@@ -111,3 +111,9 @@
   as the raw idea layer, force proposal collision checks, reject vague future
   work, and have investigators/critics/finalizer transform evidence into
   pressure-tested proposal candidates rather than passive gap summaries.
+- A finalizer prompt contract is not enough for novelty-mode MVP quality.
+  Validate the generated final report structurally before accepting it: require
+  the configured number of detailed `Spinoff Proposal:` sections, required
+  per-proposal subsections, high-confidence/speculative split, and a triage
+  matrix. If the first report is thin, run a repair finalization pass against
+  the same evidence bundle instead of treating `status=success` as sufficient.

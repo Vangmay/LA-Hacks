@@ -77,6 +77,16 @@ class FakeMarkdownFailLLM(FakeActionLLM):
         raise RuntimeError("synthetic markdown failure")
 
 
+class FakeFinalizerRepairLLM(FakeActionLLM):
+    async def chat_markdown(self, *, role: AgentModelRole, messages: list[dict[str, str]]) -> str:
+        self.messages.append(messages)
+        if len(self.messages) == 1:
+            return "# Thin Report\n\n## Proposal Triage Matrix\n\n| Proposal | Action |\n|---|---|\n"
+        if len(self.messages) == 2:
+            return _valid_final_report_fixture(1)
+        return _valid_final_report_fixture(2)
+
+
 class FakeToolRuntime:
     def __init__(self, workspace: WorkspaceManager) -> None:
         self.workspace = workspace
@@ -577,6 +587,127 @@ async def _exercise_stage_failure_fallbacks(root: Path) -> None:
     _assert("Finalization Failed" in final_path.read_text(encoding="utf-8"), "finalization fallback missing")
 
 
+def _valid_final_report_fixture(count: int) -> str:
+    sections = [
+        "# Research Deep-Dive Report",
+        "",
+        "## High-Confidence Spinoff Proposals",
+        "",
+    ]
+    for index in range(1, count + 1):
+        sections.extend(
+            [
+                f"### Spinoff Proposal: Fixture Proposal {index}",
+                "",
+                "#### One-sentence idea",
+                "",
+                "A concrete fixture proposal.",
+                "",
+                "#### Core novelty claim",
+                "",
+                "The proposal is different from the seed and closest prior work.",
+                "",
+                "#### Seed-paper connection",
+                "",
+                "- Seed mechanism/claim: fixture seed mechanism.",
+                "- What the seed paper does: fixture seed behavior.",
+                "- What this proposal changes: fixture technical change.",
+                "",
+                "#### Evidence basis",
+                "",
+                "| Evidence | Paper/artifact | Why it matters |",
+                "|---|---|---|",
+                "| Fixture evidence | TEST | Supports the fixture proposal. |",
+                "",
+                "#### Closest prior-work collision",
+                "",
+                "| Collision risk | Paper | Relationship | Why proposal may still survive |",
+                "|---|---|---|---|",
+                "| Prior collision | PRIOR | Adjacent | The mechanism differs. |",
+                "",
+                "#### Future-work/SOTA collision",
+                "",
+                "Future-work collision is explicitly named.",
+                "",
+                "#### Technical mechanism",
+                "",
+                "A concrete algorithmic mechanism.",
+                "",
+                "#### Minimum viable validation",
+                "",
+                "- First experiment/proof/implementation: fixture experiment.",
+                "- Required dataset/tool/formalism: fixture dataset.",
+                "- Success criterion: fixture success criterion.",
+                "",
+                "#### Falsification criteria",
+                "",
+                "The idea fails if the prior collision already implements the mechanism.",
+                "",
+                "#### Research plan",
+                "",
+                "- Week 1: reproduce the relevant baseline.",
+                "- Week 2-3: implement the proposed mechanism.",
+                "- First deliverable: an ablation table.",
+                "",
+                "#### Confidence",
+                "",
+                "- Confidence: medium",
+                "- What would raise confidence: stronger collision search.",
+                "- What would lower confidence: prior work match.",
+                "",
+            ]
+        )
+    sections.extend(
+        [
+            "## Speculative or Needs-More-Search Proposals",
+            "",
+            "Speculative proposals are tracked separately.",
+            "",
+            "## Proposal Triage Matrix",
+            "",
+            "| Proposal | Type | Novelty score | Specificity score | Evidence score | Feasibility score | Research-value score | Biggest collision risk | Recommended action |",
+            "|---|---|---:|---:|---:|---:|---:|---|---|",
+        ]
+    )
+    for index in range(1, count + 1):
+        sections.append(f"| Fixture Proposal {index} | system | 4 | 4 | 4 | 4 | 4 | PRIOR | promote |")
+    return "\n".join(sections) + "\n"
+
+
+async def _exercise_final_report_repair_contract(root: Path) -> None:
+    config = DeepDiveConfig(
+        workspace_root=root,
+        max_investigators=1,
+        subagents_per_investigator=1,
+        min_personas_per_investigator=1,
+        max_personas_per_investigator=1,
+        require_persona_diversity=False,
+        final_report_min_spinoff_proposals=2,
+        thinking_profile=ModelProfile(provider="fake", model="thinking", api_key_env="FAKE"),
+        light_profile=ModelProfile(provider="fake", model="light", api_key_env="FAKE"),
+    )
+    fake_llm = FakeFinalizerRepairLLM([])
+    orchestrator = DeepDiveOrchestrator(config=config, llm_provider=fake_llm)
+    request = DeepDiveRunRequest(
+        run_id="final repair",
+        arxiv_url="https://arxiv.org/abs/1706.03762",
+        paper_id="ARXIV:1706.03762",
+        section_titles=["Novelty"],
+        research_brief="Final repair fixture.",
+        research_objective="novelty_ideation",
+        mode="live",
+    )
+    run_root = orchestrator.workspace.prepare_run(request.run_id)
+    final_path = await orchestrator._finalize_live(run_root, request, [], [], [])
+    final_text = final_path.read_text(encoding="utf-8")
+    _assert(len(fake_llm.messages) == 3, "thin final report should trigger repeated repair calls")
+    _assert("Thin Report" not in final_text, "repair should replace the thin report")
+    _assert(
+        not orchestrator._final_report_quality_issues(final_text, "novelty_ideation"),
+        "repaired final report should satisfy novelty quality gates",
+    )
+
+
 def _dynamic_taste(idx: int, roles: list[str], archetype: str) -> dict:
     return {
         "taste_id": f"dynamic_taste_{idx}",
@@ -828,6 +959,7 @@ async def main_async() -> None:
         await _exercise_dynamic_roster_contract(Path(tmp) / "dynamic")
         await _exercise_subagent_failure_isolation(Path(tmp) / "failure-isolation")
         await _exercise_stage_failure_fallbacks(Path(tmp) / "stage-fallbacks")
+        await _exercise_final_report_repair_contract(Path(tmp) / "final-repair")
 
         orchestrator = DeepDiveOrchestrator(config=config)
         _assert(

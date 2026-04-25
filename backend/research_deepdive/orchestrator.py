@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -1049,7 +1050,110 @@ class DeepDiveOrchestrator:
                 error=str(exc) or exc.__class__.__name__,
                 context=artifact_text,
             )
+        else:
+            content = await self._repair_final_report_if_needed(
+                prompt=prompt,
+                artifact_text=artifact_text,
+                content=content,
+                objective=request.research_objective,
+            )
         return self.workspace.write_markdown(path, content)
+
+    async def _repair_final_report_if_needed(
+        self,
+        *,
+        prompt: str,
+        artifact_text: str,
+        content: str,
+        objective: str,
+    ) -> str:
+        current = content
+        issues = self._final_report_quality_issues(current, objective)
+        for attempt in range(1, 4):
+            if not issues:
+                return current
+            repair_request = (
+                "The final report failed runtime quality gates. Return a complete "
+                "replacement markdown report, not a patch. Preserve the existing "
+                "valid analysis, but expand or restructure it so every gate passes.\n\n"
+                f"Repair attempt: {attempt}/3\n\n"
+                "Failed gates:\n"
+                + "\n".join(f"- {issue}" for issue in issues)
+                + "\n\nCurrent final report:\n\n"
+                + current
+                + "\n\nEvidence bundle to use for the replacement report:\n\n"
+                + artifact_text
+            )
+            try:
+                current = await self.llm.chat_markdown(
+                    role=AgentModelRole.FINALIZATION,
+                    messages=[
+                        {"role": "system", "content": prompt},
+                        {"role": "user", "content": repair_request},
+                    ],
+                )
+            except Exception as exc:
+                return (
+                    current
+                    + "\n\n## Final Report Quality Gate Warning\n\n"
+                    + f"The runtime attempted repair pass {attempt} but the repair call failed.\n\n"
+                    + f"- Error: {str(exc) or exc.__class__.__name__}\n"
+                    + "\n".join(f"- Unresolved gate: {issue}" for issue in issues)
+                    + "\n"
+                )
+            issues = self._final_report_quality_issues(current, objective)
+        if issues:
+            current += (
+                "\n\n## Final Report Quality Gate Warning\n\n"
+                "The report was repaired three times but still missed some runtime gates. "
+                "Treat the missing items as known quality debt.\n\n"
+                + "\n".join(f"- Unresolved gate: {issue}" for issue in issues)
+                + "\n"
+            )
+        return current
+
+    def _final_report_quality_issues(self, content: str, objective: str) -> list[str]:
+        if objective != "novelty_ideation":
+            return []
+        issues: list[str] = []
+        min_proposals = self.config.final_report_min_spinoff_proposals
+        proposal_count = len(
+            re.findall(r"^#{2,4}\s+Spinoff Proposal:\s+.+$", content, flags=re.MULTILINE)
+        )
+        if proposal_count < min_proposals:
+            issues.append(
+                f"expected at least {min_proposals} detailed `Spinoff Proposal:` sections; found {proposal_count}"
+            )
+        required_global_markers = (
+            "High-Confidence Spinoff Proposals",
+            "Speculative or Needs-More-Search Proposals",
+            "Proposal Triage Matrix",
+        )
+        for marker in required_global_markers:
+            if marker not in content:
+                issues.append(f"missing required final report section `{marker}`")
+        per_proposal_markers = (
+            "One-sentence idea",
+            "Core novelty claim",
+            "Seed-paper connection",
+            "Evidence basis",
+            "Closest prior-work collision",
+            "Future-work/SOTA collision",
+            "Technical mechanism",
+            "Minimum viable validation",
+            "Falsification criteria",
+            "Research plan",
+            "Confidence",
+        )
+        for marker in per_proposal_markers:
+            count = len(
+                re.findall(rf"^#{{3,5}}\s+{re.escape(marker)}\s*$", content, flags=re.MULTILINE)
+            )
+            if count < min_proposals:
+                issues.append(
+                    f"expected `{marker}` subsection in each detailed proposal; found {count}/{min_proposals}"
+                )
+        return issues
 
     def _cross_investigator_context_bundle(
         self,
