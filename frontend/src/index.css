@@ -1,3 +1,119 @@
+/* Background vignette and overlays for Veridian UI */
+.veridian-bg-overlay {
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  width: 100vw;
+  height: 100vh;
+  background:
+    radial-gradient(ellipse at 50% 60%, #23243a 0%, #181c2f 70%, #181c2f 100%),
+    radial-gradient(ellipse at 20% 30%, #00eaff33 0%, transparent 70%),
+    radial-gradient(ellipse at 80% 70%, #b388ff33 0%, transparent 70%),
+    linear-gradient(120deg, #00eaff11 0%, #b388ff11 100%);
+  mix-blend-mode: lighten;
+  opacity: 0.95;
+  transition: opacity 0.4s;
+}
+/* Drop zone glowing border and text */
+.dropzone-glow {
+  border: 2.5px solid #b388ff;
+  box-shadow:
+    0 0 0 2px #b388ff44,
+    0 0 12px 2px #b388ff88,
+    0 0 32px 8px #00eaff44,
+    0 0 64px 16px #00eaff22;
+  transition: box-shadow 0.3s;
+}
+.dropzone-glow:hover {
+  box-shadow:
+    0 0 0 2px #00eaff66,
+    0 0 16px 4px #00eaffcc,
+    0 0 48px 16px #b388ff88,
+    0 0 96px 32px #b388ff44;
+}
+.dropzone-text-glow {
+  text-shadow:
+    0 0 8px #b388ffcc,
+    0 0 16px #00eaff99,
+    0 0 32px #b388ff44;
+}
+/* Gradient text for VERIDIAN title */
+.veridian-gradient-title {
+  background: linear-gradient(90deg, #00eaff 0%, #b388ff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-fill-color: transparent;
+}
+.veridian-gradient-a {
+  background: linear-gradient(90deg, #b388ff 0%, #00eaff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-fill-color: transparent;
+  font-weight: 900;
+}
+.veridian-gradient-sub {
+  background: linear-gradient(90deg, #b388ff 0%, #00eaff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-fill-color: transparent;
+}
+.veridian-gradient-reveal {
+  background: linear-gradient(90deg, #00eaff 0%, #b388ff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-fill-color: transparent;
+  font-weight: 900;
+}
+/* Central HUD animated rings */
+.animate-spin-slow {
+  animation: spin 18s linear infinite;
+}
+.animate-spin-slower {
+  animation: spin 36s linear infinite;
+}
+.animate-spin-reverse-slower {
+  animation: spin-reverse 32s linear infinite;
+}
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+@keyframes spin-reverse {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(-360deg); }
+}
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Particle field and neon glow helpers for Veridian UI */
+.particle-field {
+  position: absolute;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.particle-dot {
+  fill: #00eaff;
+  opacity: 0.7;
+  filter: blur(0.5px);
+}
+
+.particle-dot-purple {
+  fill: #b388ff;
+  opacity: 0.7;
+  filter: blur(0.5px);
+}
+
+.neon-glow {
+  filter: drop-shadow(0 0 16px #00eaff88) drop-shadow(0 0 32px #b388ff44);
+}
+
+.bg-radial {
+  background: radial-gradient(ellipse at center, #23243a 0%, #181c2f 100%);
+}
