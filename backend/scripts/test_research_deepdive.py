@@ -139,7 +139,11 @@ async def _exercise_live_runner_budget_contract(root: Path) -> None:
             "arguments": {
                 "path": "queries.md",
                 "heading": "Query log",
-                "content": "Query: attention ablation; params limit=1; result count=1.",
+                "content": (
+                    "Query: attention ablation; params limit=1; result count=1. "
+                    "Purpose: verify runtime budget accounting after invalid actions. "
+                    "Follow-up: inspect whether rejected actions preserved tool budget counters."
+                ),
             },
         },
         {
@@ -147,7 +151,12 @@ async def _exercise_live_runner_budget_contract(root: Path) -> None:
             "arguments": {
                 "path": "papers.md",
                 "heading": "Paper TEST1",
-                "content": "- TEST1. Test Paper. 2020. Source: Semantic Scholar. Relevance: runtime fixture.",
+                "content": (
+                    "- Paper ID: TEST1. Title: Test Paper. Year: 2020. Source: Semantic Scholar. "
+                    "Relevance: runtime fixture for budget accounting and finalization behavior. "
+                    "Evidence note: this synthetic record is promoted after one valid search so the "
+                    "agent has a traceable paper item before writing findings and handoff."
+                ),
             },
         },
         {
@@ -155,7 +164,25 @@ async def _exercise_live_runner_budget_contract(root: Path) -> None:
             "arguments": {
                 "path": "findings.md",
                 "heading": "Finding",
-                "content": "Finding: budget accounting is traceable. Evidence: TEST1. Uncertainty: fixture only.",
+                "content": (
+                    "Finding: budget accounting is traceable because malformed top-level query actions, "
+                    "workspace calls missing paths, and post-budget research attempts are rejected without "
+                    "executing tools. Evidence: TEST1 and the rejected_action trace entries. "
+                    "Uncertainty: this is an offline fixture, not a real literature claim."
+                ),
+            },
+        },
+        {
+            "action": "append_workspace_markdown",
+            "arguments": {
+                "path": "memory.md",
+                "heading": "Runtime state",
+                "content": (
+                    "Stable fact: one valid research call executed and invalid actions did not spend "
+                    "research or workspace budgets. Open question: real live runs should keep memory "
+                    "updated after every important query so final synthesis can recover intent even when "
+                    "handoff text is thin."
+                ),
             },
         },
         {
@@ -175,12 +202,13 @@ async def _exercise_live_runner_budget_contract(root: Path) -> None:
     result = await runner.run_subagent(plan, ResearchStage.SUBAGENT_RESEARCH)
 
     _assert(result.research_tool_calls_used == 1, "only valid search should spend research budget")
-    _assert(result.workspace_tool_calls_used == 4, "valid workspace tools should spend only workspace budget")
-    _assert(result.llm_steps_used == 9, "rejected actions should consume LLM steps, not tool budgets")
+    _assert(result.workspace_tool_calls_used == 5, "valid workspace tools should spend only workspace budget")
+    _assert(result.llm_steps_used == 10, "rejected actions should consume LLM steps, not tool budgets")
     executed = [name for name, _ in fake_tools.calls]
     _assert(executed == [
         "read_workspace_markdown",
         "paper_bulk_search",
+        "append_workspace_markdown",
         "append_workspace_markdown",
         "append_workspace_markdown",
         "append_workspace_markdown",

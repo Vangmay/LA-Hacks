@@ -64,3 +64,9 @@
   created before any planner LLM call, the system is deterministic even if the
   prompt describes a dynamic architecture. Live planning must happen before
   subagent creation, with schema validation and explicit deterministic fallback.
+- Do not use crude character-count thresholds as the primary quality signal for
+  deep-dive artifacts. Runtime enforcement should encode artifact-specific
+  content obligations: queries need query/parameters/result-count/rationale;
+  papers need IDs/titles/years/source/relevance; findings need evidence,
+  uncertainty, and proposal implications; memory needs durable running state.
+  Minimal length checks are only a backstop against empty placeholders.

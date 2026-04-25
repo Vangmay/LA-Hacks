@@ -21,6 +21,38 @@ WORKSPACE_TOOLS = {
     "patch_workspace_file",
 }
 
+PLACEHOLDER_MARKERS = (
+    "no papers collected yet",
+    "no findings have been distilled yet",
+    "no findings yet",
+    "no queries yet",
+    "nothing recorded yet",
+)
+
+ARTIFACT_QUALITY_CONTRACTS: dict[str, list[tuple[str, tuple[str, ...]]]] = {
+    "queries.md": [
+        ("exact query or tool call", ("query", "searched", "tool")),
+        ("parameters or filters", ("param", "limit", "offset", "field", "filter", "sort")),
+        ("result count or failure state", ("result", "returned", "total", "empty", "failed", "error")),
+        ("why it was run or follow-up it suggested", ("why", "purpose", "rationale", "follow-up", "next")),
+    ],
+    "papers.md": [
+        ("paper identifier or source", ("paper id", "paperid", "arxiv", "semantic scholar", "s2", "doi")),
+        ("title/year/metadata", ("title", "year", "publication", "venue", "authors")),
+        ("relevance note", ("relevance", "relevant", "matters", "supports", "bucket", "why")),
+    ],
+    "findings.md": [
+        ("finding, gap, risk, or proposal statement", ("finding", "gap", "risk", "proposal", "claim")),
+        ("evidence grounding", ("evidence", "paper", "supports", "because", "based on")),
+        ("uncertainty, limitation, or next check", ("uncertain", "uncertainty", "speculative", "limitation", "next", "falsification")),
+    ],
+    "memory.md": [
+        ("stable running state", ("stable", "state", "fact", "remember", "current")),
+        ("search thread or query direction", ("search", "thread", "query", "bucket")),
+        ("open question, contradiction, or handoff prep", ("open", "question", "contradiction", "handoff", "next")),
+    ],
+}
+
 TOP_LEVEL_ARGUMENT_KEYS = {
     "content",
     "end_line",
@@ -85,7 +117,18 @@ Rules:
   JSON payload.
 - The markdown files should be detailed overall. The per-action budget is only
   a JSON safety boundary; continue appending additional chunks until the
-  appropriate files contain enough evidence, papers, query details, and findings.
+  appropriate files contain enough evidence, papers, query details, findings,
+  and durable memory. Placeholder text such as 'no papers collected yet' or
+  'no findings yet' is not acceptable documentation.
+- Artifact content contract:
+  - `queries.md`: exact query/tool, parameters or filters, result count or
+    failure state, and why the query was run or what follow-up it suggested.
+  - `papers.md`: paper identifier/source, title/year/metadata, and relevance
+    note for why the paper matters.
+  - `findings.md`: finding/gap/risk/proposal statement, evidence grounding,
+    and uncertainty, limitation, or next check.
+  - `memory.md`: stable running state, search thread or query direction, and
+    open question, contradiction, or handoff preparation.
 - Before final, ensure handoff_markdown contains searched queries, important papers, findings, uncertainty, and next steps.
 - Do not include prose outside the JSON object.
 """
@@ -143,14 +186,21 @@ class LiveAgentRunner:
             if action_type == "final":
                 repair_target = self._documentation_repair_target(plan.workspace_path)
                 if repair_target:
+                    repair_issue = _artifact_quality_issue(
+                        (plan.workspace_path / repair_target).read_text(encoding="utf-8")
+                        if (plan.workspace_path / repair_target).exists()
+                        else "",
+                        repair_target,
+                    )
                     messages.append({"role": "assistant", "content": json.dumps(action)})
                     messages.append(
                         {
                             "role": "user",
                             "content": (
-                                f"`{repair_target}` is still empty, so final handoff is premature. "
+                                f"`{repair_target}` is not ready for final handoff: {repair_issue}. "
                                 "Return exactly one JSON object now using `append_workspace_markdown` "
-                                f"with `arguments.path` set to `{repair_target}` and detailed content."
+                                f"with `arguments.path` set to `{repair_target}` and content that satisfies "
+                                "that artifact's required content contract."
                             ),
                         }
                     )
@@ -413,7 +463,8 @@ class LiveAgentRunner:
                 continue
             text = path.read_text(encoding="utf-8")
             meaningful = _meaningful_markdown_chars(text)
-            state = "empty" if meaningful == 0 else "has content"
+            issue = _artifact_quality_issue(text, relative_path)
+            state = "ready" if not issue else f"needs repair: {issue}"
             rows.append(f"- `{relative_path}`: {state}; {meaningful} meaningful chars")
         return "\n".join(rows)
 
@@ -424,18 +475,25 @@ class LiveAgentRunner:
                 "Documentation status: required markdown files have started accumulating content. "
                 "Keep enriching them with detailed, chunked notes as research progresses."
             )
+        issue = _artifact_quality_issue(
+            (workspace_path / target).read_text(encoding="utf-8")
+            if (workspace_path / target).exists()
+            else "",
+            target,
+        )
         return (
             "Documentation repair needed before more broad searching: "
-            f"`{target}` is still empty. The next action must append a detailed, "
-            "chunked note to that file using `append_workspace_markdown`. Do not run "
-            "another search until this file has substantive content."
+            f"`{target}` is not satisfying its artifact contract: {issue}. "
+            "The next action must append a detailed, evidence-bearing chunk to "
+            "that file using `append_workspace_markdown`. Do not run another "
+            "search until this file has the required kind of content."
         )
 
     def _documentation_repair_target(self, workspace_path: Path) -> str:
-        for relative_path in ("queries.md", "papers.md", "findings.md"):
+        for relative_path in ("queries.md", "papers.md", "findings.md", "memory.md"):
             path = workspace_path / relative_path
             text = path.read_text(encoding="utf-8") if path.exists() else ""
-            if _meaningful_markdown_chars(text) == 0:
+            if _artifact_quality_issue(text, relative_path):
                 return relative_path
         return ""
 
@@ -460,6 +518,23 @@ def _meaningful_markdown_chars(text: str) -> int:
             continue
         meaningful_lines.append(stripped)
     return len("\n".join(meaningful_lines))
+
+
+def _artifact_quality_issue(text: str, relative_path: str) -> str:
+    if _meaningful_markdown_chars(text) == 0:
+        return "empty beyond headings"
+    lowered = text.lower()
+    placeholders = [marker for marker in PLACEHOLDER_MARKERS if marker in lowered]
+    if placeholders:
+        return f"placeholder text still present: {placeholders[0]}"
+    missing = [
+        label
+        for label, terms in ARTIFACT_QUALITY_CONTRACTS.get(relative_path, [])
+        if not any(term in lowered for term in terms)
+    ]
+    if missing:
+        return "missing " + "; missing ".join(missing)
+    return ""
 
 
 def _action_updates_markdown(action: dict[str, Any], relative_path: str) -> bool:

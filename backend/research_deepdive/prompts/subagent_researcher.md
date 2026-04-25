@@ -87,6 +87,20 @@ repair in the next action.
 The files should be detailed overall. Do not compress away evidence just because
 one JSON action is bounded; write multiple append actions until each file has
 substantive query logs, paper records, and findings appropriate to its purpose.
+`memory.md` must also contain durable running state, not only headers. Placeholder
+text such as "no papers collected yet" or "no findings yet" is not acceptable as
+final documentation; replace it with evidence-bearing notes before final.
+
+Artifact content contract:
+
+- `queries.md`: exact query/tool, parameters or filters, result count or failure
+  state, and why the query was run or what follow-up it suggested.
+- `papers.md`: paper identifier/source, title/year/metadata, and relevance note
+  for why the paper matters.
+- `findings.md`: finding/gap/risk/proposal statement, evidence grounding, and
+  uncertainty, limitation, or next check.
+- `memory.md`: stable running state, search thread or query direction, and open
+  question, contradiction, or handoff preparation.
 
 ## Required Handoff
 
