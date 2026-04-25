@@ -14,6 +14,7 @@ sentence-transformers
 chromadb
 networkx
 httpx
+beautifulsoup4
 tenacity
 python-json-logger
 pydantic-ai
