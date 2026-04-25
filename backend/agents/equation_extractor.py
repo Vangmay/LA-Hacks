@@ -33,7 +33,7 @@ _SYSTEM_PROMPT = (
 class EquationExtractorAgent(BaseAgent):
     """Extracts LaTeX equations from raw text.
 
-    Used as a fallback when the parser's equation list is empty.
+    Runs when an agent needs additional equation candidates from claim context.
     Owned by Person B — supplements SymbolicVerifierAgent.
     """
 
@@ -81,7 +81,7 @@ class EquationExtractorAgent(BaseAgent):
         """Return up to `radius` chars around the first occurrence of claim_text."""
         idx = raw_text.find(claim_text[:40])
         if idx == -1:
-            return raw_text[:3000]  # fall back to start of doc
+            return raw_text[:3000]
         start = max(0, idx - radius)
         end = min(len(raw_text), idx + len(claim_text) + radius)
         return raw_text[start:end]

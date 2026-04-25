@@ -6,7 +6,6 @@ python-dotenv
 python-multipart
 sse-starlette
 openai
-pymupdf
 sympy
 antlr4-python3-runtime==4.11.*
 scipy
@@ -15,7 +14,6 @@ sentence-transformers
 chromadb
 networkx
 httpx
-beautifulsoup4
 tenacity
 python-json-logger
 pydantic-ai

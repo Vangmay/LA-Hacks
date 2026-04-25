@@ -19,7 +19,7 @@
 
 ## Specification
 
-- User input is an arXiv URL or bare arXiv id. PDF upload and HTML fallback are not part of the new backend path.
+- User input is an arXiv URL or bare arXiv id.
 - Accept common arXiv URL forms (`/abs/`, `/pdf/`, `/html/`) only to extract the arXiv id; always fetch `https://arxiv.org/e-print/{id}`.
 - Save the downloaded source archive under the job directory, extract it safely, find the main `.tex`, and recursively inline local `\input{}` / `\include{}` files.
 - Parser output must keep the existing shape: `title`, `abstract`, `sections`, `equations`, `bibliography`, `raw_text`, `is_scanned`.
@@ -31,10 +31,26 @@
 - Chunk 1 verified with `python backend/scripts/test_tex_ingestion.py`.
 - Chunk 1 live source fetch verified with `python backend/scripts/test_tex_ingestion.py --live https://arxiv.org/pdf/1706.03762 https://arxiv.org/abs/2103.00020`.
 - Chunk 2 verified with `python backend/scripts/test_tex_parser.py`.
-- Chunk 2 live parse verified with `python backend/scripts/test_tex_parser.py --live https://arxiv.org/pdf/1706.03762 https://arxiv.org/abs/2103.00020` and title fallback rechecked with `python backend/scripts/test_tex_parser.py --live https://arxiv.org/abs/2103.00020`.
+- Chunk 2 live parse verified with `python backend/scripts/test_tex_parser.py --live https://arxiv.org/pdf/1706.03762 https://arxiv.org/abs/2103.00020` and alternate title command handling rechecked with `python backend/scripts/test_tex_parser.py --live https://arxiv.org/abs/2103.00020`.
 - Chunk 3 verified with `backend/.venv/bin/python backend/scripts/test_review_tex_flow.py`.
 - Chunk 3 syntax/import check verified with `backend/.venv/bin/python -m py_compile backend/api/review.py backend/core/orchestrators/review.py backend/scripts/test_pipeline.py backend/scripts/test_review_tex_flow.py backend/agents/dag_builder.py backend/agents/attacker.py backend/agents/counterexample_search.py backend/agents/citation_gap.py`.
 - Chunk 4 verified with `backend/.venv/bin/python backend/scripts/test_prompt_2_agents.py`, `backend/.venv/bin/python backend/scripts/test_numeric.py`, and `backend/.venv/bin/python backend/scripts/test_defender.py --mock`.
 - Added `antlr4-python3-runtime==4.11.*` for SymPy LaTeX parsing and verified dependency health with `backend/.venv/bin/pip check`.
 - Live URL pipeline smoke passed with `backend/.venv/bin/python backend/scripts/test_pipeline.py https://arxiv.org/pdf/1706.03762 --max-claims 1`.
 - Second live URL pipeline smoke passed with `backend/.venv/bin/python backend/scripts/test_pipeline.py https://arxiv.org/abs/2103.00020 --max-claims 1`.
+
+## Cleanup Plan
+
+- [x] Audit backend docstrings and comments for stale ingestion wording.
+- [x] Rewrite docstrings to describe the arXiv URL to TeX source pipeline directly.
+- [x] Re-run focused offline and live URL-to-TeX tests.
+- [ ] Commit the cleanup as a separate chunk.
+
+## Cleanup Review
+
+- Removed the inactive PDF and HTML parser modules from the backend path.
+- Removed stale parser dependencies from `backend/requirements.txt`.
+- Rewrote ingestion/parser/review docstrings around the active arXiv URL/id to e-print TeX source path.
+- Tightened review report endpoints so unknown or incomplete jobs return explicit HTTP errors instead of synthetic report content.
+- Verified `/abs/` and `/pdf/` arXiv URL forms both normalize to the same e-print source bundle.
+- Live capped pipeline passed: `backend/.venv/bin/python backend/scripts/test_pipeline.py https://arxiv.org/abs/1706.03762 --max-claims 1`.

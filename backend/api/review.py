@@ -1,7 +1,8 @@
+"""Review-mode API endpoints for arXiv TeX source jobs."""
+
 import asyncio
 import logging
 import os
-from datetime import datetime
 
 from fastapi import APIRouter, Form, HTTPException
 from fastapi.responses import PlainTextResponse
@@ -37,6 +38,7 @@ async def submit_review_arxiv(submission: ArxivSubmission):
 
 
 async def _submit_arxiv_review(arxiv_url: str):
+    """Create a review job from an arXiv URL/id and queue orchestration."""
     ref = parse_arxiv_url(arxiv_url)
     if not ref:
         raise HTTPException(status_code=400, detail=f"unrecognized arxiv url: {arxiv_url!r}")
@@ -85,6 +87,7 @@ async def _submit_arxiv_review(arxiv_url: str):
 
 @router.get("/{job_id}/status")
 async def get_status(job_id: str):
+    """Return queue and progress metadata for a review job."""
     if not job_store.exists(job_id):
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
     job = job_store.get(job_id)
@@ -97,6 +100,7 @@ async def get_status(job_id: str):
 
 @router.get("/{job_id}/stream")
 async def stream(job_id: str):
+    """Stream review DAG events for a job."""
     async def event_gen():
         async for event in event_bus.subscribe(job_id):
             yield {"event": "dag_update", "data": event.model_dump_json()}
@@ -106,18 +110,21 @@ async def stream(job_id: str):
 
 @router.get("/{job_id}/report")
 async def get_report(job_id: str):
+    """Return the completed review report for a job."""
     if not job_store.exists(job_id):
-        # Allow report fetch on unknown ids to return a mock for scaffolding;
-        # Person B will tighten this.
-        return _mock_report()
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
     job = job_store.get(job_id)
     if job.get("status") != "complete":
         raise HTTPException(status_code=202, detail="Review in progress")
-    return job.get("report") or _mock_report()
+    report = job.get("report")
+    if not report:
+        raise HTTPException(status_code=500, detail="Review report missing")
+    return report
 
 
 @router.get("/{job_id}/dag")
 async def get_dag(job_id: str):
+    """Return the latest DAG snapshot for a review job."""
     if not job_store.exists(job_id):
         return {"nodes": [], "edges": []}
     job = job_store.get(job_id) or {}
@@ -128,20 +135,14 @@ async def get_dag(job_id: str):
 
 @router.get("/{job_id}/report/markdown", response_class=PlainTextResponse)
 async def get_markdown_report(job_id: str):
-    return "# Mock Report"
-
-
-def _mock_report() -> dict:
-    return {
-        "paper_title": "Mock Paper",
-        "paper_hash": "0" * 16,
-        "reviewed_at": datetime.utcnow().isoformat(),
-        "total_claims": 0,
-        "supported": 0,
-        "contested": 0,
-        "refuted": 0,
-        "cascaded_failures": 0,
-        "verdicts": [],
-        "dag_summary": {"nodes": [], "edges": []},
-        "markdown_report": "# Mock Report",
-    }
+    """Return the completed review report as markdown."""
+    if not job_store.exists(job_id):
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    job = job_store.get(job_id)
+    if job.get("status") != "complete":
+        raise HTTPException(status_code=202, detail="Review in progress")
+    report = job.get("report") or {}
+    markdown = report.get("markdown_report")
+    if not markdown:
+        raise HTTPException(status_code=500, detail="Markdown report missing")
+    return markdown

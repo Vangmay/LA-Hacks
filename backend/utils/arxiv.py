@@ -1,9 +1,8 @@
-"""arXiv URL parsing and TeX source ingestion.
+"""arXiv source ingestion utilities.
 
-The backend path is source-first: accept an arXiv URL/id only to identify the
-paper, download ``https://arxiv.org/e-print/<id>``, safely unpack the source
-bundle, find the main TeX file, and assemble included local TeX files into one
-document string for downstream agents.
+An arXiv URL or article id identifies the e-print source bundle. The ingestion
+path downloads that bundle, extracts it safely, selects the root TeX document,
+and assembles local TeX includes for downstream review agents.
 """
 from __future__ import annotations
 
@@ -23,8 +22,8 @@ logger = logging.getLogger(__name__)
 _ARXIV_ID_RE = re.compile(
     r"""
     (?P<id>
-        \d{4}\.\d{4,5}                         # new-style: 1706.03762
-      | [a-z\-]+(?:\.[a-z]{2})?/\d{7}          # old-style: hep-th/9901001, math.AG/0601001
+        \d{4}\.\d{4,5}                         # numeric archive id: 1706.03762
+      | [a-z\-]+(?:\.[a-z]{2})?/\d{7}          # category archive id: hep-th/9901001
     )
     (?:v(?P<version>\d+))?
     """,
@@ -54,25 +53,31 @@ _TEX_INPUT_RE = re.compile(
 
 
 class ArxivSourceError(RuntimeError):
-    """Raised when an arXiv source bundle cannot be fetched or assembled."""
+    """Raised when an arXiv source bundle cannot produce assembled TeX."""
 
 
 @dataclass(frozen=True)
 class ArxivRef:
+    """Normalized arXiv article reference."""
+
     arxiv_id: str
     version: Optional[str] = None
 
     @property
     def canonical(self) -> str:
+        """Article id including version when one was supplied."""
         return f"{self.arxiv_id}v{self.version}" if self.version else self.arxiv_id
 
     @property
     def source_url(self) -> str:
+        """Canonical arXiv e-print source URL."""
         return f"https://arxiv.org/e-print/{self.canonical}"
 
 
 @dataclass(frozen=True)
 class ArxivSource:
+    """Extracted source metadata and assembled TeX text."""
+
     ref: ArxivRef
     source_url: str
     archive_path: str
@@ -83,7 +88,7 @@ class ArxivSource:
 
 
 def parse_arxiv_url(value: str) -> Optional[ArxivRef]:
-    """Parse an arXiv URL or bare id. Returns None if unrecognized."""
+    """Parse an accepted arXiv URL or bare article id."""
     if not value:
         return None
     text = value.strip()
@@ -113,7 +118,7 @@ def parse_arxiv_url(value: str) -> Optional[ArxivRef]:
 
 
 async def fetch_arxiv_source(ref: ArxivRef, dest_dir: str) -> ArxivSource:
-    """Download, unpack, and assemble the TeX source for an arXiv reference."""
+    """Download the e-print source bundle and return assembled TeX metadata."""
     dest = Path(dest_dir)
     dest.mkdir(parents=True, exist_ok=True)
 
@@ -155,7 +160,7 @@ async def fetch_arxiv_source(ref: ArxivRef, dest_dir: str) -> ArxivSource:
 
 
 def unpack_source_archive(archive_path: Path, extract_dir: Path) -> list[Path]:
-    """Safely unpack an arXiv e-print payload and return extracted TeX files."""
+    """Extract an e-print payload into ``extract_dir`` and return TeX files."""
     extract_dir.mkdir(parents=True, exist_ok=True)
     try:
         extracted = _extract_tar(archive_path, extract_dir)
@@ -169,7 +174,7 @@ def unpack_source_archive(archive_path: Path, extract_dir: Path) -> list[Path]:
 
 
 def find_main_tex(source_dir: Path) -> Path:
-    """Pick the TeX file most likely to be the root document."""
+    """Select the root TeX document from an extracted source tree."""
     candidates = sorted(source_dir.rglob("*.tex"))
     if not candidates:
         raise ArxivSourceError("no .tex files found after extraction")
@@ -184,7 +189,7 @@ def find_main_tex(source_dir: Path) -> Path:
 
 
 def assemble_tex_document(main_tex: Path, source_dir: Path) -> str:
-    """Inline local ``\\input``/``\\include`` TeX files into one document."""
+    """Expand local TeX includes into one document string."""
     root = source_dir.resolve()
     visited: set[Path] = set()
 
@@ -215,6 +220,7 @@ def assemble_tex_document(main_tex: Path, source_dir: Path) -> str:
 
 
 def _extract_tar(archive_path: Path, extract_dir: Path) -> list[Path]:
+    """Extract regular files and directories from a tar payload safely."""
     extracted: list[Path] = []
     root = extract_dir.resolve()
     total_bytes = 0
@@ -242,6 +248,7 @@ def _extract_tar(archive_path: Path, extract_dir: Path) -> list[Path]:
 
 
 def _extract_single_file_payload(archive_path: Path, extract_dir: Path) -> list[Path]:
+    """Store a single-file TeX payload as ``main.tex``."""
     raw = archive_path.read_bytes()
     try:
         data = gzip.decompress(raw)
@@ -261,6 +268,7 @@ def _extract_single_file_payload(archive_path: Path, extract_dir: Path) -> list[
 
 
 def _resolve_tex_input(target: str, current_dir: Path, root: Path) -> Optional[Path]:
+    """Resolve a TeX include target inside the extracted source tree."""
     clean = target.strip()
     if not clean or clean.startswith("|"):
         return None
@@ -277,6 +285,7 @@ def _resolve_tex_input(target: str, current_dir: Path, root: Path) -> Optional[P
 
 
 def _read_text(path: Path) -> str:
+    """Read TeX source with common archive encodings."""
     for encoding in ("utf-8", "latin-1"):
         try:
             return path.read_text(encoding=encoding)
@@ -286,6 +295,7 @@ def _read_text(path: Path) -> str:
 
 
 def score_main_tex(path: Path) -> int:
+    """Score how likely a TeX file is to be the root document."""
     text = _read_text(path)
     lower_name = path.name.lower()
     score = 0
@@ -306,10 +316,12 @@ def score_main_tex(path: Path) -> int:
 
 
 def _safe_name(value: str) -> str:
+    """Return a filesystem-safe name for source artifacts."""
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", value)
 
 
 def _is_within(path: Path, root: Path) -> bool:
+    """Return whether ``path`` is contained by ``root``."""
     try:
         path.relative_to(root)
         return True

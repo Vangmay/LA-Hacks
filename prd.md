@@ -13,7 +13,7 @@
 
 PaperCourt is a multi-agent system for engaging deeply with research papers across four modes. **Review Mode** deploys adversarial agent swarms to verify and attack claims in a submitted paper, producing a verdict report with confidence scores and cascade failure propagation. **Reader Mode** turns the same dependency graph into a personalized study map — generating layered explanations, prerequisite links, glossary entries, and interactive exercises for each claim. **PoC Mode** operationalizes the paper's empirically testable claims into a runnable proof-of-concept: generating success/failure metrics, an implementation scaffold, and a reproducibility report mapping your experiment results back to the original claims. **Research Mode** wraps all three into a fully autonomous research loop: given a question or topic, the system retrieves relevant literature, builds a cross-paper knowledge graph, detects open problems, generates and attempts to prove conjectures, and self-reviews its output using the adversarial core.
 
-All four modes share the same foundational infrastructure: PDF parsing, claim extraction, and a proof-theoretic dependency DAG rendered live in the browser via SSE.
+All four modes share the same foundational infrastructure: arXiv source ingestion, TeX parsing, claim extraction, and a proof-theoretic dependency DAG rendered live in the browser via SSE.
 
 ### 1.2 Problem Statement
 
@@ -25,7 +25,7 @@ No existing tool spans all four: adversarial claim verification, dependency-awar
 
 PaperCourt addresses all four use cases on a shared backend:
 
-- **Shared core:** PDF parsing → claim extraction → proof-theoretic DAG → live DAG visualization via SSE
+- **Shared core:** arXiv source ingestion → TeX parsing → claim extraction → proof-theoretic DAG → live DAG visualization via SSE
 - **Review Mode:** adversarial attacker/defender swarms + symbolic/numeric/semantic verification → per-claim verdicts with cascade propagation
 - **Reader Mode:** explanation generation at multiple levels + prerequisite mapping + glossary + interactive exercises + Socratic tutor per claim
 - **PoC Mode:** empirically testable claim filtering → success/failure metric extraction → implementation scaffold generation → experiment result ingestion → reproducibility report
@@ -47,7 +47,7 @@ PaperCourt addresses all four use cases on a shared backend:
 ### 2.1 Goals
 
 **Shared core (all modes)**
-- Parse PDFs and extract atomic claim units
+- Ingest arXiv source bundles and extract atomic claim units from TeX
 - Build a proof-theoretic dependency DAG with topological traversal
 - Stream live DAG state updates to a browser UI via SSE
 
@@ -88,7 +88,7 @@ PaperCourt addresses all four use cases on a shared backend:
 
 - Full formal proof verification (Lean 4 export is a stretch goal only)
 - Real-time collaborative multi-user sessions (all modes are single-session)
-- Support for non-PDF input formats
+- Support for non-arXiv input sources
 - Integration with journal submission systems
 - Fully autonomous Research Mode loop with no human checkpoint (v1 requires human approval after hypothesis generation)
 - PoC Mode: automatic execution of generated scaffold code (user runs the code; system only ingests results)
@@ -101,8 +101,8 @@ PaperCourt addresses all four use cases on a shared backend:
 
 | ID | Requirement |
 |---|---|
-| F-01 | System shall accept a PDF file as input |
-| F-02 | ParserAgent shall extract raw text, LaTeX equations, section structure, and bibliography |
+| F-01 | System shall accept an arXiv URL or bare article id as input |
+| F-02 | TexParserAgent shall extract raw text, LaTeX equations, section structure, and bibliography from assembled TeX |
 | F-03 | ClaimExtractorAgent shall segment parsed content into atomic claim units: theorems, lemmas, corollaries, propositions, and key intermediate assertions |
 | F-04 | Each claim unit shall carry: claim text, claim type, section location, and attached equation strings |
 
@@ -165,7 +165,7 @@ PaperCourt addresses all four use cases on a shared backend:
 | F-32 | Clicking a node shall open a side panel showing: claim text, tier results, all attacker challenges, all defender rebuttals, and the final verdict rationale |
 | F-33 | A live activity feed alongside the DAG shall log agent events in real time (e.g. "AttackerAgent raised counterexample on Lemma 3") |
 | F-34 | A summary bar at the top shall show live running counts: total claims, pending, processing, supported, contested, refuted |
-| F-35 | The DAG view shall be the primary interface — paper upload and live review visualization on a single page |
+| F-35 | The DAG view shall be the primary interface — arXiv submission and live review visualization on a single page |
 
 ### 3.8 Lean 4 Export (Stretch)
 
@@ -197,7 +197,7 @@ PaperCourt addresses all four use cases on a shared backend:
 
 | ID | Requirement |
 |---|---|
-| F-50 | System shall accept a research question, topic, or conjecture as freeform text input; PDF upload is optional |
+| F-50 | System shall accept a research question, topic, or conjecture as freeform text input; paper input is optional |
 | F-51 | LiteratureSearchAgent shall query Semantic Scholar and arXiv APIs to retrieve and rank the top-k relevant papers |
 | F-52 | KnowledgeGraphAgent shall extract claims from all retrieved papers and merge them into a single cross-paper knowledge graph, with source paper tracked per node |
 | F-53 | KnowledgeGraphAgent shall detect cross-paper contradictions (same claim, conflicting verdicts across papers) and flag them as contested nodes |
@@ -239,7 +239,7 @@ PaperCourt addresses all four use cases on a shared backend:
 
 #### Shared Core (all modes)
 ```
-ParserAgent
+TexParserAgent
 ClaimExtractorAgent
 DAGBuilderAgent
 ```
@@ -315,7 +315,7 @@ class BaseAgent:
 
 ### 4.3 Agent Execution Rules
 
-**Shared core:** ParserAgent → ClaimExtractorAgent → DAGBuilderAgent (always sequential)
+**Shared core:** TexParserAgent → ClaimExtractorAgent → DAGBuilderAgent (always sequential)
 
 **Review Mode:** Verification tier agents + Attacker + Defender run in parallel per claim via `asyncio.gather`; CascadeAgent → ReportAgent run sequentially after all claims are resolved
 
@@ -562,13 +562,13 @@ class ReviewReport(BaseModel):
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/review` | Submit a PDF for Review Mode; returns `job_id` |
+| `POST` | `/review` | Submit an arXiv URL/id for Review Mode; returns `job_id` |
 | `GET` | `/review/{job_id}/status` | Poll job status |
 | `GET` | `/review/{job_id}/stream` | **SSE stream** — emits `DAGEvent` objects in real time |
 | `GET` | `/review/{job_id}/report` | Retrieve completed `ReviewReport` JSON |
 | `GET` | `/review/{job_id}/report/markdown` | Retrieve markdown summary |
 | `GET` | `/review/{job_id}/dag` | Retrieve full DAG snapshot (nodes + edges + current verdicts) |
-| `POST` | `/read` | Submit a PDF for Reader Mode with comprehension level; returns `session_id` |
+| `POST` | `/read` | Submit an arXiv URL/id for Reader Mode with comprehension level; returns `session_id` |
 | `GET` | `/read/{session_id}/claim/{claim_id}` | Fetch full `ClaimAnnotation` for a node (triggers agent generation if not cached) |
 | `POST` | `/read/{session_id}/claim/{claim_id}/tutor` | Submit a "convince me" query; returns SocraticTutorAgent response |
 | `POST` | `/read/{session_id}/claim/{claim_id}/grade` | Submit exercise answer; returns graded result |
@@ -581,7 +581,7 @@ class ReviewReport(BaseModel):
 | `POST` | `/research/{session_id}/hypotheses/{hypothesis_id}/reject` | Reject a hypothesis; loop continues to next gap |
 | `GET` | `/research/{session_id}/note` | Retrieve the final research note and self-review report |
 | `GET` | `/research/{session_id}/knowledge-graph` | Retrieve the full cross-paper knowledge graph snapshot |
-| `POST` | `/poc` | Submit a PDF for PoC Mode; returns `session_id` |
+| `POST` | `/poc` | Submit an arXiv URL/id for PoC Mode; returns `session_id` |
 | `GET` | `/poc/{session_id}/claims` | List all claims with testability classification |
 | `GET` | `/poc/{session_id}/claim/{claim_id}/spec` | Retrieve full `PoCSpec` for a testable claim |
 | `GET` | `/poc/{session_id}/scaffold.zip` | Download generated scaffold as a zip file |
@@ -594,7 +594,7 @@ class ReviewReport(BaseModel):
 
 ```json
 {
-  "file": "<multipart PDF upload>",
+  "arxiv_url": "https://arxiv.org/abs/1706.03762",
   "options": {
     "enable_lean4_export": false,
     "rag_corpus": "arxiv_math",
@@ -626,7 +626,7 @@ class ReviewReport(BaseModel):
 | SSE streaming | FastAPI `EventSourceResponse` (sse-starlette) |
 | Symbolic verification | SymPy |
 | Numeric adversary | SciPy (optimize, minimize) |
-| PDF parsing | PyMuPDF (fitz) |
+| TeX ingestion | arXiv e-print source download + safe TeX assembly |
 | LLM calls | OpenAI API (GPT-4o) |
 | Embeddings | sentence-transformers |
 | Vector store | ChromaDB (local) or Pinecone (remote) |
@@ -653,7 +653,7 @@ class ReviewReport(BaseModel):
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  [PaperCourt]          [Upload PDF]    Summary: 12✓ 3? 2✗ 3⟳   │
+│  [PaperCourt]          [arXiv URL]     Summary: 12✓ 3? 2✗ 3⟳   │
 ├───────────────────────────────────────┬─────────────────────────┤
 │                                       │                         │
 │           DAG Canvas                  │    Activity Feed        │
@@ -782,7 +782,7 @@ Each feed entry is a single line with an icon, agent name, and short description
 
 1. **Claim extraction accuracy:** How do we handle informal assertions that are not labeled as theorems/lemmas but are still load-bearing? Heuristic detection vs. LLM extraction?
 2. **RAG corpus scope:** Start with arXiv abstracts only, or include full-text? Full-text dramatically increases index size.
-3. **Equation parsing:** PyMuPDF extracts LaTeX inconsistently from PDFs. Do we add a fallback OCR pass (e.g., Mathpix API) for equation-heavy papers?
+3. **Equation parsing:** How much TeX macro expansion is needed before symbolic verification becomes reliable across arXiv source styles?
 4. **Attacker budget:** How many challenges should AttackerAgent generate per claim before we cap it? Uncapped challenges blow up cost.
 5. **Verdict weighting:** How do we weight tier scores vs. LLM agent debate outcomes in VerdictAggregatorAgent? Needs an explicit scoring rubric.
 6. **Lean 4 scope:** Autoformalization of arbitrary math is unsolved. Should Lean 4 export be scoped to algebraic identities only for v1?
@@ -791,7 +791,7 @@ Each feed entry is a single line with an icon, agent name, and short description
 9. **Reader Mode: exercise quality bar:** How do we ensure exercises are actually pedagogically useful and not trivial? Do we need a human review pass on generated exercises for v1?
 10. **Reader Mode: prerequisite link quality:** OpenAlex covers textbooks sparsely — do we fall back to Google Scholar links or curated static resource lists for common prerequisites?
 11. **Research Mode: knowledge graph persistence:** Does the cross-paper graph persist across sessions (growing database) or is it rebuilt fresh each session? Persistent is more powerful but adds infra complexity for v1.
-12. **Research Mode: domain scope:** Review and Reader Mode work on any PDF. Research Mode's literature retrieval is currently Semantic Scholar + arXiv — does this scope the product to academic research only, or do we want a more general document corpus path?
+12. **Research Mode: domain scope:** Review and Reader Mode work on arXiv papers. Research Mode's literature retrieval is currently Semantic Scholar + arXiv — does this scope the product to academic research only, or do we want a broader corpus path?
 13. **Research Mode: hypothesis quality gate:** What makes a generated hypothesis "good enough" to show the user? We need a pre-filter before the human checkpoint to avoid surfacing trivially false or already-proven conjectures.
 14. **PoC Mode: testability classification accuracy:** GPT-4o may misclassify purely theoretical claims as testable (e.g. existence proofs that state a bound without specifying how to compute it). Do we need a human confirmation step before scaffold generation?
 15. **PoC Mode: scaffold quality for novel architectures:** Generated scaffolds will be better for standard ML tasks (classification accuracy, loss curves) than for novel architectures or domain-specific metrics. Should we scope PoC Mode to ML/systems papers only for v1?
@@ -807,7 +807,7 @@ Each feed entry is a single line with an icon, agent name, and short description
 | SymPy fails on non-algebraic claims | High | Medium | Tier 1 emits `inconclusive` gracefully; does not block pipeline |
 | Cost blowup from parallel LLM calls | Medium | High | Per-claim attacker challenge cap; token budget guardrails |
 | DAG cycle detection edge cases | Low | High | Strict cycle check at build time; fail fast with clear error |
-| PDF parsing failures on scanned papers | Medium | Medium | Detect scan; surface warning; partial processing where possible |
+| arXiv source ingestion failures | Medium | Medium | Surface clear source errors and keep failed jobs inspectable |
 | SSE stream dropped mid-review | Medium | Medium | Backend buffers all `DAGEvent`s per job; client can re-subscribe and replay from last `event_id` |
 | React Flow performance on large DAGs (50+ nodes) | Low | Medium | Enable virtualization; add minimap + zoom controls; cap visible detail at small zoom levels |
 | Reader Mode exercises are trivial or wrong | Medium | Medium | GPT-4o with strict rubric prompt; sample eval set to validate quality before shipping |

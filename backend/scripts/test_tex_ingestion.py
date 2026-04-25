@@ -2,7 +2,7 @@
 
 Usage from repo root or backend/:
     python backend/scripts/test_tex_ingestion.py
-    python backend/scripts/test_tex_ingestion.py --live https://arxiv.org/pdf/1706.03762
+    python backend/scripts/test_tex_ingestion.py --live https://arxiv.org/abs/1706.03762
 """
 from __future__ import annotations
 
@@ -161,7 +161,7 @@ def main() -> int:
     print("offline TeX ingestion tests OK")
 
     if args.live is not None:
-        urls = args.live or ["https://arxiv.org/pdf/1706.03762"]
+        urls = args.live or ["https://arxiv.org/abs/1706.03762"]
         asyncio.run(test_live_fetch(urls))
         print("live TeX ingestion tests OK")
 

@@ -10,6 +10,8 @@ import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
+from fastapi import HTTPException
+
 HERE = Path(__file__).resolve().parent
 BACKEND = HERE.parent
 sys.path.insert(0, str(BACKEND))
@@ -205,10 +207,39 @@ async def test_review_route_source_storage() -> None:
         review_api._orchestrator.run = original_run
 
     _assert(response["parser_kind"] == "tex", "route did not queue tex parser")
+    _assert(
+        response["source_url"] == "https://arxiv.org/e-print/1706.03762",
+        "route did not normalize to arXiv e-print source URL",
+    )
     job = job_store.get(response["job_id"])
     _assert(job is not None, "job missing")
     _assert(job["arxiv_id"] == "1706.03762", "wrong arxiv id")
     _assert(Path(job["tex_path"]).is_file(), "assembled tex was not written")
+
+
+async def test_report_routes_require_completed_job() -> None:
+    try:
+        await review_api.get_report("missing-review-job")
+    except HTTPException as exc:
+        _assert(exc.status_code == 404, f"expected 404, got {exc.status_code}")
+    else:
+        raise AssertionError("missing report job did not raise")
+
+    job_id = job_store.create_job(mode="review")
+    try:
+        await review_api.get_report(job_id)
+    except HTTPException as exc:
+        _assert(exc.status_code == 202, f"expected 202, got {exc.status_code}")
+    else:
+        raise AssertionError("incomplete report job did not raise")
+
+    report = {"markdown_report": "# Review Report"}
+    job_store.update(job_id, status="complete", report=report)
+    _assert(await review_api.get_report(job_id) == report, "completed report mismatch")
+    _assert(
+        await review_api.get_markdown_report(job_id) == "# Review Report",
+        "markdown report mismatch",
+    )
 
 
 async def test_orchestrator_mocked_prompt_2_4() -> None:
@@ -262,6 +293,7 @@ async def test_orchestrator_mocked_prompt_2_4() -> None:
 
 async def main_async() -> None:
     await test_review_route_source_storage()
+    await test_report_routes_require_completed_job()
     await test_orchestrator_mocked_prompt_2_4()
 
 

@@ -1,7 +1,7 @@
-"""End-to-end live pipeline test for arXiv URL -> TeX -> Prompt 2.4.
+"""End-to-end live pipeline test for arXiv source review.
 
 Usage (from repo root):
-    python backend/scripts/test_pipeline.py https://arxiv.org/pdf/1706.03762
+    python backend/scripts/test_pipeline.py https://arxiv.org/abs/1706.03762
 
 This script makes real OpenAI calls. Use ``--max-claims`` while developing if
 you want to validate the full path without reviewing every extracted claim.

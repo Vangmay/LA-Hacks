@@ -14,7 +14,7 @@ PaperCourt is a multi-agent system for engaging with research papers across four
 - **PoC Mode** — filters empirically testable claims, generates runnable implementation scaffolds, ingests experiment results, produces a reproducibility report
 - **Research Mode** — autonomous literature retrieval, knowledge graph construction, gap detection, hypothesis generation, self-review loop
 
-All four modes share one backend pipeline: PDF → ParserAgent → ClaimExtractorAgent → DAGBuilderAgent → mode-specific agents.
+All four modes share one backend pipeline: arXiv URL/id → e-print source bundle → TexParserAgent → ClaimExtractorAgent → DAGBuilderAgent → mode-specific agents.
 
 The live DAG is the primary UI — nodes update in real time via SSE as agents run.
 
@@ -27,7 +27,7 @@ The live DAG is the primary UI — nodes update in real time via SSE as agents r
 | Backend               | Python 3.11, FastAPI, Pydantic v2, uvicorn                 |
 | Async                 | asyncio, asyncio.gather, sse-starlette                     |
 | LLM                   | OpenAI API (gpt-4o) via `openai.AsyncOpenAI`               |
-| PDF parsing           | PyMuPDF (fitz)                                             |
+| TeX ingestion         | arXiv e-print source download + safe TeX assembly          |
 | Symbolic verification | SymPy                                                      |
 | Numeric verification  | SciPy, NumPy                                               |
 | Embeddings            | sentence-transformers (all-MiniLM-L6-v2)                   |
@@ -48,7 +48,7 @@ papercourt/
 │   ├── models/              # Pydantic models — Person A owns, everyone imports
 │   ├── agents/
 │   │   ├── base.py          # BaseAgent, AgentContext, AgentResult — do not modify without coordinating
-│   │   ├── parser.py        # Person A
+│   │   ├── tex_parser.py    # Person A
 │   │   ├── claim_extractor.py  # Person A
 │   │   ├── dag_builder.py   # Person A
 │   │   ├── symbolic_verifier.py  # Person B
@@ -306,7 +306,7 @@ curl http://localhost:8000/health                          # {"status": "ok"}
 curl http://localhost:8000/review/test-id/dag              # {"nodes": [], "edges": []}
 curl http://localhost:8000/poc/test-id/claims              # {"total": 1, ...}
 python -c "from models import ClaimUnit, PoCSpec, ReviewReport; print('models ok')"
-python -c "from agents.parser import ParserAgent; print(ParserAgent().agent_id)"
+python -c "from agents.tex_parser import TexParserAgent; print(TexParserAgent().agent_id)"
 python -c "from core.dag import DAG; d = DAG(); d.add_node('a'); print('dag ok')"
 ```
 
@@ -327,9 +327,9 @@ For consistent testing across all branches, everyone uses the same paper:
 
 **arXiv:1706.03762** — "Attention Is All You Need" (Vaswani et al., 2017)
 
-Download: `wget https://arxiv.org/pdf/1706.03762 -O test_paper.pdf`
+Use: `https://arxiv.org/abs/1706.03762`
 
-Store at `backend/tests/fixtures/test_paper.pdf` (gitignored). This paper has clearly labeled propositions, explicit performance numbers (BLEU scores), and complexity claims — it exercises all four modes well.
+The backend extracts the article id and downloads `https://arxiv.org/e-print/1706.03762`. This paper has clearly labeled propositions, explicit performance numbers (BLEU scores), and complexity claims — it exercises all four modes well.
 
 ---
 
@@ -340,11 +340,11 @@ Build in this order. Do not move to the next phase until the current one passes 
 | Phase                     | Owner    | Checkpoint                                                           |
 | ------------------------- | -------- | -------------------------------------------------------------------- |
 | 0 — Scaffold              | Person A | All 6 verify checks pass                                             |
-| 1 — Parser + DAG          | Person A | `python scripts/test_pipeline.py test_paper.pdf` prints claims + DAG |
+| 1 — Parser + DAG          | Person A | `python scripts/test_pipeline.py https://arxiv.org/abs/1706.03762 --max-claims 1` prints claims + DAG |
 | 2 — Review agents         | Person B | `POST /review` returns full ReviewReport JSON for test paper         |
-| 3 — Live DAG UI           | Person C | Upload PDF, watch nodes turn green/red in browser in real time       |
+| 3 — Live DAG UI           | Person C | Enter arXiv URL, watch nodes turn green/red in browser in real time  |
 | 7 (partial) — PoC backend | Person D | `GET /poc/{id}/scaffold.zip` downloads a real runnable scaffold      |
 
 Phases 4 (Reader), 5 (Research), 6 (polish) are post-hackathon unless ahead of schedule.
 
-The demo arc: upload paper → live DAG updates as review runs → click a node to see attacker/defender exchange → switch to PoC mode → download scaffold zip → show the generated test_harness.py. That's the story.
+The demo arc: enter arXiv URL → live DAG updates as review runs → click a node to see attacker/defender exchange → switch to PoC mode → download scaffold zip → show the generated test_harness.py. That's the story.

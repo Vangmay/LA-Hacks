@@ -1,8 +1,7 @@
-"""TexParserAgent — parse assembled arXiv TeX into parser_output.
+"""Parse assembled arXiv TeX into PaperCourt parser output.
 
-The output shape intentionally matches ParserAgent so ClaimExtractorAgent,
-DAGBuilderAgent, and review-mode agents do not need to know whether the source
-was TeX or PDF.
+The parser extracts title, abstract, sections, equations, bibliography entries,
+plain review text, and scan status from a TeX document string.
 """
 from __future__ import annotations
 
@@ -53,6 +52,8 @@ _TITLE_COMMANDS = ("title", "icmltitle", "papertitle")
 
 
 class TexParserAgent(BaseAgent):
+    """Extract review-ready paper structure from assembled TeX."""
+
     agent_id = "tex_parser"
 
     EMPTY_OUTPUT: Dict[str, Any] = {
@@ -66,6 +67,7 @@ class TexParserAgent(BaseAgent):
     }
 
     async def run(self, context: AgentContext) -> AgentResult:
+        """Parse TeX from ``context.extra["tex_text"]`` or ``tex_path``."""
         tex_text = (context.extra or {}).get("tex_text")
         tex_path: Optional[str] = (context.extra or {}).get("tex_path") or (
             context.extra or {}
@@ -115,6 +117,7 @@ class TexParserAgent(BaseAgent):
             )
 
     def _parse_tex(self, tex: str) -> Dict[str, Any]:
+        """Return structured parser output for a TeX document."""
         clean = _strip_comments(tex)
         body = _document_body(clean)
 
@@ -129,11 +132,12 @@ class TexParserAgent(BaseAgent):
 
 
 def parse_tex_text(tex_text: str) -> Dict[str, Any]:
-    """Convenience function for tests/scripts that need synchronous parsing."""
+    """Parse TeX synchronously for scripts and offline tests."""
     return TexParserAgent()._parse_tex(tex_text)
 
 
 def _strip_comments(tex: str) -> str:
+    """Remove unescaped TeX comments while preserving line structure."""
     lines: List[str] = []
     for line in tex.splitlines():
         cut = len(line)
@@ -146,6 +150,7 @@ def _strip_comments(tex: str) -> str:
 
 
 def _document_body(tex: str) -> str:
+    """Return content between document boundaries when present."""
     begin = _BEGIN_DOCUMENT_RE.search(tex)
     if not begin:
         return tex
@@ -156,6 +161,7 @@ def _document_body(tex: str) -> str:
 
 
 def _extract_command_arg(tex: str, command: str) -> str:
+    """Return the first braced argument for a TeX command."""
     pattern = re.compile(rf"\\{re.escape(command)}\s*(?:\[[^\]]*\]\s*)?\{{", re.DOTALL)
     match = pattern.search(tex)
     if not match:
@@ -165,6 +171,7 @@ def _extract_command_arg(tex: str, command: str) -> str:
 
 
 def _extract_first_command_arg(tex: str, commands: Tuple[str, ...]) -> str:
+    """Return the first populated command argument from ``commands``."""
     for command in commands:
         value = _extract_command_arg(tex, command)
         if value.strip():
@@ -173,6 +180,7 @@ def _extract_first_command_arg(tex: str, commands: Tuple[str, ...]) -> str:
 
 
 def _extract_environment(tex: str, env: str) -> str:
+    """Return the body of the first matching TeX environment."""
     pattern = re.compile(
         rf"\\begin\s*\{{{re.escape(env)}\}}(?P<body>.*?)\\end\s*\{{{re.escape(env)}\}}",
         re.IGNORECASE | re.DOTALL,
@@ -182,6 +190,7 @@ def _extract_environment(tex: str, env: str) -> str:
 
 
 def _extract_sections(body: str, abstract: str) -> List[Dict[str, str]]:
+    """Split the document body into section dictionaries."""
     matches: List[Tuple[int, int, str]] = []
     for match in _SECTION_CMD_RE.finditer(body):
         heading, end = _read_braced(body, match.end() - 1)
@@ -213,6 +222,7 @@ def _extract_sections(body: str, abstract: str) -> List[Dict[str, str]]:
 
 
 def _extract_equations(body: str, sections: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    """Extract display and inline math with section labels."""
     section_spans = _section_spans(body)
     seen: set[str] = set()
     equations: List[Dict[str, str]] = []
@@ -250,6 +260,7 @@ def _extract_equations(body: str, sections: List[Dict[str, str]]) -> List[Dict[s
 
 
 def _section_spans(body: str) -> List[Tuple[int, str]]:
+    """Map section command positions to section headings."""
     spans: List[Tuple[int, str]] = [(0, "")]
     for match in _SECTION_CMD_RE.finditer(body):
         heading, _ = _read_braced(body, match.end() - 1)
@@ -258,6 +269,7 @@ def _section_spans(body: str) -> List[Tuple[int, str]]:
 
 
 def _section_for_position(pos: int, spans: List[Tuple[int, str]]) -> str:
+    """Return the section heading active at ``pos``."""
     current = ""
     for start, heading in spans:
         if start > pos:
@@ -267,6 +279,7 @@ def _section_for_position(pos: int, spans: List[Tuple[int, str]]) -> str:
 
 
 def _extract_bibliography(body: str) -> List[Dict[str, str]]:
+    """Extract bibliography entries from TeX bibliography constructs."""
     bib_text = _extract_environment(body, "thebibliography")
     if bib_text:
         return _parse_bibitems(bib_text)
@@ -284,6 +297,7 @@ def _extract_bibliography(body: str) -> List[Dict[str, str]]:
 
 
 def _parse_bibitems(text: str) -> List[Dict[str, str]]:
+    """Parse ``\\bibitem`` entries into bibliography dictionaries."""
     matches = list(_BIBITEM_RE.finditer(text))
     entries: List[Dict[str, str]] = []
     for idx, match in enumerate(matches):
@@ -296,6 +310,7 @@ def _parse_bibitems(text: str) -> List[Dict[str, str]]:
 
 
 def _build_raw_text(title: str, body: str) -> str:
+    """Build plain review text from the title and document body."""
     raw = _latex_to_text(body)
     if title:
         return f"{title}\n\n{raw}".strip()
@@ -303,6 +318,7 @@ def _build_raw_text(title: str, body: str) -> str:
 
 
 def _latex_to_text(tex: str) -> str:
+    """Convert common TeX markup to compact plain text."""
     text = tex
     text = _replace_equation_blocks(text)
     text = _replace_section_commands(text)
@@ -335,6 +351,7 @@ def _latex_to_text(tex: str) -> str:
 
 
 def _replace_equation_blocks(tex: str) -> str:
+    """Normalize display math environments into delimited math blocks."""
     text = tex
     for env in _EQUATION_ENVS:
         pattern = re.compile(
@@ -347,6 +364,7 @@ def _replace_equation_blocks(tex: str) -> str:
 
 
 def _protect_math_segments(tex: str) -> Tuple[str, Dict[str, str]]:
+    """Protect math spans from command stripping."""
     segments: Dict[str, str] = {}
     pattern = re.compile(
         r"(?<!\\)\$\$(?P<display>.*?)(?<!\\)\$\$|"
@@ -363,6 +381,7 @@ def _protect_math_segments(tex: str) -> Tuple[str, Dict[str, str]]:
 
 
 def _replace_section_commands(tex: str) -> str:
+    """Render section commands as plain-text headings."""
     output: List[str] = []
     cursor = 0
     for match in _SECTION_CMD_RE.finditer(tex):
@@ -375,6 +394,7 @@ def _replace_section_commands(tex: str) -> str:
 
 
 def _remove_environment(tex: str, env: str) -> str:
+    """Remove all instances of a TeX environment."""
     pattern = re.compile(
         rf"\\begin\s*\{{{re.escape(env)}\}}.*?\\end\s*\{{{re.escape(env)}\}}",
         re.IGNORECASE | re.DOTALL,
@@ -383,6 +403,7 @@ def _remove_environment(tex: str, env: str) -> str:
 
 
 def _read_braced(text: str, open_brace_idx: int) -> Tuple[str, int]:
+    """Read a balanced braced value starting at ``open_brace_idx``."""
     if open_brace_idx < 0 or open_brace_idx >= len(text) or text[open_brace_idx] != "{":
         return "", open_brace_idx
 

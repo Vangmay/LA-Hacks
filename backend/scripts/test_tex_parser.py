@@ -2,7 +2,7 @@
 
 Usage:
     python backend/scripts/test_tex_parser.py
-    python backend/scripts/test_tex_parser.py --live https://arxiv.org/pdf/1706.03762
+    python backend/scripts/test_tex_parser.py --live https://arxiv.org/abs/1706.03762
 """
 from __future__ import annotations
 
@@ -110,7 +110,7 @@ def main() -> int:
     print("offline TeX parser tests OK")
 
     if args.live is not None:
-        urls = args.live or ["https://arxiv.org/pdf/1706.03762"]
+        urls = args.live or ["https://arxiv.org/abs/1706.03762"]
         asyncio.run(test_live_parse(urls))
         print("live TeX parser tests OK")
 

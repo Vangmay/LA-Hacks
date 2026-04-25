@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 class ReviewOrchestrator:
-    """Run the TeX-first review pipeline through Prompt 2.4.
+    """Run review jobs from assembled arXiv TeX through Prompt 2.4.
 
     Runtime path:
       arXiv source TeX -> TexParserAgent -> ClaimExtractorAgent -> DAGBuilderAgent
@@ -36,6 +36,7 @@ class ReviewOrchestrator:
     """
 
     async def run(self, job_id: str, **_kwargs) -> None:
+        """Execute the review pipeline for a queued job."""
         try:
             job = job_store.get(job_id)
             if not job:
@@ -97,6 +98,7 @@ class ReviewOrchestrator:
             job_store.update(job_id, status="error", error=str(e))
 
     async def _run_parser(self, job_id: str, job: dict) -> Dict[str, Any]:
+        """Parse the assembled TeX file stored for this job."""
         tex_path = job.get("tex_path")
         result = await TexParserAgent().run(
             AgentContext(job_id=job_id, extra={"tex_path": tex_path})
@@ -110,6 +112,7 @@ class ReviewOrchestrator:
         job_id: str,
         parser_output: Dict[str, Any],
     ) -> List[dict]:
+        """Extract atomic claims from parser output."""
         result = await ClaimExtractorAgent().run(
             AgentContext(job_id=job_id, extra={"parser_output": parser_output})
         )
@@ -121,6 +124,7 @@ class ReviewOrchestrator:
         return claims
 
     async def _run_dag_builder(self, job_id: str, claims: List[dict]) -> Dict[str, Any]:
+        """Build claim dependency metadata for the review DAG."""
         result = await DAGBuilderAgent().run(
             AgentContext(job_id=job_id, extra={"claims": claims})
         )
@@ -133,6 +137,7 @@ class ReviewOrchestrator:
         job_id: str,
         claims: List[dict],
     ) -> Dict[str, dict]:
+        """Run verification, attack, and defense agents for each claim."""
         symbolic = SymbolicVerifierAgent()
         numeric = NumericAdversaryAgent()
         attacker = AttackerAgent()
@@ -183,6 +188,7 @@ class ReviewOrchestrator:
         claim: ClaimUnit,
         verifiers: List[Any],
     ) -> List[dict]:
+        """Run Prompt 2.1 verification tiers for one claim."""
         ctx = AgentContext(job_id=job_id, claim=claim)
         results = await asyncio.gather(
             *(verifier.run(ctx) for verifier in verifiers),
@@ -216,6 +222,7 @@ class ReviewOrchestrator:
         attacker: AttackerAgent,
         verification_results: List[dict],
     ) -> List[dict]:
+        """Run Prompt 2.3 challenge generation for one claim."""
         result = await _run_agent_no_raise(
             attacker.run(
                 AgentContext(
@@ -244,6 +251,7 @@ class ReviewOrchestrator:
         defender: DefenderAgent,
         challenges: List[dict],
     ) -> List[dict]:
+        """Run Prompt 2.4 rebuttal generation for one claim."""
         result = await _run_agent_no_raise(
             defender.run(
                 AgentContext(
@@ -271,6 +279,7 @@ async def _run_agent_no_raise(
     agent_id: str,
     claim_id: str,
 ) -> AgentResult:
+    """Convert unexpected agent exceptions into AgentResult errors."""
     try:
         return await awaitable
     except Exception as e:
@@ -291,6 +300,7 @@ async def _publish(
     claim_id: str | None,
     payload: dict,
 ) -> None:
+    """Publish a DAG event for a review job."""
     await event_bus.publish(
         job_id,
         DAGEvent(
@@ -305,6 +315,7 @@ async def _publish(
 
 
 def _dag_snapshot(claims: List[dict], edges: List[dict]) -> dict:
+    """Return the API-facing DAG snapshot."""
     return {
         "nodes": [
             {
@@ -328,6 +339,7 @@ def _interim_report(
     dag_output: Dict[str, Any],
     review_results: Dict[str, dict],
 ) -> dict:
+    """Build the Prompt 2.4 report payload for completed jobs."""
     paper_hash = _paper_hash(job.get("tex_path"))
     return {
         "paper_title": parser_output.get("title") or job.get("arxiv_id") or "Untitled",
@@ -356,6 +368,7 @@ def _interim_report(
 
 
 def _paper_hash(path: str | None) -> str:
+    """Return a stable short hash for the assembled TeX file."""
     if not path:
         return "0" * 16
     try:
