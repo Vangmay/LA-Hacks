@@ -94,3 +94,87 @@ source-grounded `ResearchAtom` review pipeline:
   from nearby prose/equation blocks, especially for AEVB equations (1)-(10) and
   appendix equations (13)-(24).
 - Live E2E depends on arXiv availability and the configured OpenAI model/key.
+
+---
+
+# UI Demo Track
+
+Goal: a working `/review/:jobId` page that demos the v0.4 atom pipeline end to
+end. Backend is complete; the demo bottleneck is the frontend.
+
+## Done
+
+- Submit flow on Home: real input + "Review" button, calls
+  `api.review.submit(arxivUrl)`, navigates to `/review/${job_id}` on success,
+  renders inline error on failure. See `frontend/src/pages/Home.jsx`.
+- Skeleton review page at `frontend/src/pages/Review.jsx`:
+  - Header with job id, `status`, and `completed_atoms / total_atoms`.
+  - Left pane: atom list from `GET /review/{id}/dag`, with status dot + type
+    badge + importance + section. Click selects.
+  - Center pane: placeholder showing atom/edge counts (DAG viz pending).
+  - Right pane: detail view with type, status, label, section, source excerpt.
+  - One-shot load via `Promise.all([api.review.status, api.review.dag])`.
+- `App.jsx` routes `/review/:jobId` → `<Review />`.
+- Vite proxy already forwards `/api` → `localhost:8000` (see
+  `frontend/vite.config.js`); both routes return 200 in dev.
+
+## Broken right now
+
+- **`daisyui` is in `frontend/package.json` but missing from `node_modules`.**
+  PostCSS errors at runtime: `Cannot find module 'daisyui'`. `tailwind.config.js`
+  loads it via `require("daisyui")`. Fix is `npm install` inside `frontend/`
+  (a fresh install picks it up from package.json) or remove daisyui from the
+  config if we don't actually use any daisy classes. **Decide before next dev
+  run.**
+
+## Up next (in build order)
+
+1. **Resolve daisyui.** Either install or strip from tailwind.config.js. We are
+   not currently using any `daisy-*` classnames in `Home.jsx` or `Review.jsx`.
+2. **SSE consumer in `Review.jsx`.** Open `api.review.stream(jobId)` in a
+   `useEffect`, dispatch events into a reducer, update atom status in place.
+   Event types to handle:
+   - `ATOM_CREATED`, `EDGE_CREATED` — populate the graph live (currently we
+     only see what `/dag` returned at mount).
+   - `CHECK_STARTED` / `CHECK_COMPLETE` — flip atom status to `checking`, then
+     show check kind + status + summary in the detail pane.
+   - `CHALLENGE_ISSUED`, `REBUTTAL_ISSUED` — append to detail pane lists.
+   - `VERDICT_EMITTED` — set final atom status; recolor list dot + node.
+   - `CASCADE_TRIGGERED` — mark cascade-risk atoms with a distinct color.
+   - `REPORT_READY` — enable a "View Report" affordance.
+   - `JOB_COMPLETE`, `JOB_ERROR` — terminal UI states; close `EventSource`.
+   Use `Last-Event-Id` for resume on reconnect (server already supports it,
+   ported in d200762).
+3. **DAG visualization in the center pane.** React Flow is in
+   `CLAUDE.md`'s stated stack but **not yet in `package.json`** — `npm i
+   reactflow` first. Map `dag.nodes` → React Flow nodes (color by verdict
+   status from the SSE state), `dag.edges` → edges. Click a node ⇒ select it
+   in the right pane (already wired by `selectedId`).
+4. **Report drawer.** On `REPORT_READY`, fetch
+   `api.review.reportMarkdown(jobId)` and render in a slide-over. A small
+   markdown lib (`marked` or `react-markdown`) is fine; keep it minimal.
+5. **Pre-warm for demo day.** Run both papers from `good_papers.txt` against
+   the demo backend before going live, bookmark those `job_id`s as a fallback
+   if a fresh run fails mid-talk.
+
+## Explicitly skipping for the demo
+
+- Source-grounding back into TeX (highlight `SourceSpan` in a TeX/PDF view).
+  High effort, low marginal wow given the live DAG already tells the story.
+- Persistence (`job_store` is in-process). A demo run survives a single
+  process; that's enough.
+- Idempotency on `/review/arxiv` (resubmits re-run the LLMs). Don't resubmit.
+- Multi-variable numeric probe support.
+- Reader / PoC / Research mode UIs. Stubs stay stubs.
+
+## Files of interest
+
+- `frontend/src/pages/Home.jsx` — submit flow (done).
+- `frontend/src/pages/Review.jsx` — three-pane page (skeleton done, needs SSE +
+  DAG + report drawer).
+- `frontend/src/App.jsx` — routes.
+- `frontend/src/api/client.js` — already has `review.stream`,
+  `review.report`, `review.reportMarkdown` ready to use.
+- `backend/core/orchestrators/review.py` — authoritative list of `DAGEvent`
+  types the SSE consumer must handle; mirror it in the reducer.
+- `backend/api/review.py` — SSE endpoint with `Last-Event-Id` replay + heartbeat.

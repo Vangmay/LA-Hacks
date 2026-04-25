@@ -174,8 +174,8 @@ async def get_dag(job_id: str):
     if not job_store.exists(job_id):
         return {"nodes": [], "edges": []}
     job = job_store.get(job_id) or {}
-    if job.get("dag_snapshot"):
-        return job["dag_snapshot"]
+    if job.get("graph_snapshot"):
+        return job["graph_snapshot"]
     return {"nodes": [], "edges": []}
 
 
