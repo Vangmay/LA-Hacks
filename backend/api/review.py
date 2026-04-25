@@ -1,26 +1,110 @@
 import asyncio
 import logging
+import os
 from datetime import datetime
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import PlainTextResponse
+from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
-from core.job_store import job_store
 from core.event_bus import event_bus
+from core.job_store import job_store
 from core.orchestrators.review import ReviewOrchestrator
+from utils.arxiv import fetch_paper, parse_arxiv_url
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 _orchestrator = ReviewOrchestrator()
 
+_JOB_ROOT = "/tmp/papercourt"
+
+
+class ArxivSubmission(BaseModel):
+    arxiv_url: str
+
 
 @router.post("")
-async def submit_review(file: UploadFile = File(None)):
-    job_id = job_store.create_job(mode="review", filename=file.filename if file else None)
+async def submit_review(
+    file: Optional[UploadFile] = File(None),
+    arxiv_url: Optional[str] = Form(None),
+):
+    """Submit a paper for review via either PDF upload or arXiv URL.
+
+    Body forms:
+      - multipart file upload as ``file`` field
+      - form field ``arxiv_url`` (URL or bare arXiv id)
+    """
+    if file is None and not arxiv_url:
+        raise HTTPException(
+            status_code=400,
+            detail="provide either a PDF file or arxiv_url",
+        )
+
+    job_id = job_store.create_job(
+        mode="review",
+        filename=file.filename if file else None,
+    )
     event_bus.create_channel(job_id)
+    job_dir = os.path.join(_JOB_ROOT, job_id)
+    os.makedirs(job_dir, exist_ok=True)
+
+    pdf_path: Optional[str] = None
+    html_path: Optional[str] = None
+    parser_kind: str = "pdf"
+    arxiv_id: Optional[str] = None
+
+    if arxiv_url:
+        ref = parse_arxiv_url(arxiv_url)
+        if not ref:
+            raise HTTPException(status_code=400, detail=f"unrecognized arxiv url: {arxiv_url!r}")
+        arxiv_id = ref.canonical
+        try:
+            fetched = await fetch_paper(ref, job_dir)
+        except Exception as e:
+            logger.exception("arxiv fetch failed for %s", ref.canonical)
+            job_store.update(job_id, status="error", error=f"fetch failed: {e}")
+            raise HTTPException(status_code=502, detail=f"arxiv fetch failed: {e}") from e
+        pdf_path = fetched.pdf_path
+        if fetched.html_text:
+            html_path = os.path.join(job_dir, f"{ref.canonical}.html")
+            with open(html_path, "w", encoding="utf-8") as fh:
+                fh.write(fetched.html_text)
+            parser_kind = "html"
+        if not pdf_path and not html_path:
+            job_store.update(job_id, status="error", error="arxiv returned no fetchable formats")
+            raise HTTPException(status_code=502, detail="arxiv returned no fetchable formats")
+
+    if file is not None:
+        target = os.path.join(job_dir, "upload.pdf")
+        contents = await file.read()
+        with open(target, "wb") as fh:
+            fh.write(contents)
+        pdf_path = target
+        parser_kind = "pdf"
+
+    job_store.update(
+        job_id,
+        pdf_path=pdf_path,
+        html_path=html_path,
+        parser_kind=parser_kind,
+        arxiv_id=arxiv_id,
+    )
+
     asyncio.create_task(_orchestrator.run(job_id))
-    return {"job_id": job_id, "status": "queued"}
+    return {
+        "job_id": job_id,
+        "status": "queued",
+        "parser_kind": parser_kind,
+        "arxiv_id": arxiv_id,
+    }
+
+
+@router.post("/arxiv")
+async def submit_review_arxiv(submission: ArxivSubmission):
+    """JSON-body convenience wrapper around POST /review with arxiv_url."""
+    return await submit_review(file=None, arxiv_url=submission.arxiv_url)
 
 
 @router.get("/{job_id}/status")

@@ -1,7 +1,12 @@
-"""End-to-end pipeline test: PDF -> Parser -> ClaimExtractor -> DAGBuilder -> SymbolicVerifier.
+"""End-to-end pipeline test: paper -> Parser -> ClaimExtractor -> DAGBuilder -> SymbolicVerifier -> Attacker.
 
 Usage (from backend/):
-    python scripts/test_pipeline.py path/to/paper.pdf
+    .venv/bin/python scripts/test_pipeline.py [path/to/paper.pdf | arxiv-url-or-id]
+
+Examples:
+    .venv/bin/python scripts/test_pipeline.py tests/fixtures/test_paper.pdf
+    .venv/bin/python scripts/test_pipeline.py https://arxiv.org/abs/1706.03762
+    .venv/bin/python scripts/test_pipeline.py 1706.03762
 
 Defaults to tests/fixtures/test_paper.pdf. Requires OPENAI_API_KEY in
 backend/.env. Makes real API calls (typically $0.05-$0.20).
@@ -13,6 +18,7 @@ import hashlib
 import json
 import os
 import sys
+import tempfile
 from pathlib import Path
 import dotenv
 
@@ -26,35 +32,65 @@ from agents.base import AgentContext
 from agents.claim_extractor import ClaimExtractorAgent
 from agents.dag_builder import DAGBuilderAgent
 from agents.parser import ParserAgent
+from agents.html_parser import HtmlParserAgent
 from agents.symbolic_verifier import SymbolicVerifierAgent
 from agents.attacker import AttackerAgent
 from models import ClaimUnit
 from config import settings
+from utils.arxiv import fetch_paper, parse_arxiv_url
 
 
-def _paper_hash(pdf_path: str) -> str:
-    with open(pdf_path, "rb") as f:
-        return hashlib.md5(f.read()).hexdigest()[:12]
+def _resolve_input(arg: str):
+    """Returns ('pdf', path) or ('html', html_text) or raises."""
+    ref = parse_arxiv_url(arg)
+    if ref is not None:
+        print(f"=== Fetching arXiv {ref.canonical} ===")
+        with tempfile.TemporaryDirectory() as tmp:
+            fetched = asyncio.run(fetch_paper(ref, tmp))
+            if fetched.html_text:
+                print(f"  html source: {fetched.html_source_url}")
+                return ("html", fetched.html_text)
+            if fetched.pdf_path:
+                # html unavailable — copy the PDF out of the tempdir so the
+                # caller can still read it after the with-block exits.
+                dest = Path(tempfile.mkdtemp()) / Path(fetched.pdf_path).name
+                Path(fetched.pdf_path).rename(dest)
+                print(f"  no HTML; using PDF at {dest}")
+                return ("pdf", str(dest))
+        raise RuntimeError("arxiv fetch produced neither html nor pdf")
+    if os.path.isfile(arg):
+        return ("pdf", arg)
+    raise FileNotFoundError(f"not a PDF and not an arXiv URL: {arg}")
 
 
-async def run(pdf_path: str) -> int:
-    if not os.path.isfile(pdf_path):
-        print(f"PDF not found: {pdf_path}")
-        print("Download the test paper with:")
-        print("  wget -q https://arxiv.org/pdf/1706.03762 -O backend/tests/fixtures/test_paper.pdf")
-        return 1
+def _paper_hash(kind: str, source: str) -> str:
+    if kind == "pdf":
+        with open(source, "rb") as f:
+            return hashlib.md5(f.read()).hexdigest()[:12]
+    return hashlib.md5(source.encode("utf-8")).hexdigest()[:12]
 
+
+async def run(kind: str, source: str) -> int:
     if not settings.openai_api_key:
         print("OPENAI_API_KEY not set. Add it to backend/.env and re-run.")
         return 1
 
-    paper_hash = _paper_hash(pdf_path)
+    paper_hash = _paper_hash(kind, source)
     pipeline_output: dict = {"paper_hash": paper_hash}
 
     # ── Step 1: Parser ────────────────────────────────────────────────────────
-    print(f"\n=== ParserAgent ({pdf_path}) ===")
-    parser_ctx = AgentContext(job_id="manual-test", extra={"pdf_path": pdf_path})
-    parser_result = await ParserAgent().run(parser_ctx)
+    if kind == "html":
+        print("\n=== HtmlParserAgent ===")
+        parser_ctx = AgentContext(job_id="manual-test", extra={"html_text": source})
+        parser_result = await HtmlParserAgent().run(parser_ctx)
+    else:
+        print(f"\n=== ParserAgent ({source}) ===")
+        parser_ctx = AgentContext(job_id="manual-test", extra={"pdf_path": source})
+        parser_result = await ParserAgent().run(parser_ctx)
+
+    if parser_result.status != "success":
+        print(f"  parser status={parser_result.status} error={parser_result.error}")
+        return 1
     parsed = parser_result.output
     print(f"  title:        {parsed['title'][:80]!r}")
     print(f"  sections:     {len(parsed['sections'])}")
@@ -229,8 +265,17 @@ def _save(data: dict, paper_hash: str) -> None:
 
 
 def main() -> int:
-    pdf_path = sys.argv[1] if len(sys.argv) > 1 else str(BACKEND / "tests" / "fixtures" / "test_paper.pdf")
-    return asyncio.run(run(pdf_path))
+    arg = sys.argv[1] if len(sys.argv) > 1 else str(
+        BACKEND / "tests" / "fixtures" / "test_paper.pdf"
+    )
+    try:
+        kind, source = _resolve_input(arg)
+    except Exception as e:
+        print(f"Could not resolve input: {e}")
+        print("Download the test paper with:")
+        print("  wget -q https://arxiv.org/pdf/1706.03762 -O backend/tests/fixtures/test_paper.pdf")
+        return 1
+    return asyncio.run(run(kind, source))
 
 
 if __name__ == "__main__":
