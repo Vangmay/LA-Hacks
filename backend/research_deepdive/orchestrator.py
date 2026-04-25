@@ -453,11 +453,18 @@ class DeepDiveOrchestrator:
 
     def _parse_dynamic_roster_response(
         self,
-        response: dict[str, Any],
+        response: dict[str, Any] | list[Any],
         investigator_id: str,
         section_title: str,
     ) -> tuple[list[ResearchTaste], str]:
-        raw_items = response.get("tastes") or response.get("subagents") or []
+        if isinstance(response, list):
+            raw_items = response
+            rationale = "Planner returned a top-level roster list."
+        elif isinstance(response, dict):
+            raw_items = response.get("tastes") or response.get("subagents") or []
+            rationale = str(response.get("rationale") or response.get("planner_rationale") or "")
+        else:
+            raise ValueError("dynamic roster response must be a JSON object or array")
         if not isinstance(raw_items, list):
             raise ValueError("dynamic roster response must contain a `tastes` or `subagents` list")
         tastes = [
@@ -465,7 +472,7 @@ class DeepDiveOrchestrator:
             for idx, item in enumerate(raw_items, start=1)
             if isinstance(item, dict)
         ]
-        return tastes, str(response.get("rationale") or response.get("planner_rationale") or "")
+        return tastes, rationale
 
     def _coerce_dynamic_taste(
         self,

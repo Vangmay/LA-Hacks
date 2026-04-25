@@ -354,7 +354,7 @@ async def _exercise_dynamic_roster_contract(root: Path) -> None:
             _dynamic_taste(3, ["prior_work"], "Prior Work Mapper"),
         ],
     }
-    fake_llm = FakeActionLLM([valid_response])
+    fake_llm = FakeActionLLM([valid_response["tastes"]])
     config = DeepDiveConfig(
         workspace_root=root / "accepted",
         max_investigators=1,
