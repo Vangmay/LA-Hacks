@@ -81,6 +81,11 @@
   writes the scarce resource. Keep tight budgets on external research APIs, but
   use generous step counts, workspace tool budgets, and per-write character
   budgets so agents can document, repair, and finalize thoroughly.
+- MVP live defaults should enable the important orchestration features, not
+  require the operator to remember extra flags. Dynamic roster planning should
+  be on by default, with explicit opt-out flags, and Gemma-oriented time,
+  interval, output-token, step, and workspace budgets should default high while
+  external search APIs remain deliberately budgeted.
 - Novelty mode needs its own artifact and prompt spine. Treat `proposal_seeds.md`
   as the raw idea layer, force proposal collision checks, reject vague future
   work, and have investigators/critics/finalizer transform evidence into

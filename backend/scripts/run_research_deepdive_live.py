@@ -26,26 +26,46 @@ def parse_args() -> argparse.Namespace:
         default="novelty_ideation",
     )
     parser.add_argument("--run-id", default="")
-    parser.add_argument("--max-investigators", type=int, default=3)
-    parser.add_argument("--subagents-per-investigator", type=int, default=3)
-    parser.add_argument("--dynamic-roster", action="store_true", default=settings.deepdive_dynamic_roster_enabled)
+    parser.add_argument("--max-investigators", type=int, default=settings.deepdive_max_investigators)
+    parser.add_argument("--subagents-per-investigator", type=int, default=settings.deepdive_subagents_per_investigator)
+    parser.add_argument(
+        "--dynamic-roster",
+        dest="dynamic_roster",
+        action="store_true",
+        default=settings.deepdive_dynamic_roster_enabled,
+        help="Use live LLM-planned personas for each investigator. Enabled by default.",
+    )
+    parser.add_argument(
+        "--no-dynamic-roster",
+        dest="dynamic_roster",
+        action="store_false",
+        help="Disable live LLM-planned personas and use deterministic generated tastes.",
+    )
     parser.add_argument(
         "--no-dynamic-roster-fallback",
         action="store_true",
         help="Fail instead of falling back to deterministic tastes when live roster validation fails.",
     )
-    parser.add_argument("--subagent-tool-calls", type=int, default=18)
+    parser.add_argument("--subagent-tool-calls", type=int, default=settings.deepdive_subagent_max_tool_calls)
     parser.add_argument(
         "--subagent-workspace-tool-calls",
         type=int,
         default=settings.deepdive_subagent_max_workspace_tool_calls,
     )
     parser.add_argument("--subagent-steps", type=int, default=settings.deepdive_subagent_max_steps)
-    parser.add_argument("--parallel-subagents", type=int, default=3)
-    parser.add_argument("--timeout-seconds", type=int, default=1800)
-    parser.add_argument("--semantic-scholar-interval", type=float, default=1.2)
-    parser.add_argument("--semantic-scholar-retries", type=int, default=4)
-    parser.add_argument("--serpapi-max-requests", type=int, default=50)
+    parser.add_argument("--parallel-subagents", type=int, default=settings.deepdive_max_parallel_subagents)
+    parser.add_argument("--timeout-seconds", type=int, default=settings.deepdive_stage_timeout_seconds)
+    parser.add_argument(
+        "--semantic-scholar-interval",
+        type=float,
+        default=settings.deepdive_semantic_scholar_min_interval_seconds,
+    )
+    parser.add_argument(
+        "--semantic-scholar-retries",
+        type=int,
+        default=settings.deepdive_semantic_scholar_max_retries,
+    )
+    parser.add_argument("--serpapi-max-requests", type=int, default=settings.deepdive_serpapi_max_requests)
     parser.add_argument("--tool-result-char-limit", type=int, default=settings.deepdive_tool_result_char_limit)
     parser.add_argument(
         "--workspace-write-char-budget",

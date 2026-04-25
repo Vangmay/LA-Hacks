@@ -587,16 +587,33 @@ async def main_async() -> None:
         default_config.light_profile.api_key_env == "GEMMA_API_KEY",
         "light profile should default to the Gemma key env var",
     )
+    _assert(default_config.dynamic_roster_enabled, "dynamic roster should be enabled by default")
     _assert(
-        default_config.subagent_max_workspace_tool_calls >= 2000,
+        default_config.thinking_profile.max_output_tokens >= 32768,
+        "thinking Gemma output budget should be high by default",
+    )
+    _assert(
+        default_config.light_profile.max_output_tokens >= 32768,
+        "light Gemma output budget should be high by default",
+    )
+    _assert(
+        default_config.thinking_profile.min_interval_seconds <= 0.25,
+        "thinking Gemma interval should not throttle unnecessarily",
+    )
+    _assert(
+        default_config.light_profile.min_interval_seconds <= 0.25,
+        "light Gemma interval should not throttle unnecessarily",
+    )
+    _assert(
+        default_config.subagent_max_workspace_tool_calls >= 10000,
         "workspace tool budget should be high enough for detailed markdown repair",
     )
     _assert(
-        default_config.subagent_max_steps >= 1000,
+        default_config.subagent_max_steps >= 3000,
         "Gemma-backed subagent step budget should not starve documentation",
     )
     _assert(
-        default_config.workspace_write_char_budget >= 10000,
+        default_config.workspace_write_char_budget >= 20000,
         "workspace write char budget should allow large markdown chunks",
     )
 
