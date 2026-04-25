@@ -7,11 +7,21 @@ async function postFile(url, file) {
   return r.json()
 }
 
+async function postJson(url, body) {
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return r.json()
+}
+
 export const api = {
   review: {
-    submit: (file) => postFile(`${BASE}/review`, file),
+    submit: (arxivUrl) => postJson(`${BASE}/review/arxiv`, { arxiv_url: arxivUrl }),
     status: (jobId) => fetch(`${BASE}/review/${jobId}/status`).then(r => r.json()),
     dag: (jobId) => fetch(`${BASE}/review/${jobId}/dag`).then(r => r.json()),
+    atom: (jobId, atomId) => fetch(`${BASE}/review/${jobId}/atoms/${atomId}`).then(r => r.json()),
     stream: (jobId) => new EventSource(`${BASE}/review/${jobId}/stream`),
     report: (jobId) => fetch(`${BASE}/review/${jobId}/report`).then(r => r.json()),
     reportMarkdown: (jobId) => fetch(`${BASE}/review/${jobId}/report/markdown`).then(r => r.text()),

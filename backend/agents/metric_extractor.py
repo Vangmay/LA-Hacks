@@ -1,15 +1,21 @@
-from .base import BaseAgent, AgentContext, AgentResult
+"""PoC mode stub."""
+from .base import AgentContext, AgentResult, BaseAgent
 
 
 class MetricExtractorAgent(BaseAgent):
     agent_id = "metric_extractor"
 
     async def run(self, context: AgentContext) -> AgentResult:
-        claim_id = context.claim.claim_id if context.claim else "claim_001"
-        return self._mock_result(claim_id=claim_id, output={
-            "spec_id": "spec_001",
-            "claim_id": claim_id,
-            "testability": "testable",
-            "success_criteria": [],
-            "failure_criteria": [],
-        })
+        atom_id = context.atom.atom_id if context.atom else "atom_001"
+        return AgentResult(
+            agent_id=self.agent_id,
+            status="success",
+            output={
+                "spec_id": "spec_001",
+                "atom_id": atom_id,
+                "testability": "testable",
+                "success_criteria": [],
+                "failure_criteria": [],
+            },
+            confidence=0.5,
+        )

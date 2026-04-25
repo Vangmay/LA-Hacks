@@ -1,7 +1,11 @@
-from pydantic import BaseModel
+"""Research-mode stub models. Implementation comes later."""
+from __future__ import annotations
+
 from typing import List, Literal, Optional
 
-from .verification import VerificationResult
+from pydantic import BaseModel
+
+from .checks import CheckResult
 from .report import ReviewReport
 
 
@@ -10,8 +14,10 @@ class Hypothesis(BaseModel):
     text: str
     source_gap: str
     proof_approach: Optional[Literal["induction", "construction", "contradiction", "numeric"]] = None
-    verification_result: Optional[VerificationResult] = None
-    status: Literal["proposed", "approved", "rejected", "proven", "disproven", "inconclusive"]
+    check_result: Optional[CheckResult] = None
+    status: Literal[
+        "proposed", "approved", "rejected", "proven", "disproven", "inconclusive"
+    ]
     user_approved: bool
 
 
