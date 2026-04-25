@@ -165,7 +165,7 @@ class LiveAgentRunner:
                     + "\n\nCurrent artifact status:\n"
                     + self._artifact_status(plan.workspace_path)
                     + "\n\n"
-                    + self._documentation_repair_directive(plan.workspace_path)
+                    + self._artifact_contract_message()
                 ),
             },
         ]
@@ -319,7 +319,11 @@ class LiveAgentRunner:
                         + "\n\nCurrent artifact status:\n"
                         + self._artifact_status(plan.workspace_path)
                         + "\n\n"
-                        + self._documentation_repair_directive(plan.workspace_path)
+                        + (
+                            self._documentation_repair_directive(plan.workspace_path)
+                            if research_tool_calls_used > 0 or research_budget_exhausted
+                            else self._artifact_contract_message()
+                        )
                         + (
                             "\n\n" + self._research_budget_exhausted_message(plan.workspace_path)
                             if research_budget_exhausted
@@ -487,6 +491,17 @@ class LiveAgentRunner:
             "The next action must append a detailed, evidence-bearing chunk to "
             "that file using `append_workspace_markdown`. Do not run another "
             "search until this file has the required kind of content."
+        )
+
+    def _artifact_contract_message(self) -> str:
+        return (
+            "Artifact contract: when you have evidence to record, keep all "
+            "required markdown files current. `queries.md` needs query/tool, "
+            "parameters, result count/failure state, and rationale/follow-up. "
+            "`papers.md` needs paper ID/source, title/year/metadata, and "
+            "relevance. `findings.md` needs finding/gap/risk/proposal, evidence, "
+            "and uncertainty/next check. `memory.md` needs durable running state, "
+            "search thread, and open question/contradiction/handoff prep."
         )
 
     def _documentation_repair_target(self, workspace_path: Path) -> str:
