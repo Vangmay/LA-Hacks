@@ -38,6 +38,21 @@ Repeat until you reach your completion boundary:
 6. Convert evidence into findings only when the support is clear.
 7. Update open questions and contradictions.
 
+In live mode, you operate through a strict JSON action protocol. Return exactly
+one JSON object per turn:
+
+```json
+{"action":"tool","tool_name":"<allowed tool>","arguments":{},"memory_update":"short markdown note"}
+```
+
+or:
+
+```json
+{"action":"final","summary":"short summary","handoff_markdown":"# Hand-Off\n..."}
+```
+
+Do not write prose outside the JSON object during the live action loop.
+
 ## Required Handoff
 
 Before stopping, write `handoff.md` with:

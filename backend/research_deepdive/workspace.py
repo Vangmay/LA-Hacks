@@ -54,6 +54,49 @@ class WorkspaceManager:
         path.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
         return path
 
+    def resolve_owned_path(self, workspace_path: Path, relative_path: str) -> Path:
+        candidate = (workspace_path / relative_path).resolve()
+        owner = workspace_path.resolve()
+        if candidate != owner and owner not in candidate.parents:
+            raise ValueError(f"path escapes workspace: {relative_path}")
+        return candidate
+
+    def read_owned_text(
+        self,
+        workspace_path: Path,
+        relative_path: str,
+        start_line: int = 1,
+        end_line: int | None = None,
+    ) -> tuple[str, int]:
+        path = self.resolve_owned_path(workspace_path, relative_path)
+        lines = path.read_text(encoding="utf-8").splitlines()
+        total = len(lines)
+        start = max(1, start_line)
+        end = total if end_line is None or end_line <= 0 else min(total, end_line)
+        return "\n".join(lines[start - 1 : end]), total
+
+    def write_owned_markdown(self, workspace_path: Path, relative_path: str, content: str) -> Path:
+        path = self.resolve_owned_path(workspace_path, relative_path)
+        if path.suffix not in {".md", ".json", ".jsonl", ".txt"}:
+            raise ValueError(f"unsupported workspace file type: {relative_path}")
+        return self.write_markdown(path, content)
+
+    def append_owned_markdown(
+        self,
+        workspace_path: Path,
+        relative_path: str,
+        content: str,
+        heading: str = "",
+    ) -> Path:
+        path = self.resolve_owned_path(workspace_path, relative_path)
+        if path.suffix not in {".md", ".txt"}:
+            raise ValueError(f"append_workspace_markdown requires markdown/text: {relative_path}")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        prefix = f"\n\n## {heading}\n\n" if heading else "\n\n"
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(prefix + content.rstrip() + "\n")
+        return path
+
     def initialize_investigator(self, plan: InvestigatorPlan) -> None:
         self.write_markdown(
             plan.workspace_path / "README.md",
@@ -81,6 +124,11 @@ class WorkspaceManager:
             "## Search Threads\n\n"
             "## Candidate Papers\n\n"
             "## Open Questions\n\n"
+            "## Contradictions\n\n"
             "## Hand-Off Summary\n\n",
         )
+        self.write_markdown(plan.workspace_path / "queries.md", "# Queries\n\n")
+        self.write_markdown(plan.workspace_path / "papers.md", "# Papers\n\n")
+        self.write_markdown(plan.workspace_path / "findings.md", "# Findings\n\n")
+        self.write_markdown(plan.workspace_path / "tool_calls.jsonl", "")
         self.write_json(plan.workspace_path / "taste.json", plan.taste.model_dump())

@@ -4,9 +4,12 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+from .agent_runner import LiveAgentRunner
 from .config import DeepDiveConfig
+from .llm import DeepDiveLLMProvider
 from .models import (
     AgentExitReason,
+    AgentModelRole,
     AgentRunResult,
     CritiqueResult,
     DeepDiveRunRequest,
@@ -17,6 +20,7 @@ from .models import (
 )
 from .personas import generate_research_tastes
 from .prompts import PromptBook
+from .tool_runtime import ToolRuntime
 from .tools import build_default_tool_registry
 from .workspace import WorkspaceManager, slugify
 
@@ -34,11 +38,27 @@ class DeepDiveOrchestrator:
         self,
         config: DeepDiveConfig | None = None,
         prompt_book: PromptBook | None = None,
+        llm_provider: DeepDiveLLMProvider | None = None,
+        tool_runtime: ToolRuntime | None = None,
     ) -> None:
         self.config = (config or DeepDiveConfig()).normalized()
         self.prompt_book = prompt_book or PromptBook()
         self.tools = build_default_tool_registry()
         self.workspace = WorkspaceManager(self.config.workspace_root)
+        self.llm = llm_provider or DeepDiveLLMProvider(self.config)
+        self.tool_runtime = tool_runtime or ToolRuntime(
+            workspace=self.workspace,
+            http_timeout_seconds=self.config.http_timeout_seconds,
+            result_char_limit=self.config.tool_result_char_limit,
+            semantic_scholar_min_interval_seconds=self.config.semantic_scholar_min_interval_seconds,
+            semantic_scholar_max_retries=self.config.semantic_scholar_max_retries,
+        )
+        self.live_runner = LiveAgentRunner(
+            llm=self.llm,
+            tools=self.tool_runtime,
+            workspace=self.workspace,
+            max_steps=self.config.subagent_max_steps,
+        )
 
     async def run(self, request: DeepDiveRunRequest) -> DeepDiveRunResult:
         stages: list[ResearchStage] = []
@@ -53,16 +73,28 @@ class DeepDiveOrchestrator:
             subagent_results = await self._run_all_subagents(investigators, request)
             stages.append(ResearchStage.SUBAGENT_RESEARCH)
 
-            syntheses = [self._synthesize_investigator(plan, subagent_results) for plan in investigators]
+            if request.mode == "live":
+                syntheses = [
+                    await self._synthesize_investigator_live(plan, subagent_results)
+                    for plan in investigators
+                ]
+            else:
+                syntheses = [self._synthesize_investigator(plan, subagent_results) for plan in investigators]
             stages.append(ResearchStage.INVESTIGATOR_SYNTHESIS)
 
             self._write_cross_investigator_deep_dive(run_root, syntheses)
             stages.append(ResearchStage.CROSS_INVESTIGATOR_DEEP_DIVE)
 
-            critiques = self._run_critiques(run_root, syntheses)
+            if request.mode == "live":
+                critiques = await self._run_critiques_live(run_root, syntheses)
+            else:
+                critiques = self._run_critiques(run_root, syntheses)
             stages.append(ResearchStage.CRITIQUE)
 
-            final_report = self._finalize(run_root, request, investigators, syntheses, critiques)
+            if request.mode == "live":
+                final_report = await self._finalize_live(run_root, request, investigators, syntheses, critiques)
+            else:
+                final_report = self._finalize(run_root, request, investigators, syntheses, critiques)
             stages.append(ResearchStage.FINALIZATION)
 
             return DeepDiveRunResult(
@@ -98,8 +130,12 @@ class DeepDiveOrchestrator:
     ) -> list[InvestigatorPlan]:
         section_titles = request.section_titles or ["whole paper"]
         selected = section_titles[: self.config.max_investigators]
-        tool_names = sorted(self.tools)
-        shared_tools = self._shared_tool_prompt()
+        tool_names = sorted(
+            self.tool_runtime.executable_tool_names()
+            if request.mode == "live"
+            else self.tools.keys()
+        )
+        shared_tools = self._shared_tool_prompt(tool_names if request.mode == "live" else None)
 
         investigators: list[InvestigatorPlan] = []
         for idx, title in enumerate(selected, start=1):
@@ -141,6 +177,7 @@ class DeepDiveOrchestrator:
                     system_prompt=subagent_prompt,
                     allowed_tools=tool_names,
                     max_tool_calls=self.config.subagent_max_tool_calls,
+                    model_role=AgentModelRole.SEARCH_SUBAGENT,
                 )
                 self.workspace.initialize_subagent(plan)
                 subagents.append(plan)
@@ -189,6 +226,8 @@ class DeepDiveOrchestrator:
 
         async def run_one(plan: SubagentPlan) -> AgentRunResult:
             async with semaphore:
+                if request.mode == "live":
+                    return await self.live_runner.run_subagent(plan, ResearchStage.SUBAGENT_RESEARCH)
                 return await self._run_subagent_budget(plan, request.mode)
 
         tasks = [run_one(subagent) for inv in investigators for subagent in inv.subagents]
@@ -254,6 +293,45 @@ class DeepDiveOrchestrator:
             summary=f"Synthesized {len(own_results)} subagent hand-offs.",
         )
 
+    async def _synthesize_investigator_live(
+        self,
+        plan: InvestigatorPlan,
+        subagent_results: list[AgentRunResult],
+    ) -> AgentRunResult:
+        own_results = [result for result in subagent_results if result.agent_id.startswith(plan.investigator_id)]
+        artifact = plan.workspace_path / "synthesis.md"
+        handoffs = []
+        for result in own_results:
+            for artifact_path in result.artifacts:
+                if artifact_path.name == "handoff.md" and artifact_path.exists():
+                    handoffs.append(artifact_path.read_text(encoding="utf-8"))
+        prompt = (
+            "You are the thinking-model investigator. Synthesize only this section's subagent handoffs. "
+            "Preserve evidence IDs, separate prior work from recent/future work, identify missing buckets, "
+            "and list concrete follow-up searches. Return markdown only."
+        )
+        content = await self.llm.chat_markdown(
+            role=AgentModelRole.INVESTIGATOR,
+            messages=[
+                {"role": "system", "content": plan.system_prompt},
+                {"role": "user", "content": prompt + "\n\n" + "\n\n---\n\n".join(handoffs)},
+            ],
+        )
+        self.workspace.write_markdown(artifact, content)
+        profile = self.llm.profile_for(AgentModelRole.INVESTIGATOR)
+        return AgentRunResult(
+            agent_id=plan.investigator_id,
+            stage=ResearchStage.INVESTIGATOR_SYNTHESIS,
+            exit_reason=AgentExitReason.COMPLETED,
+            tool_calls_used=0,
+            workspace_path=plan.workspace_path,
+            artifacts=[artifact],
+            summary=f"Live investigator synthesis over {len(own_results)} subagent hand-offs.",
+            model_provider=profile.provider,
+            model_name=profile.model,
+            llm_steps_used=1,
+        )
+
     def _write_cross_investigator_deep_dive(
         self,
         run_root: Path,
@@ -304,6 +382,61 @@ class DeepDiveOrchestrator:
             )
         return results
 
+    async def _run_critiques_live(
+        self,
+        run_root: Path,
+        syntheses: list[AgentRunResult],
+    ) -> list[CritiqueResult]:
+        lenses = [
+            ("coverage_critic", "coverage and search recall"),
+            ("novelty_critic", "novelty and closest-prior-work pressure"),
+            ("evidence_critic", "source grounding and citation quality"),
+            ("skeptic_critic", "overclaiming, contradictions, and weak inference"),
+        ]
+        synthesis_text = "\n\n---\n\n".join(
+            path.read_text(encoding="utf-8")
+            for synthesis in syntheses
+            for path in synthesis.artifacts
+            if path.exists()
+        )
+        results: list[CritiqueResult] = []
+        for critic_id, lens in lenses:
+            path = run_root / "critique" / critic_id
+            path.mkdir(parents=True, exist_ok=True)
+            prompt = self.prompt_book.critique_prompt(
+                critic_id=critic_id,
+                lens=lens,
+                workspace_path=path,
+                shared_tool_spec=self._shared_tool_prompt(sorted(self.tool_runtime.executable_tool_names())),
+                memory_spec=self.prompt_book.memory_spec,
+            )
+            self.workspace.write_markdown(path / "system_prompt.md", prompt)
+            content = await self.llm.chat_markdown(
+                role=AgentModelRole.CRITIQUE,
+                messages=[
+                    {"role": "system", "content": prompt},
+                    {
+                        "role": "user",
+                        "content": (
+                            "Critique these investigator syntheses. Return markdown using the required critique sections.\n\n"
+                            + synthesis_text
+                        ),
+                    },
+                ],
+            )
+            artifact = path / "critique.md"
+            self.workspace.write_markdown(artifact, content)
+            results.append(
+                CritiqueResult(
+                    critic_id=critic_id,
+                    lens=lens,
+                    workspace_path=path,
+                    artifact_path=artifact,
+                    summary=f"Live critique completed for {lens}.",
+                )
+            )
+        return results
+
     def _finalize(
         self,
         run_root: Path,
@@ -335,11 +468,57 @@ class DeepDiveOrchestrator:
         ]
         return self.workspace.write_markdown(path, "\n".join(body))
 
-    def _shared_tool_prompt(self) -> str:
+    async def _finalize_live(
+        self,
+        run_root: Path,
+        request: DeepDiveRunRequest,
+        investigators: list[InvestigatorPlan],
+        syntheses: list[AgentRunResult],
+        critiques: list[CritiqueResult],
+    ) -> Path:
+        path = run_root / "final" / "research_deep_dive_report.md"
+        prompt = self.prompt_book.finalizer_prompt(
+            arxiv_url=request.arxiv_url,
+            paper_id=request.paper_id or "unknown",
+            workspace_path=run_root / "final",
+            shared_tool_spec=self._shared_tool_prompt(sorted(self.tool_runtime.executable_tool_names())),
+            memory_spec=self.prompt_book.memory_spec,
+        )
+        self.workspace.write_markdown(run_root / "final" / "system_prompt.md", prompt)
+        artifacts = []
+        for result in syntheses:
+            artifacts.extend(result.artifacts)
+        artifacts.extend(critique.artifact_path for critique in critiques)
+        artifact_text = "\n\n---\n\n".join(
+            f"# Artifact: {artifact}\n\n{artifact.read_text(encoding='utf-8')}"
+            for artifact in artifacts
+            if artifact.exists()
+        )
+        content = await self.llm.chat_markdown(
+            role=AgentModelRole.FINALIZATION,
+            messages=[
+                {"role": "system", "content": prompt},
+                {
+                    "role": "user",
+                    "content": (
+                        f"Create the final research deep-dive report for {request.arxiv_url}. "
+                        f"There are {len(investigators)} investigators. Use only the artifacts below.\n\n"
+                        + artifact_text
+                    ),
+                },
+            ],
+        )
+        return self.workspace.write_markdown(path, content)
+
+    def _shared_tool_prompt(self, tool_names: list[str] | None = None) -> str:
+        specs = self.tools
+        if tool_names is not None:
+            allowed = set(tool_names)
+            specs = {name: spec for name, spec in self.tools.items() if name in allowed}
         return (
             self.prompt_book.shared_tool_spec
             + "\n\n"
-            + _format_tool_specs(self.tools)
+            + _format_tool_specs(specs)
         )
 
 
