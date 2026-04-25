@@ -9,9 +9,9 @@
 - [x] Commit chunk 1.
 - [x] Chunk 2: add TeX parser agent that emits the existing parser contract.
 - [x] Verify chunk 2 with local TeX fixtures and import checks.
-- [ ] Commit chunk 2.
-- [ ] Chunk 3: rewire review API and pipeline script to use arXiv URL/id -> TeX only.
-- [ ] Verify chunk 3 with mocked end-to-end pipeline and backend route checks.
+- [x] Commit chunk 2.
+- [x] Chunk 3: rewire review API and pipeline script to use arXiv URL/id -> TeX only.
+- [x] Verify chunk 3 with mocked end-to-end pipeline and backend route checks.
 - [ ] Commit chunk 3.
 - [ ] Chunk 4: strengthen Prompt 2.1-2.4 agent tests around the new TeX path.
 - [ ] Run full backend verification suite, including real arXiv URL smoke cases where network permits.
@@ -32,3 +32,5 @@
 - Chunk 1 live source fetch verified with `python backend/scripts/test_tex_ingestion.py --live https://arxiv.org/pdf/1706.03762 https://arxiv.org/abs/2103.00020`.
 - Chunk 2 verified with `python backend/scripts/test_tex_parser.py`.
 - Chunk 2 live parse verified with `python backend/scripts/test_tex_parser.py --live https://arxiv.org/pdf/1706.03762 https://arxiv.org/abs/2103.00020` and title fallback rechecked with `python backend/scripts/test_tex_parser.py --live https://arxiv.org/abs/2103.00020`.
+- Chunk 3 verified with `backend/.venv/bin/python backend/scripts/test_review_tex_flow.py`.
+- Chunk 3 syntax/import check verified with `backend/.venv/bin/python -m py_compile backend/api/review.py backend/core/orchestrators/review.py backend/scripts/test_pipeline.py backend/scripts/test_review_tex_flow.py backend/agents/dag_builder.py backend/agents/attacker.py backend/agents/counterexample_search.py backend/agents/citation_gap.py`.

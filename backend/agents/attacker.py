@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+from typing import Optional
 
 from openai import AsyncOpenAI
 
@@ -24,7 +25,20 @@ _SYSTEM_PROMPT = (
 class AttackerAgent(BaseAgent):
     agent_id = "attacker"
 
-    _client = AsyncOpenAI(api_key=settings.openai_api_key)
+    def __init__(
+        self,
+        client: Optional[AsyncOpenAI] = None,
+        counterexample_agent: Optional[CounterexampleSearchAgent] = None,
+        citation_gap_agent: Optional[CitationGapAgent] = None,
+    ) -> None:
+        self._client = client
+        self._counterexample_agent = counterexample_agent
+        self._citation_gap_agent = citation_gap_agent
+
+    def _get_client(self) -> AsyncOpenAI:
+        if self._client is None:
+            self._client = AsyncOpenAI(api_key=settings.openai_api_key)
+        return self._client
 
     async def run(self, context: AgentContext) -> AgentResult:
         claim = context.claim
@@ -47,7 +61,7 @@ class AttackerAgent(BaseAgent):
 
         # Main attacker LLM call
         try:
-            response = await self._client.chat.completions.create(
+            response = await self._get_client().chat.completions.create(
                 model=settings.openai_model,
                 messages=[
                     {"role": "system", "content": _SYSTEM_PROMPT},
@@ -77,10 +91,12 @@ class AttackerAgent(BaseAgent):
         if claim and claim.claim_type in ("theorem", "proposition") and any(
             kw in claim.text for kw in ("for all", "for every", "∀", "for each")
         ):
-            sub_tasks.append(CounterexampleSearchAgent().run(context))
+            counterexample_agent = self._counterexample_agent or CounterexampleSearchAgent()
+            sub_tasks.append(counterexample_agent.run(context))
 
         if claim and claim.citations:
-            sub_tasks.append(CitationGapAgent().run(context))
+            citation_gap_agent = self._citation_gap_agent or CitationGapAgent()
+            sub_tasks.append(citation_gap_agent.run(context))
 
         if sub_tasks:
             sub_results = await asyncio.gather(*sub_tasks, return_exceptions=True)
