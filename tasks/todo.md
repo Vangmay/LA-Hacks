@@ -6,9 +6,9 @@
 - [x] Narrow scope to backend only after user correction; do not change frontend.
 - [x] Chunk 1: replace arXiv ingestion utility with source archive fetch/extract/TeX bundle logic.
 - [x] Verify chunk 1 with offline unit-style script tests and at least one real arXiv e-print fetch.
-- [ ] Commit chunk 1.
-- [ ] Chunk 2: add TeX parser agent that emits the existing parser contract.
-- [ ] Verify chunk 2 with local TeX fixtures and import checks.
+- [x] Commit chunk 1.
+- [x] Chunk 2: add TeX parser agent that emits the existing parser contract.
+- [x] Verify chunk 2 with local TeX fixtures and import checks.
 - [ ] Commit chunk 2.
 - [ ] Chunk 3: rewire review API and pipeline script to use arXiv URL/id -> TeX only.
 - [ ] Verify chunk 3 with mocked end-to-end pipeline and backend route checks.
@@ -30,3 +30,5 @@
 
 - Chunk 1 verified with `python backend/scripts/test_tex_ingestion.py`.
 - Chunk 1 live source fetch verified with `python backend/scripts/test_tex_ingestion.py --live https://arxiv.org/pdf/1706.03762 https://arxiv.org/abs/2103.00020`.
+- Chunk 2 verified with `python backend/scripts/test_tex_parser.py`.
+- Chunk 2 live parse verified with `python backend/scripts/test_tex_parser.py --live https://arxiv.org/pdf/1706.03762 https://arxiv.org/abs/2103.00020` and title fallback rechecked with `python backend/scripts/test_tex_parser.py --live https://arxiv.org/abs/2103.00020`.
