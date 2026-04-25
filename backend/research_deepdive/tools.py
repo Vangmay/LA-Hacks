@@ -777,7 +777,7 @@ def build_default_tool_registry() -> dict[str, ToolSpec]:
         _tool(
             name="read_workspace_markdown",
             category="workspace",
-            purpose="Read a markdown artifact from an allowed workspace path. Use this for memory.md, queries.md, papers.md, findings.md, and handoff.md.",
+            purpose="Read a markdown artifact from an allowed workspace path. Use this for memory.md, queries.md, papers.md, findings.md, proposal_seeds.md, and handoff.md.",
             input_schema=_schema({"path": {"type": "string"}, "start_line": {"type": "integer"}, "end_line": {"type": "integer"}}, ["path"]),
             output_schema=_schema({"content": {"type": "string"}, "line_count": {"type": "integer"}}, ["content"]),
             input_example={"path": "memory.md", "start_line": 1, "end_line": 120},
@@ -800,7 +800,7 @@ def build_default_tool_registry() -> dict[str, ToolSpec]:
             purpose="Append a dated note, finding, or memory entry to a markdown artifact.",
             input_schema=_schema({"path": {"type": "string"}, "heading": {"type": "string"}, "content": {"type": "string"}}, ["path", "content"]),
             output_schema=_schema({"path": {"type": "string"}}, ["path"]),
-            input_example={"path": "memory.md", "heading": "Query: exact title", "content": "Found 12 results."},
+            input_example={"path": "proposal_seeds.md", "heading": "Proposal Seed: exact title", "content": "- Status: raw\n- Evidence trigger: ..."},
             output_example={"path": "memory.md"},
             writes=["own workspace only"],
         ),

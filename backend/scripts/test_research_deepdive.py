@@ -86,6 +86,15 @@ class FakeToolRuntime:
                 heading=arguments.get("heading", ""),
             )
             return {"path": path.name}
+        if tool_name == "patch_workspace_file":
+            path = self.workspace.resolve_owned_path(workspace_path, arguments["path"])
+            lines = path.read_text(encoding="utf-8").splitlines()
+            start = max(1, int(arguments["start_line"]))
+            end = max(start, int(arguments["end_line"]))
+            replacement = str(arguments["replacement"]).splitlines()
+            new_lines = lines[: start - 1] + replacement + lines[end:]
+            path.write_text("\n".join(new_lines) + ("\n" if new_lines else ""), encoding="utf-8")
+            return {"path": path.name, "changed": new_lines != lines}
         if tool_name == "write_workspace_markdown":
             path = self.workspace.write_owned_markdown(
                 workspace_path,
@@ -95,8 +104,12 @@ class FakeToolRuntime:
             return {"path": path.name}
         if tool_name == "paper_bulk_search":
             return {
-                "papers": [{"paperId": "TEST1", "title": "Test Paper", "year": 2020}],
-                "total": 1,
+                "papers": [
+                    {"paperId": "TEST1", "title": "Test Paper One", "year": 2020},
+                    {"paperId": "TEST2", "title": "Test Paper Two", "year": 2021},
+                    {"paperId": "TEST3", "title": "Test Paper Three", "year": 2022},
+                ],
+                "total": 3,
                 "warnings": [],
             }
         raise AssertionError(f"unexpected fake tool call: {tool_name}")
@@ -138,11 +151,14 @@ async def _exercise_live_runner_budget_contract(root: Path) -> None:
             "action": "append_workspace_markdown",
             "arguments": {
                 "path": "queries.md",
-                "heading": "Query log",
+                "heading": "Query: manual budget check",
                 "content": (
-                    "Query: attention ablation; params limit=1; result count=1. "
-                    "Purpose: verify runtime budget accounting after invalid actions. "
-                    "Follow-up: inspect whether rejected actions preserved tool budget counters."
+                    "- Tool: `paper_bulk_search`\n"
+                    "- Arguments: `{\"query\":\"attention ablation\",\"limit\":1}`\n"
+                    "- Result count: `3`\n"
+                    "- Top result IDs: TEST1, TEST2, TEST3\n"
+                    "- Why this query was run: verify runtime budget accounting after invalid actions.\n"
+                    "- Follow-up: inspect whether rejected actions preserved tool budget counters.\n"
                 ),
             },
         },
@@ -150,12 +166,31 @@ async def _exercise_live_runner_budget_contract(root: Path) -> None:
             "action": "append_workspace_markdown",
             "arguments": {
                 "path": "papers.md",
-                "heading": "Paper TEST1",
+                "heading": "Paper: TEST1",
                 "content": (
-                    "- Paper ID: TEST1. Title: Test Paper. Year: 2020. Source: Semantic Scholar. "
-                    "Relevance: runtime fixture for budget accounting and finalization behavior. "
-                    "Evidence note: this synthetic record is promoted after one valid search so the "
-                    "agent has a traceable paper item before writing findings and handoff."
+                    "- Paper ID: TEST1\n"
+                    "- Year: 2020\n"
+                    "- Source bucket: Semantic Scholar fixture\n"
+                    "- Found by: paper_bulk_search attention ablation\n"
+                    "- Relation to seed: runtime accounting fixture\n"
+                    "- Why it matters: verifies one promoted paper record survives final validation.\n"
+                    "- Caveat: synthetic offline record.\n\n"
+                    "## Paper: TEST2\n\n"
+                    "- Paper ID: TEST2\n"
+                    "- Year: 2021\n"
+                    "- Source bucket: Semantic Scholar fixture\n"
+                    "- Found by: paper_bulk_search attention ablation\n"
+                    "- Relation to seed: runtime accounting fixture\n"
+                    "- Why it matters: verifies multiple candidate papers trigger finding validation.\n"
+                    "- Caveat: synthetic offline record.\n\n"
+                    "## Paper: TEST3\n\n"
+                    "- Paper ID: TEST3\n"
+                    "- Year: 2022\n"
+                    "- Source bucket: Semantic Scholar fixture\n"
+                    "- Found by: paper_bulk_search attention ablation\n"
+                    "- Relation to seed: runtime accounting fixture\n"
+                    "- Why it matters: verifies final validation requires structured paper records.\n"
+                    "- Caveat: synthetic offline record.\n"
                 ),
             },
         },
@@ -163,12 +198,20 @@ async def _exercise_live_runner_budget_contract(root: Path) -> None:
             "action": "append_workspace_markdown",
             "arguments": {
                 "path": "findings.md",
-                "heading": "Finding",
+                "heading": "Finding: Budget accounting traceability",
                 "content": (
-                    "Finding: budget accounting is traceable because malformed top-level query actions, "
-                    "workspace calls missing paths, and post-budget research attempts are rejected without "
-                    "executing tools. Evidence: TEST1 and the rejected_action trace entries. "
-                    "Uncertainty: this is an offline fixture, not a real literature claim."
+                    "- Claim: budget accounting is traceable because malformed top-level query actions, "
+                    "workspace calls missing paths, and post-budget research attempts are rejected without executing tools.\n"
+                    "- Confidence: high\n"
+                    "- Evidence: TEST1, TEST2, TEST3 and rejected_action trace entries.\n"
+                    "- Why it matters: protects scarce research/API budget while allowing documentation repair.\n"
+                    "- Caveat: offline fixture, not a real literature claim.\n\n"
+                    "## Finding: Workspace repair remains available\n\n"
+                    "- Claim: valid workspace calls can still update artifacts after research budget exhaustion.\n"
+                    "- Confidence: medium\n"
+                    "- Evidence: trace counters and final handoff after the valid search budget was exhausted.\n"
+                    "- Why it matters: prevents forced handoff from skipping documentation.\n"
+                    "- Caveat: full live model behavior still needs E2E validation.\n"
                 ),
             },
         },
@@ -230,6 +273,17 @@ async def _exercise_live_runner_budget_contract(root: Path) -> None:
         _assert(entry["research_tool_calls_used"] <= 1, "rejection trace has invalid research counter")
         _assert(entry["workspace_tool_calls_used"] <= 1, "invalid actions should not spend workspace budget")
 
+    raw_lines = [
+        json.loads(line)
+        for line in (subagent_path / "raw_tool_results.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    _assert(len(raw_lines) == 1, "raw research tool result should be logged automatically")
+    _assert(raw_lines[0]["paper_ids"][:3] == ["TEST1", "TEST2", "TEST3"], "raw log should extract paper IDs")
+    queries_text = (subagent_path / "queries.md").read_text(encoding="utf-8")
+    _assert("## Query: paper_bulk_search 1" in queries_text, "runtime should auto-append structured query entry")
+    _assert("- Arguments:" in queries_text and "- Top result IDs:" in queries_text, "auto query entry missing fields")
+
 
 async def _exercise_artifact_bundle_contract(root: Path) -> None:
     fake_llm = FakeActionLLM([])
@@ -276,6 +330,10 @@ async def _exercise_artifact_bundle_contract(root: Path) -> None:
         "# Findings\n\nPACKET-FINDING: packet evidence supports a novelty gap.",
     )
     orchestrator.workspace.write_markdown(
+        subagent.workspace_path / "proposal_seeds.md",
+        "# Proposal Seeds\n\n## Proposal Seed: Packet seed\n\n- Candidate novelty: PACKET-SEED.\n",
+    )
+    orchestrator.workspace.write_markdown(
         subagent.workspace_path / "memory.md",
         "# Memory\n\nOpen question: does PACKET-PAPER collide with the seed?",
     )
@@ -296,6 +354,7 @@ async def _exercise_artifact_bundle_contract(root: Path) -> None:
 
     packet = build_subagent_context_packet(subagent.workspace_path)
     _assert("## Findings" in packet and "PACKET-FINDING" in packet, "packet should include findings")
+    _assert("## Proposal Seeds" in packet and "PACKET-SEED" in packet, "packet should include proposal seeds")
     _assert("## Papers" in packet and "PACKET-PAPER" in packet, "packet should include papers")
     _assert("Query: packet query" in packet, "packet should include queries")
     _assert("Tool Trace Summary" in packet and "paper_bulk_search" in packet, "packet should include trace summary")
@@ -350,6 +409,7 @@ async def _exercise_artifact_bundle_contract(root: Path) -> None:
     _assert("unresolved_conflicts.md" in final_prompt_text, "finalizer should receive unresolved conflicts")
     _assert("PACKET-PAPER" in final_prompt_text, "finalizer should receive subagent papers")
     _assert("PACKET-FINDING" in final_prompt_text, "finalizer should receive subagent findings")
+    _assert("PACKET-SEED" in final_prompt_text, "finalizer should receive subagent proposal seeds")
     _assert("Query: packet query" in final_prompt_text, "finalizer should receive subagent queries")
     _assert("CRITIQUE-FINDING" in final_prompt_text, "finalizer should receive critique artifacts")
 
@@ -473,6 +533,7 @@ async def main_async() -> None:
         "google_scholar_cited_by_search",
         "list_dataset_releases",
         "write_workspace_markdown",
+        "patch_workspace_file",
     ):
         _assert(required in tools, f"missing tool: {required}")
         _assert(tools[required].input_example or required.startswith("list_dataset"), f"missing input example: {required}")
@@ -526,6 +587,18 @@ async def main_async() -> None:
         default_config.light_profile.api_key_env == "GEMMA_API_KEY",
         "light profile should default to the Gemma key env var",
     )
+    _assert(
+        default_config.subagent_max_workspace_tool_calls >= 2000,
+        "workspace tool budget should be high enough for detailed markdown repair",
+    )
+    _assert(
+        default_config.subagent_max_steps >= 1000,
+        "Gemma-backed subagent step budget should not starve documentation",
+    )
+    _assert(
+        default_config.workspace_write_char_budget >= 10000,
+        "workspace write char budget should allow large markdown chunks",
+    )
 
     with tempfile.TemporaryDirectory() as tmp:
         config = DeepDiveConfig(
@@ -569,6 +642,10 @@ async def main_async() -> None:
         await _exercise_dynamic_roster_contract(Path(tmp) / "dynamic")
 
         orchestrator = DeepDiveOrchestrator(config=config)
+        _assert(
+            "patch_workspace_file" in orchestrator.tool_runtime.executable_tool_names(),
+            "patch_workspace_file should be executable in live runtime",
+        )
         result = await orchestrator.run(
             DeepDiveRunRequest(
                 run_id="smoke run",
@@ -606,7 +683,9 @@ async def main_async() -> None:
                 _assert((subagent.workspace_path / "queries.md").exists(), "subagent queries memory missing")
                 _assert((subagent.workspace_path / "papers.md").exists(), "subagent papers memory missing")
                 _assert((subagent.workspace_path / "findings.md").exists(), "subagent findings memory missing")
+                _assert((subagent.workspace_path / "proposal_seeds.md").exists(), "subagent proposal seeds missing")
                 _assert((subagent.workspace_path / "tool_calls.jsonl").exists(), "subagent tool trace missing")
+                _assert((subagent.workspace_path / "raw_tool_results.jsonl").exists(), "subagent raw tool trace missing")
                 _assert((subagent.workspace_path / "handoff.md").exists(), "subagent handoff missing")
                 _assert(subagent.model_role == AgentModelRole.SEARCH_SUBAGENT, "subagent should use light model role")
                 prompt = (subagent.workspace_path / "system_prompt.md").read_text(encoding="utf-8")
@@ -618,12 +697,17 @@ async def main_async() -> None:
                 _assert("Research Taste" in prompt, "subagent prompt missing taste")
                 _assert("Research objective: `novelty_ideation`" in prompt, "subagent prompt missing objective")
                 _assert("spinoff novelty proposals" in prompt, "subagent prompt missing novelty objective guidance")
+                _assert("Novelty Ideation Contract" in prompt, "subagent prompt missing novelty contract")
+                _assert("proposal_seeds.md" in prompt, "subagent prompt missing proposal seed artifact")
 
         assert result.final_report_path is not None
         final_prompt = (result.final_report_path.parent / "system_prompt.md").read_text(encoding="utf-8")
         _assert("Research objective: `novelty_ideation`" in final_prompt, "finalizer prompt missing objective")
-        _assert("Spinoff novelty proposals" in final_prompt, "finalizer prompt missing proposal section")
+        _assert("spinoff novelty proposals" in final_prompt.lower(), "finalizer prompt missing proposal section")
         _assert("Proposal triage matrix" in final_prompt, "finalizer prompt missing proposal triage")
+        _assert("High-Confidence Spinoff Proposals" in final_prompt, "finalizer prompt missing high-confidence proposal split")
+        _assert("Speculative or Needs-More-Search Proposals" in final_prompt, "finalizer prompt missing speculative proposal split")
+        _assert("Novelty Score Rubric" in final_prompt, "finalizer prompt missing novelty score rubric")
         _assert("Report Depth Contract" in final_prompt, "finalizer prompt missing depth contract")
         _assert("at least 8 spinoff novelty proposals" in final_prompt, "finalizer prompt missing proposal count")
         _assert("at least 3 supporting evidence items" in final_prompt, "finalizer prompt missing evidence depth")
@@ -632,6 +716,7 @@ async def main_async() -> None:
             critique_prompt = (critique.workspace_path / "system_prompt.md").read_text(encoding="utf-8")
             _assert("Critique Depth Contract" in critique_prompt, "critique prompt missing depth contract")
             _assert("at least 6" in critique_prompt, "critique prompt missing point minimum")
+            _assert("Novelty Critique Rules" in critique_prompt, "critique prompt missing novelty critique rules")
 
         literature_prompt = prompt_book.finalizer_prompt(
             arxiv_url="https://arxiv.org/abs/1706.03762",
@@ -639,6 +724,7 @@ async def main_async() -> None:
             workspace_path=Path(tmp) / "lit-final",
             research_objective="literature_review",
             objective_directive="Objective is `literature_review`: test directive.",
+            novelty_contract="",
             final_report_depth_spec="Detail level: `extensive`. Do not replace literature-review depth with proposal ideation.",
             final_report_sections="10. Coverage gaps and recommended next searches.",
             shared_tool_spec=prompt_book.shared_tool_spec,
@@ -647,6 +733,7 @@ async def main_async() -> None:
         _assert("Research objective: `literature_review`" in literature_prompt, "literature prompt missing objective")
         _assert("Coverage gaps and recommended next searches" in literature_prompt, "literature prompt missing review section")
         _assert("do not invent proposals" in literature_prompt.lower(), "literature prompt should suppress proposals")
+        _assert("Novelty Ideation Contract" not in literature_prompt, "literature prompt should not include novelty contract")
 
     print("research deep-dive smoke ok")
 

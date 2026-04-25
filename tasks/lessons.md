@@ -70,3 +70,18 @@
   papers need IDs/titles/years/source/relevance; findings need evidence,
   uncertainty, and proposal implications; memory needs durable running state.
   Minimal length checks are only a backstop against empty placeholders.
+- Documentation repair must be evidence-stage-aware. Do not require
+  `papers.md`, `findings.md`, or proposal artifacts before searches have
+  produced the evidence needed to populate them; otherwise the runtime pressures
+  agents into fake or placeholder prose. Obligations should unlock from the
+  trace: search result -> query entry, paper-producing result -> paper records,
+  enough candidate papers -> findings, findings in novelty mode -> proposal
+  seeds, final -> repair every due artifact or mark the handoff incomplete.
+- For Gemma-backed deep-dive runs, do not make LLM turns or workspace markdown
+  writes the scarce resource. Keep tight budgets on external research APIs, but
+  use generous step counts, workspace tool budgets, and per-write character
+  budgets so agents can document, repair, and finalize thoroughly.
+- Novelty mode needs its own artifact and prompt spine. Treat `proposal_seeds.md`
+  as the raw idea layer, force proposal collision checks, reject vague future
+  work, and have investigators/critics/finalizer transform evidence into
+  pressure-tested proposal candidates rather than passive gap summaries.

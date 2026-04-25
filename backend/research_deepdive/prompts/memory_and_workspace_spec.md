@@ -24,6 +24,8 @@ Each subagent folder should contain:
 - `queries.md`: queries attempted, API/tool parameters, and result counts.
 - `papers.md`: candidate papers with IDs, relation labels, and evidence notes.
 - `findings.md`: distilled findings, each tied to evidence.
+- `proposal_seeds.md`: in `novelty_ideation`, raw research ideas derived from
+  evidence claims.
 - `handoff.md`: final summary for the investigator.
 
 ## `memory.md` Structure
@@ -52,6 +54,32 @@ Each important finding should include:
 - Why it matters: <novelty, gap, limitation, background, follow-up, etc.>
 - Caveat: <what could make this wrong>
 ```
+
+## Proposal Seed Format
+
+In `novelty_ideation`, subagents must write proposal seeds to
+`proposal_seeds.md` using:
+
+```markdown
+## Proposal Seed: <title>
+
+- Status: raw|promising|weak|probably already done
+- Originating taste:
+- Seed-paper hook:
+- Evidence trigger:
+- Candidate novelty:
+- Technical mechanism:
+- Closest prior-work collision:
+- Closest future-work collision:
+- Minimum validation:
+- Falsification risk:
+- Why this is not generic:
+- Confidence: low|medium|high
+- Required next search:
+```
+
+`findings.md` is for evidence claims. `proposal_seeds.md` is for research ideas
+derived from those claims.
 
 ## Completion Boundary
 

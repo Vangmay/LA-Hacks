@@ -34,6 +34,7 @@ class AgentModelRole(str, Enum):
 class AgentExitReason(str, Enum):
     COMPLETED = "completed"
     MAX_TOOL_CALLS_REACHED = "max_tool_calls_reached"
+    INCOMPLETE_ARTIFACTS = "incomplete_artifacts"
     DRY_RUN = "dry_run"
     ERROR = "error"
 

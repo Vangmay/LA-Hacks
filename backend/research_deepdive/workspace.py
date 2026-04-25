@@ -130,5 +130,7 @@ class WorkspaceManager:
         self.write_markdown(plan.workspace_path / "queries.md", "# Queries\n\n")
         self.write_markdown(plan.workspace_path / "papers.md", "# Papers\n\n")
         self.write_markdown(plan.workspace_path / "findings.md", "# Findings\n\n")
+        self.write_markdown(plan.workspace_path / "proposal_seeds.md", "# Proposal Seeds\n\n")
         self.write_markdown(plan.workspace_path / "tool_calls.jsonl", "")
+        self.write_markdown(plan.workspace_path / "raw_tool_results.jsonl", "")
         self.write_json(plan.workspace_path / "taste.json", plan.taste.model_dump())

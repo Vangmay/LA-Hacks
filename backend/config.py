@@ -44,9 +44,9 @@ class Settings(BaseSettings):
     deepdive_model_max_retries: int = 5
     deepdive_model_retry_max_delay_seconds: float = 90.0
     deepdive_tool_result_char_limit: int = 6000
-    deepdive_workspace_write_char_budget: int = 3000
-    deepdive_subagent_max_workspace_tool_calls: int = 1000
-    deepdive_subagent_max_steps: int = 80
+    deepdive_workspace_write_char_budget: int = 10000
+    deepdive_subagent_max_workspace_tool_calls: int = 2000
+    deepdive_subagent_max_steps: int = 1000
     deepdive_semantic_scholar_min_interval_seconds: float = 1.2
     deepdive_semantic_scholar_max_retries: int = 4
     deepdive_serpapi_max_requests: int = 50

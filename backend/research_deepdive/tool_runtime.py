@@ -110,6 +110,7 @@ class ToolRuntime:
             "read_workspace_markdown",
             "write_workspace_markdown",
             "append_workspace_markdown",
+            "patch_workspace_file",
         }
         if self._serpapi_key():
             names.add("google_scholar_search")
@@ -361,3 +362,18 @@ class ToolRuntime:
             heading=arguments.get("heading", ""),
         )
         return {"path": str(path.resolve().relative_to(workspace_path.resolve()))}
+
+    async def _tool_patch_workspace_file(self, arguments: dict[str, Any], workspace_path: Path) -> dict[str, Any]:
+        path = self.workspace.resolve_owned_path(workspace_path, arguments["path"])
+        if path.suffix not in {".md", ".txt", ".json", ".jsonl"}:
+            raise ValueError(f"patch_workspace_file unsupported file type: {arguments['path']}")
+        lines = path.read_text(encoding="utf-8").splitlines()
+        start = max(1, int(arguments["start_line"]))
+        end = max(start, int(arguments["end_line"]))
+        replacement = str(arguments["replacement"]).splitlines()
+        new_lines = lines[: start - 1] + replacement + lines[end:]
+        path.write_text("\n".join(new_lines) + ("\n" if new_lines else ""), encoding="utf-8")
+        return {
+            "path": str(path.resolve().relative_to(workspace_path.resolve())),
+            "changed": new_lines != lines,
+        }

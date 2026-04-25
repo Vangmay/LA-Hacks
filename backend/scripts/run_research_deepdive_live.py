@@ -40,7 +40,7 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=settings.deepdive_subagent_max_workspace_tool_calls,
     )
-    parser.add_argument("--subagent-steps", type=int, default=24)
+    parser.add_argument("--subagent-steps", type=int, default=settings.deepdive_subagent_max_steps)
     parser.add_argument("--parallel-subagents", type=int, default=3)
     parser.add_argument("--timeout-seconds", type=int, default=1800)
     parser.add_argument("--semantic-scholar-interval", type=float, default=1.2)

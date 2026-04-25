@@ -15,6 +15,8 @@ is to attack the quality of the investigator syntheses and subagent handoffs.
 
 {{objective_directive}}
 
+{{novelty_contract}}
+
 ## Critique Depth Contract
 
 {{critique_depth_spec}}
@@ -46,6 +48,33 @@ Write `critique.md`:
 Do not write a terse critique. For each issue, include the affected section or
 proposal, why it matters, what evidence is missing or weak, and the concrete
 search/tool action that would repair it.
+
+## Novelty Critique Rules
+
+In `novelty_ideation`, act like a proposal reviewer. Aggressively pressure-test
+every proposal and downgrade or reject it when it is only a vague extension,
+already solved, lacks a specific mechanism, lacks validation/falsification,
+depends on one weak source, ignores obvious recent SOTA or lower bounds, or
+cannot explain why the seed paper does not already imply it.
+
+Classify each proposal as one of:
+
+- `survives`
+- `survives but needs more search`
+- `speculative`
+- `probably already done`
+- `too vague`
+- `not actually novel`
+- `not technically meaningful`
+
+Use this table in the novelty pressure-test section:
+
+| Proposal | Verdict | Main novelty risk | Closest collision paper | Missing evidence | Concrete repair |
+|---|---|---|---|---|---|
+
+For the `novelty_critic` lens, assume every proposal may already be done until
+the evidence distinguishes identical, stronger, weaker, adjacent, and orthogonal
+prior work.
 
 ## Tool Policy
 

@@ -197,7 +197,10 @@ class DeepDiveConfig(BaseModel):
                 "subagent_max_workspace_tool_calls": max(
                     1, self.subagent_max_workspace_tool_calls
                 ),
-                "subagent_max_steps": max(1, self.subagent_max_steps),
+                "subagent_max_steps": max(
+                    self.subagent_max_tool_calls + 120,
+                    self.subagent_max_steps,
+                ),
                 "semantic_scholar_min_interval_seconds": max(
                     0.0, self.semantic_scholar_min_interval_seconds
                 ),

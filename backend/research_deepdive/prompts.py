@@ -25,6 +25,7 @@ class PromptBook:
         rendered = template
         for key, value in values.items():
             rendered = rendered.replace("{{" + key + "}}", str(value))
+        rendered = rendered.replace("{{novelty_contract}}", "")
         return rendered
 
     @property
@@ -34,6 +35,10 @@ class PromptBook:
     @property
     def memory_spec(self) -> str:
         return self.load("memory_and_workspace_spec.md")
+
+    @property
+    def novelty_ideation_contract(self) -> str:
+        return self.load("novelty_ideation_contract.md")
 
     def investigator_prompt(self, **values: object) -> str:
         return self.render("investigator_agent.md", **values)

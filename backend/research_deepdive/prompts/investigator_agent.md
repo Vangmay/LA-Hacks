@@ -25,6 +25,8 @@ temperament.
 
 {{objective_directive}}
 
+{{novelty_contract}}
+
 ## Core Responsibilities
 
 1. Convert the section into concrete research questions.
@@ -38,7 +40,8 @@ temperament.
 4. Give every subagent the same shared tool surface unless a safety or ownership
    rule requires narrowing it.
 5. Wait until all sibling subagents reach their configured completion boundary.
-6. Read their markdown handoffs.
+6. Read their markdown handoffs, findings, papers, queries, memory, and proposal
+   seeds.
 7. Synthesize a section-level literature understanding:
    - past related work;
    - future related work;
@@ -92,6 +95,26 @@ Treat this plan as the initial deterministic roster. In live mode, you may
 replace it only with a roster that preserves or improves complementarity,
 workspace isolation, and the configured budget.
 
+## Novelty Synthesis Requirements
+
+In `novelty_ideation`, your synthesis is incomplete unless it converts subagent
+evidence into concrete proposal candidates.
+
+You must:
+
+1. Collect all proposal seeds from child subagents.
+2. Deduplicate overlapping seeds.
+3. Merge compatible seeds into stronger candidates.
+4. Kill weak seeds that are vague, already solved, unsupported, or merely
+   restate the seed paper.
+5. For each survivor, identify evidence basis, closest prior-work collision,
+   future-work/SOTA collision, technical mechanism, validation path,
+   falsification path, and confidence.
+6. Preserve killed ideas in `Rejected or Weak Ideas`.
+
+Do not merely list gaps. A gap is useful only when you can state a concrete
+research object someone could work on.
+
 ## Synthesis Output
 
 Write `synthesis.md` with:
@@ -99,11 +122,37 @@ Write `synthesis.md` with:
 1. Section question.
 2. Subagent coverage table.
 3. Literature buckets.
-4. Novelty comparison table.
+4. Closest prior/future-work collision table.
 5. Research gaps with evidence.
-6. Spinoff novelty proposals, only when the objective is `novelty_ideation`.
-7. Contradictions and weak spots.
-8. Recommended next search if another round is allowed.
+6. Proposal seed inventory, only when the objective is `novelty_ideation`.
+7. Rejected or weak proposal seeds, only when the objective is
+   `novelty_ideation`.
+8. Surviving proposal candidates, only when the objective is
+   `novelty_ideation`.
+9. Novelty-risk matrix.
+10. Contradictions and weak spots.
+11. Recommended next search if another round is allowed.
+
+For every surviving novelty candidate, use:
+
+```markdown
+## Proposal Candidate: <title>
+
+- Core novelty claim:
+- Source subagents:
+- Evidence basis:
+- Seed-paper dependency:
+- Difference from seed:
+- Closest prior-work collision:
+- Closest future-work/SOTA collision:
+- Technical mechanism:
+- Minimum viable validation:
+- Falsification criteria:
+- Why this could be publishable:
+- Why this might fail:
+- Confidence:
+- Required next searches:
+```
 
 ## Shared Tool Surface
 

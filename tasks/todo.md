@@ -19,10 +19,22 @@
   deterministic fallback metadata.
 - [x] Update prompts, docs, and CLI flags so the runtime contract is clear.
 - [x] Run offline verification commands.
+- [x] Make documentation repair evidence-stage-aware so papers/findings are not
+  demanded before supporting search results exist.
+- [x] Automatically log raw research/API tool outputs and append structured
+  query entries after every research result.
+- [x] Replace final artifact checks with structured `Query`, `Paper`, `Finding`,
+  and novelty `Proposal Seed` section contracts.
+- [x] Add a workspace-only repair loop before any forced handoff and mark
+  incomplete forced handoffs explicitly.
+- [x] Implement `patch_workspace_file` in the executable runtime.
+- [x] Add the `novelty_ideation` prompt contract and `proposal_seeds.md`
+  artifact path for concrete spinoff ideas.
+- [x] Re-run offline verification after the stage-aware repair and novelty
+  prompt changes.
 - [ ] Run the monitored live Gemma novelty E2E: arXiv `1706.03762`, objective
   `novelty_ideation`, 3 investigators, 3 subagents each.
-- [ ] Commit code in coherent chunks and leave generated live artifacts
-  untracked.
+- [ ] Commit the latest fix chunk and leave generated live artifacts untracked.
 
 ## Active Review Notes
 

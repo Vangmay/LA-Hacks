@@ -161,6 +161,7 @@ class DeepDiveOrchestrator:
         )
         shared_tools = self._shared_tool_prompt(tool_names if request.mode == "live" else None)
         objective_directive = _objective_directive(request.research_objective)
+        novelty_contract = _novelty_contract(self.prompt_book, request.research_objective)
 
         investigators: list[InvestigatorPlan] = []
         for idx, title in enumerate(selected, start=1):
@@ -196,6 +197,7 @@ class DeepDiveOrchestrator:
                     research_brief=request.research_brief or "(no extra brief)",
                     research_objective=request.research_objective,
                     objective_directive=objective_directive,
+                    novelty_contract=novelty_contract,
                     investigator_id=investigator_id,
                     subagent_id=subagent_id,
                     section_title=title,
@@ -226,6 +228,7 @@ class DeepDiveOrchestrator:
                 research_brief=request.research_brief or "(no extra brief)",
                 research_objective=request.research_objective,
                 objective_directive=objective_directive,
+                novelty_contract=novelty_contract,
                 investigator_id=investigator_id,
                 section_title=title,
                 subagent_count=len(subagents),
@@ -643,7 +646,7 @@ class DeepDiveOrchestrator:
             "You are the thinking-model investigator. Synthesize only this section's subagent evidence packets. "
             "Preserve evidence IDs, separate prior work from recent/future work, identify missing buckets, "
             "and list concrete follow-up searches. Use `findings.md`, `papers.md`, `queries.md`, "
-            "`memory.md`, and tool trace summaries when they contain more evidence than `handoff.md`. "
+            "`proposal_seeds.md`, `memory.md`, and tool trace summaries when they contain more evidence than `handoff.md`. "
             + _objective_synthesis_instruction(request.research_objective)
             + " Return markdown only."
         )
@@ -703,10 +706,12 @@ class DeepDiveOrchestrator:
         request: DeepDiveRunRequest,
     ) -> list[Path]:
         prompt_path = run_root / "shared" / "cross_investigator_system_prompt.md"
+        novelty_contract = _novelty_contract(self.prompt_book, request.research_objective)
         system_prompt = (
             "You are the PaperCourt cross-investigator synthesis agent. Compare investigator syntheses "
             "and subagent evidence packets across the full run. Preserve paper IDs, exact search buckets, "
             "contradictions, novelty risks, and missing searches. Do not invent papers or claims."
+            + ("\n\n" + novelty_contract if novelty_contract else "")
         )
         self.workspace.write_markdown(prompt_path, system_prompt)
         context = self._cross_investigator_context_bundle(run_root, investigators, syntheses)
@@ -777,6 +782,7 @@ class DeepDiveOrchestrator:
                 workspace_path=path,
                 research_objective=request.research_objective,
                 objective_directive=_objective_directive(request.research_objective),
+                novelty_contract=_novelty_contract(self.prompt_book, request.research_objective),
                 critique_depth_spec=self._critique_depth_spec(),
                 shared_tool_spec=self._shared_tool_prompt(),
                 memory_spec=self.prompt_book.memory_spec,
@@ -824,6 +830,7 @@ class DeepDiveOrchestrator:
                 workspace_path=path,
                 research_objective=request.research_objective,
                 objective_directive=_objective_directive(request.research_objective),
+                novelty_contract=_novelty_contract(self.prompt_book, request.research_objective),
                 critique_depth_spec=self._critique_depth_spec(),
                 shared_tool_spec=self._shared_tool_prompt(sorted(self.tool_runtime.executable_tool_names())),
                 memory_spec=self.prompt_book.memory_spec,
@@ -872,6 +879,7 @@ class DeepDiveOrchestrator:
             workspace_path=run_root / "final",
             research_objective=request.research_objective,
             objective_directive=_objective_directive(request.research_objective),
+            novelty_contract=_novelty_contract(self.prompt_book, request.research_objective),
             final_report_sections=_final_report_sections(request.research_objective),
             final_report_depth_spec=self._final_report_depth_spec(request.research_objective),
             shared_tool_spec=self._shared_tool_prompt(),
@@ -908,6 +916,7 @@ class DeepDiveOrchestrator:
             workspace_path=run_root / "final",
             research_objective=request.research_objective,
             objective_directive=_objective_directive(request.research_objective),
+            novelty_contract=_novelty_contract(self.prompt_book, request.research_objective),
             final_report_sections=_final_report_sections(request.research_objective),
             final_report_depth_spec=self._final_report_depth_spec(request.research_objective),
             shared_tool_spec=self._shared_tool_prompt(sorted(self.tool_runtime.executable_tool_names())),
@@ -1017,6 +1026,7 @@ class DeepDiveOrchestrator:
                 + " "
                 f"Include at least {self.config.final_report_min_spinoff_proposals} spinoff novelty proposals when enough evidence exists. "
                 f"Each proposal should cite or name at least {self.config.final_report_min_evidence_items_per_proposal} supporting evidence items when available. "
+                "Separate high-confidence proposals from speculative/needs-more-search proposals, include the proposal triage matrix with numeric scores, and preserve rejected weak ideas. "
                 "If fewer proposals or evidence items are defensible, explicitly explain the evidence bottleneck instead of padding."
             )
         return (
@@ -1034,6 +1044,9 @@ def build_subagent_context_packet(path: Path, file_char_limit: int = 12000) -> s
         "",
         "## Findings",
         _read_context_file(path / "findings.md", file_char_limit),
+        "",
+        "## Proposal Seeds",
+        _read_context_file(path / "proposal_seeds.md", file_char_limit),
         "",
         "## Papers",
         _read_context_file(path / "papers.md", file_char_limit),
@@ -1194,13 +1207,22 @@ def _objective_directive(objective: str) -> str:
     if objective == "novelty_ideation":
         return (
             "Objective is `novelty_ideation`: use the literature review as the evidence base for generating "
-            "actual spinoff novelty proposals. Novelty generation does not mean free invention; it means "
-            "turning supported gaps, contradictions, failures, missing mechanisms, and modern follow-up pressure "
-            "into concrete research directions. Each proposal must name the new idea, why it may be novel relative "
-            "to closest prior/future work, the technical mechanism or hypothesis, minimum validation experiment, "
-            "falsification risk, and supporting paper evidence. Mark weak proposals as speculative."
+            "actual spinoff novelty proposals, not generic future-work bullets. Novelty generation does not mean "
+            "free invention; it means turning supported gaps, contradictions, failures, missing mechanisms, and "
+            "modern follow-up pressure into concrete research directions. Subagents should write raw ideas to "
+            "`proposal_seeds.md`; investigators should merge them into proposal candidates; critics should try "
+            "to kill or downgrade them; the finalizer should separate high-confidence proposals from speculative "
+            "ones. Each proposal must name the new idea, why it may be novel relative to closest prior/future work, "
+            "the technical mechanism or hypothesis, minimum validation experiment, falsification risk, and "
+            "supporting paper evidence. Mark weak proposals as speculative."
         )
     raise ValueError(f"unknown research objective: {objective}")
+
+
+def _novelty_contract(prompt_book: PromptBook, objective: str) -> str:
+    if objective == "novelty_ideation":
+        return prompt_book.novelty_ideation_contract
+    return ""
 
 
 def _objective_synthesis_instruction(objective: str) -> str:
@@ -1210,7 +1232,7 @@ def _objective_synthesis_instruction(objective: str) -> str:
         )
     if objective == "novelty_ideation":
         return (
-            "Convert evidence-backed gaps into concrete spinoff proposal candidates with mechanisms, closest-prior-work risk, and validation tests."
+            "Convert `proposal_seeds.md` plus evidence-backed gaps into concrete spinoff proposal candidates with mechanisms, closest-prior-work risk, collision-search status, validation tests, falsification criteria, and confidence."
         )
     raise ValueError(f"unknown research objective: {objective}")
 
@@ -1242,10 +1264,12 @@ def _final_report_sections(objective: str) -> str:
         ]
     elif objective == "novelty_ideation":
         sections = shared + [
-            "9. Spinoff novelty proposals.",
-            "10. Proposal triage matrix.",
-            "11. Evidence quality and novelty-risk assessment.",
-            "12. Open questions and recommended next searches.",
+            "9. Proposal seed inventory and rejected weak ideas.",
+            "10. High-confidence spinoff proposals.",
+            "11. Speculative or needs-more-search proposals.",
+            "12. Proposal triage matrix.",
+            "13. Evidence quality and novelty-risk assessment.",
+            "14. Open questions and recommended next searches.",
         ]
     else:
         raise ValueError(f"unknown research objective: {objective}")
