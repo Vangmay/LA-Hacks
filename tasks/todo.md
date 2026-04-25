@@ -10,10 +10,10 @@
 - [x] Record budget counters and rejected actions in `tool_calls.jsonl`.
 - [x] Add focused offline tests for split budgets, finalization, malformed
   action rejection, and Gemma high-reasoning defaults.
-- [ ] Build subagent context packets that include handoff/findings/papers/
+- [x] Build subagent context packets that include handoff/findings/papers/
   queries/memory/tool trace summaries.
-- [ ] Use context packets in investigator synthesis and finalizer bundles.
-- [ ] Replace the live cross-investigator placeholder with a thinking-model
+- [x] Use context packets in investigator synthesis and finalizer bundles.
+- [x] Replace the live cross-investigator placeholder with a thinking-model
   synthesis stage that writes the four shared artifacts.
 - [ ] Add optional dynamic roster planning with explicit validation and
   deterministic fallback metadata.

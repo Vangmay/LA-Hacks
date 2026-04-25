@@ -18,7 +18,7 @@ from .models import (
     SubagentPlan,
     ToolSpec,
 )
-from .orchestrator import DeepDiveOrchestrator
+from .orchestrator import DeepDiveOrchestrator, build_subagent_context_packet
 from .personas import classify_research_zone, generate_research_tastes
 from .prompts import PromptBook
 from .tools import build_default_tool_registry
@@ -38,6 +38,7 @@ __all__ = [
     "SubagentPlan",
     "ToolSpec",
     "build_default_tool_registry",
+    "build_subagent_context_packet",
     "classify_research_zone",
     "generate_research_tastes",
 ]

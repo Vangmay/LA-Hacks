@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from collections import Counter
 from pathlib import Path
+from typing import Any
 
 from .agent_runner import LiveAgentRunner
 from .config import DeepDiveConfig
@@ -85,7 +88,15 @@ class DeepDiveOrchestrator:
                 syntheses = [self._synthesize_investigator(plan, subagent_results) for plan in investigators]
             stages.append(ResearchStage.INVESTIGATOR_SYNTHESIS)
 
-            self._write_cross_investigator_deep_dive(run_root, syntheses, request)
+            if request.mode == "live":
+                await self._run_cross_investigator_deep_dive_live(
+                    run_root,
+                    investigators,
+                    syntheses,
+                    request,
+                )
+            else:
+                self._write_cross_investigator_deep_dive(run_root, syntheses, request)
             stages.append(ResearchStage.CROSS_INVESTIGATOR_DEEP_DIVE)
 
             if request.mode == "live":
@@ -309,15 +320,15 @@ class DeepDiveOrchestrator:
     ) -> AgentRunResult:
         own_results = [result for result in subagent_results if result.agent_id.startswith(plan.investigator_id)]
         artifact = plan.workspace_path / "synthesis.md"
-        handoffs = []
-        for result in own_results:
-            for artifact_path in result.artifacts:
-                if artifact_path.name == "handoff.md" and artifact_path.exists():
-                    handoffs.append(artifact_path.read_text(encoding="utf-8"))
+        context_packets = [
+            build_subagent_context_packet(result.workspace_path)
+            for result in own_results
+        ]
         prompt = (
-            "You are the thinking-model investigator. Synthesize only this section's subagent handoffs. "
+            "You are the thinking-model investigator. Synthesize only this section's subagent evidence packets. "
             "Preserve evidence IDs, separate prior work from recent/future work, identify missing buckets, "
-            "and list concrete follow-up searches. "
+            "and list concrete follow-up searches. Use `findings.md`, `papers.md`, `queries.md`, "
+            "`memory.md`, and tool trace summaries when they contain more evidence than `handoff.md`. "
             + _objective_synthesis_instruction(request.research_objective)
             + " Return markdown only."
         )
@@ -325,7 +336,7 @@ class DeepDiveOrchestrator:
             role=AgentModelRole.INVESTIGATOR,
             messages=[
                 {"role": "system", "content": plan.system_prompt},
-                {"role": "user", "content": prompt + "\n\n" + "\n\n---\n\n".join(handoffs)},
+                {"role": "user", "content": prompt + "\n\n" + "\n\n---\n\n".join(context_packets)},
             ],
         )
         self.workspace.write_markdown(artifact, content)
@@ -359,7 +370,75 @@ class DeepDiveOrchestrator:
         body.append("")
         for synthesis in syntheses:
             body.append(f"- `{synthesis.agent_id}`: {synthesis.summary}")
-        return self.workspace.write_markdown(artifact, "\n".join(body) + "\n")
+        self.workspace.write_markdown(artifact, "\n".join(body) + "\n")
+        placeholders = {
+            "proposal_families.md": "# Proposal Families\n\nDry-run placeholder. Live mode groups spinoff proposal families across investigators.\n",
+            "global_evidence_map.md": "# Global Evidence Map\n\nDry-run placeholder. Live mode maps papers, buckets, findings, and proposal support.\n",
+            "unresolved_conflicts.md": "# Unresolved Conflicts\n\nDry-run placeholder. Live mode records contradictions, weak evidence, and missing searches.\n",
+        }
+        for filename, content in placeholders.items():
+            self.workspace.write_markdown(run_root / "shared" / filename, content)
+        return artifact
+
+    async def _run_cross_investigator_deep_dive_live(
+        self,
+        run_root: Path,
+        investigators: list[InvestigatorPlan],
+        syntheses: list[AgentRunResult],
+        request: DeepDiveRunRequest,
+    ) -> list[Path]:
+        prompt_path = run_root / "shared" / "cross_investigator_system_prompt.md"
+        system_prompt = (
+            "You are the PaperCourt cross-investigator synthesis agent. Compare investigator syntheses "
+            "and subagent evidence packets across the full run. Preserve paper IDs, exact search buckets, "
+            "contradictions, novelty risks, and missing searches. Do not invent papers or claims."
+        )
+        self.workspace.write_markdown(prompt_path, system_prompt)
+        context = self._cross_investigator_context_bundle(run_root, investigators, syntheses)
+        deliverables = [
+            (
+                "cross_investigator_deep_dive.md",
+                "Cross-Investigator Deep Dive",
+                "Compare all investigators. Identify repeated papers, contradictory findings, overlapping gaps, weak proposal seeds, and global novelty-risk patterns.",
+            ),
+            (
+                "proposal_families.md",
+                "Proposal Families",
+                "Group spinoff novelty proposal seeds into families. For each family include mechanism, evidence support, closest-prior/future-work collision risks, and validation path.",
+            ),
+            (
+                "global_evidence_map.md",
+                "Global Evidence Map",
+                "Map important papers, IDs, years, search buckets, supporting findings, and which investigators/subagents surfaced them.",
+            ),
+            (
+                "unresolved_conflicts.md",
+                "Unresolved Conflicts",
+                "List contradictions, weak evidence, missing literature buckets, failed searches, and exact follow-up searches needed before confident claims.",
+            ),
+        ]
+        written: list[Path] = []
+        for filename, title, instruction in deliverables:
+            content = await self.llm.chat_markdown(
+                role=AgentModelRole.REVISION,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {
+                        "role": "user",
+                        "content": (
+                            f"Research objective: `{request.research_objective}`.\n"
+                            + _objective_synthesis_instruction(request.research_objective)
+                            + "\n\n"
+                            f"Write only the `{title}` artifact in detailed markdown. "
+                            f"{instruction}\n\n"
+                            "Use only this evidence bundle:\n\n"
+                            + context
+                        ),
+                    },
+                ],
+            )
+            written.append(self.workspace.write_markdown(run_root / "shared" / filename, content))
+        return written
 
     def _run_critiques(
         self,
@@ -520,15 +599,7 @@ class DeepDiveOrchestrator:
             memory_spec=self.prompt_book.memory_spec,
         )
         self.workspace.write_markdown(run_root / "final" / "system_prompt.md", prompt)
-        artifacts = []
-        for result in syntheses:
-            artifacts.extend(result.artifacts)
-        artifacts.extend(critique.artifact_path for critique in critiques)
-        artifact_text = "\n\n---\n\n".join(
-            f"# Artifact: {artifact}\n\n{artifact.read_text(encoding='utf-8')}"
-            for artifact in artifacts
-            if artifact.exists()
-        )
+        artifact_text = self._finalizer_artifact_bundle(run_root, investigators, syntheses, critiques)
         content = await self.llm.chat_markdown(
             role=AgentModelRole.FINALIZATION,
             messages=[
@@ -546,6 +617,58 @@ class DeepDiveOrchestrator:
             ],
         )
         return self.workspace.write_markdown(path, content)
+
+    def _cross_investigator_context_bundle(
+        self,
+        run_root: Path,
+        investigators: list[InvestigatorPlan],
+        syntheses: list[AgentRunResult],
+    ) -> str:
+        parts = ["# Cross-Investigator Context Bundle", ""]
+        for synthesis in syntheses:
+            for artifact in synthesis.artifacts:
+                parts.append(_format_artifact(artifact, heading="Investigator Synthesis"))
+        parts.append("# Subagent Evidence Packets")
+        for investigator in investigators:
+            parts.append(f"\n## Investigator: {investigator.investigator_id}\n")
+            for subagent in investigator.subagents:
+                parts.append(build_subagent_context_packet(subagent.workspace_path))
+        for filename in ("seed_metadata.json", "paper_brief.md"):
+            path = run_root / "shared" / filename
+            if path.exists():
+                parts.append(_format_artifact(path, heading="Seed Context"))
+        return "\n\n---\n\n".join(part for part in parts if part.strip())
+
+    def _finalizer_artifact_bundle(
+        self,
+        run_root: Path,
+        investigators: list[InvestigatorPlan],
+        syntheses: list[AgentRunResult],
+        critiques: list[CritiqueResult],
+    ) -> str:
+        parts = ["# Finalizer Evidence Bundle", ""]
+        for filename in (
+            "seed_metadata.json",
+            "paper_brief.md",
+            "cross_investigator_deep_dive.md",
+            "proposal_families.md",
+            "global_evidence_map.md",
+            "unresolved_conflicts.md",
+        ):
+            path = run_root / "shared" / filename
+            if path.exists():
+                parts.append(_format_artifact(path, heading="Shared Artifact"))
+        for synthesis in syntheses:
+            for artifact in synthesis.artifacts:
+                parts.append(_format_artifact(artifact, heading="Investigator Synthesis"))
+        for critique in critiques:
+            parts.append(_format_artifact(critique.artifact_path, heading="Critique Artifact"))
+        parts.append("# Subagent Evidence Packets")
+        for investigator in investigators:
+            parts.append(f"\n## Investigator: {investigator.investigator_id}\n")
+            for subagent in investigator.subagents:
+                parts.append(build_subagent_context_packet(subagent.workspace_path))
+        return "\n\n---\n\n".join(part for part in parts if part.strip())
 
     def _shared_tool_prompt(self, tool_names: list[str] | None = None) -> str:
         specs = self.tools
@@ -585,6 +708,136 @@ class DeepDiveOrchestrator:
             base
             + " Do not replace literature-review depth with proposal ideation. Expand evidence coverage, bucket comparisons, contradictions, and missing-search plans."
         )
+
+
+def build_subagent_context_packet(path: Path, file_char_limit: int = 12000) -> str:
+    sections = [
+        f"# Subagent: {path.name}",
+        "",
+        "## Handoff",
+        _read_context_file(path / "handoff.md", file_char_limit),
+        "",
+        "## Findings",
+        _read_context_file(path / "findings.md", file_char_limit),
+        "",
+        "## Papers",
+        _read_context_file(path / "papers.md", file_char_limit),
+        "",
+        "## Queries",
+        _read_context_file(path / "queries.md", file_char_limit),
+        "",
+        "## Memory",
+        _read_context_file(path / "memory.md", file_char_limit),
+        "",
+        "## Tool Trace Summary",
+        summarize_tool_calls(path / "tool_calls.jsonl"),
+    ]
+    return "\n".join(sections).strip() + "\n"
+
+
+def summarize_tool_calls(path: Path, max_items: int = 40) -> str:
+    if not path.exists():
+        return "(missing tool trace)"
+    counts: Counter[str] = Counter()
+    errors: list[str] = []
+    rejected: list[str] = []
+    queries: list[str] = []
+    paper_ids: list[str] = []
+    workspace_updates: list[str] = []
+    research_used = 0
+    workspace_used = 0
+    lines_read = 0
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        lines_read += 1
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            errors.append("malformed trace line")
+            continue
+        entry_type = entry.get("type")
+        if entry_type == "tool_result":
+            tool_name = str(entry.get("tool_name", "unknown"))
+            counts[tool_name] += 1
+            arguments = entry.get("arguments") or {}
+            if isinstance(arguments, dict):
+                query = arguments.get("query")
+                if query and len(queries) < max_items:
+                    queries.append(f"{tool_name}: {query}")
+                if tool_name.startswith(("write_workspace", "append_workspace", "patch_workspace")):
+                    rel = arguments.get("path")
+                    if rel and len(workspace_updates) < max_items:
+                        workspace_updates.append(f"{tool_name}: {rel}")
+            paper_ids.extend(_extract_paper_ids(entry.get("result"), max_items - len(paper_ids)))
+            research_used = max(research_used, int(entry.get("research_tool_calls_used") or 0))
+            workspace_used = max(workspace_used, int(entry.get("workspace_tool_calls_used") or 0))
+        elif entry_type == "tool_error":
+            errors.append(f"{entry.get('tool_name', 'unknown')}: {entry.get('error', 'error')}")
+        elif entry_type == "rejected_action":
+            rejected.append(str(entry.get("reason", "rejected")))
+            research_used = max(research_used, int(entry.get("research_tool_calls_used") or 0))
+            workspace_used = max(workspace_used, int(entry.get("workspace_tool_calls_used") or 0))
+    rows = [
+        f"- Trace lines read: `{lines_read}`",
+        f"- Research/API calls used: `{research_used}`",
+        f"- Workspace calls used: `{workspace_used}`",
+        "- Tool counts: " + (", ".join(f"`{name}`={count}" for name, count in sorted(counts.items())) or "(none)"),
+        "- Search queries: " + ("; ".join(_dedupe_keep_order(queries)[:max_items]) or "(none recorded)"),
+        "- Paper IDs surfaced: " + (", ".join(_dedupe_keep_order(paper_ids)[:max_items]) or "(none extracted)"),
+        "- Workspace updates: " + ("; ".join(_dedupe_keep_order(workspace_updates)[:max_items]) or "(none recorded)"),
+        "- Rejected actions: " + ("; ".join(_dedupe_keep_order(rejected)[:max_items]) or "(none)"),
+        "- Tool errors: " + ("; ".join(_dedupe_keep_order(errors)[:max_items]) or "(none)"),
+    ]
+    return "\n".join(rows)
+
+
+def _format_artifact(path: Path, heading: str, char_limit: int = 20000) -> str:
+    return f"# {heading}: {path}\n\n{_read_context_file(path, char_limit)}"
+
+
+def _read_context_file(path: Path, char_limit: int) -> str:
+    if not path.exists():
+        return "(missing)"
+    text = path.read_text(encoding="utf-8").strip()
+    if not text:
+        return "(empty)"
+    if len(text) <= char_limit:
+        return text
+    return text[:char_limit].rstrip() + f"\n\n[truncated to {char_limit} chars]"
+
+
+def _extract_paper_ids(value: Any, limit: int) -> list[str]:
+    if limit <= 0:
+        return []
+    found: list[str] = []
+
+    def visit(item: Any) -> None:
+        if len(found) >= limit:
+            return
+        if isinstance(item, dict):
+            paper_id = item.get("paperId") or item.get("paper_id") or item.get("canonical_paper_id")
+            if isinstance(paper_id, str) and paper_id:
+                found.append(paper_id)
+            for nested in item.values():
+                visit(nested)
+        elif isinstance(item, list):
+            for nested in item:
+                visit(nested)
+
+    visit(value)
+    return found
+
+
+def _dedupe_keep_order(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        deduped.append(value)
+    return deduped
 
 
 def _format_tool_specs(tools: dict[str, object]) -> str:

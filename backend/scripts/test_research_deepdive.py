@@ -24,7 +24,15 @@ from research_deepdive import (  # noqa: E402
 )
 from research_deepdive.agent_runner import LiveAgentRunner, action_instructions  # noqa: E402
 from research_deepdive.llm import normalize_model_content  # noqa: E402
-from research_deepdive.models import ResearchStage, ResearchTaste, SubagentPlan  # noqa: E402
+from research_deepdive.models import (  # noqa: E402
+    AgentExitReason,
+    AgentRunResult,
+    CritiqueResult,
+    ResearchStage,
+    ResearchTaste,
+    SubagentPlan,
+)
+from research_deepdive.orchestrator import build_subagent_context_packet  # noqa: E402
 from research_deepdive.workspace import WorkspaceManager  # noqa: E402
 
 
@@ -192,6 +200,129 @@ async def _exercise_live_runner_budget_contract(root: Path) -> None:
         _assert(entry["workspace_tool_calls_used"] <= 1, "invalid actions should not spend workspace budget")
 
 
+async def _exercise_artifact_bundle_contract(root: Path) -> None:
+    fake_llm = FakeActionLLM([])
+    config = DeepDiveConfig(
+        workspace_root=root,
+        max_investigators=1,
+        subagents_per_investigator=1,
+        min_personas_per_investigator=1,
+        max_personas_per_investigator=1,
+        require_persona_diversity=False,
+        max_parallel_subagents=1,
+        thinking_profile=ModelProfile(provider="fake", model="thinking", api_key_env="FAKE"),
+        light_profile=ModelProfile(provider="fake", model="light", api_key_env="FAKE"),
+    )
+    orchestrator = DeepDiveOrchestrator(config=config, llm_provider=fake_llm)
+    request = DeepDiveRunRequest(
+        run_id="bundle run",
+        arxiv_url="https://arxiv.org/abs/1706.03762",
+        paper_id="ARXIV:1706.03762",
+        section_titles=["Novelty"],
+        research_brief="Bundle contract fixture.",
+        research_objective="novelty_ideation",
+        mode="live",
+    )
+    run_root = orchestrator.workspace.prepare_run(request.run_id)
+    investigators = orchestrator._plan_investigators(request, run_root)
+    investigator = investigators[0]
+    subagent = investigator.subagents[0]
+
+    orchestrator.workspace.write_markdown(
+        subagent.workspace_path / "handoff.md",
+        "# Hand-Off\n\nPACKET-HANDOFF mentions PACKET-PAPER.",
+    )
+    orchestrator.workspace.write_markdown(
+        subagent.workspace_path / "queries.md",
+        "# Queries\n\nQuery: packet query; params limit=3; result count=1.",
+    )
+    orchestrator.workspace.write_markdown(
+        subagent.workspace_path / "papers.md",
+        "# Papers\n\n- PACKET-PAPER. Packet Paper. 2024. Relevance: bundle fixture.",
+    )
+    orchestrator.workspace.write_markdown(
+        subagent.workspace_path / "findings.md",
+        "# Findings\n\nPACKET-FINDING: packet evidence supports a novelty gap.",
+    )
+    orchestrator.workspace.write_markdown(
+        subagent.workspace_path / "memory.md",
+        "# Memory\n\nOpen question: does PACKET-PAPER collide with the seed?",
+    )
+    orchestrator.workspace.write_markdown(
+        subagent.workspace_path / "tool_calls.jsonl",
+        json.dumps(
+            {
+                "type": "tool_result",
+                "tool_name": "paper_bulk_search",
+                "arguments": {"query": "packet query", "limit": 3},
+                "result": {"papers": [{"paperId": "PACKET-PAPER"}]},
+                "research_tool_calls_used": 1,
+                "workspace_tool_calls_used": 2,
+            }
+        )
+        + "\n",
+    )
+
+    packet = build_subagent_context_packet(subagent.workspace_path)
+    _assert("## Findings" in packet and "PACKET-FINDING" in packet, "packet should include findings")
+    _assert("## Papers" in packet and "PACKET-PAPER" in packet, "packet should include papers")
+    _assert("Query: packet query" in packet, "packet should include queries")
+    _assert("Tool Trace Summary" in packet and "paper_bulk_search" in packet, "packet should include trace summary")
+
+    synthesis_path = investigator.workspace_path / "synthesis.md"
+    orchestrator.workspace.write_markdown(
+        synthesis_path,
+        "# Synthesis\n\nSYNTHESIS-PAPER integrates PACKET-PAPER and PACKET-FINDING.",
+    )
+    syntheses = [
+        AgentRunResult(
+            agent_id=investigator.investigator_id,
+            stage=ResearchStage.INVESTIGATOR_SYNTHESIS,
+            exit_reason=AgentExitReason.COMPLETED,
+            tool_calls_used=0,
+            workspace_path=investigator.workspace_path,
+            artifacts=[synthesis_path],
+        )
+    ]
+    cross_paths = await orchestrator._run_cross_investigator_deep_dive_live(
+        run_root,
+        investigators,
+        syntheses,
+        request,
+    )
+    _assert(len(cross_paths) == 4, "live cross-investigator stage should write four artifacts")
+    for path in cross_paths:
+        _assert(path.exists(), f"missing cross-investigator artifact: {path.name}")
+    cross_prompt_text = "\n\n".join(message["content"] for message in fake_llm.messages[0])
+    _assert("PACKET-PAPER" in cross_prompt_text, "cross-investigator prompt should include subagent papers")
+    _assert("PACKET-FINDING" in cross_prompt_text, "cross-investigator prompt should include subagent findings")
+
+    critique_path = run_root / "critique" / "coverage_critic" / "critique.md"
+    orchestrator.workspace.write_markdown(
+        critique_path,
+        "# Critique\n\nCRITIQUE-FINDING asks for stronger closest-prior-work checks.",
+    )
+    critiques = [
+        CritiqueResult(
+            critic_id="coverage_critic",
+            lens="coverage",
+            workspace_path=critique_path.parent,
+            artifact_path=critique_path,
+            summary="fixture critique",
+        )
+    ]
+    await orchestrator._finalize_live(run_root, request, investigators, syntheses, critiques)
+    final_prompt_text = "\n\n".join(message["content"] for message in fake_llm.messages[-1])
+    _assert("cross_investigator_deep_dive.md" in final_prompt_text, "finalizer should receive cross deep dive")
+    _assert("proposal_families.md" in final_prompt_text, "finalizer should receive proposal families")
+    _assert("global_evidence_map.md" in final_prompt_text, "finalizer should receive global evidence map")
+    _assert("unresolved_conflicts.md" in final_prompt_text, "finalizer should receive unresolved conflicts")
+    _assert("PACKET-PAPER" in final_prompt_text, "finalizer should receive subagent papers")
+    _assert("PACKET-FINDING" in final_prompt_text, "finalizer should receive subagent findings")
+    _assert("Query: packet query" in final_prompt_text, "finalizer should receive subagent queries")
+    _assert("CRITIQUE-FINDING" in final_prompt_text, "finalizer should receive critique artifacts")
+
+
 async def main_async() -> None:
     prompt_book = PromptBook()
     _assert("Shared Tool Specification" in prompt_book.shared_tool_spec, "shared tool spec loads")
@@ -307,6 +438,7 @@ async def main_async() -> None:
         )
 
         await _exercise_live_runner_budget_contract(Path(tmp) / "runner")
+        await _exercise_artifact_bundle_contract(Path(tmp) / "bundles")
 
         orchestrator = DeepDiveOrchestrator(config=config)
         result = await orchestrator.run(
@@ -327,6 +459,13 @@ async def main_async() -> None:
         _assert(len(result.critiques) == 4, "expected four critiques")
         _assert(result.final_report_path is not None, "final report path missing")
         _assert(result.final_report_path.exists(), "final report was not written")
+        for filename in (
+            "cross_investigator_deep_dive.md",
+            "proposal_families.md",
+            "global_evidence_map.md",
+            "unresolved_conflicts.md",
+        ):
+            _assert((result.workspace_path / "shared" / filename).exists(), f"missing shared artifact: {filename}")
 
         for investigator in result.investigators:
             _assert(investigator.workspace_path.exists(), "investigator workspace missing")
