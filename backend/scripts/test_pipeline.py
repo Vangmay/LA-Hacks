@@ -10,11 +10,16 @@ import asyncio
 import os
 import sys
 from pathlib import Path
+import dotenv
 
 # Allow running as `python scripts/test_pipeline.py` from backend/.
 HERE = Path(__file__).resolve().parent
 BACKEND = HERE.parent
 sys.path.insert(0, str(BACKEND))
+
+# Load backend/.env explicitly so OPENAI_API_KEY is picked up regardless
+# of the current working directory. Must run BEFORE importing config.
+dotenv.load_dotenv(BACKEND / ".env")
 
 from agents.base import AgentContext
 from agents.claim_extractor import ClaimExtractorAgent
