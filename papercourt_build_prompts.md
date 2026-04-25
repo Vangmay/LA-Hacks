@@ -52,7 +52,7 @@ papercourt/
 │   │   ├── base.py               # BaseAgent, AgentContext, AgentResult — Person A owns this
 │   │   │
 │   │   │   # Person A implements these (Phase 1):
-│   │   ├── parser.py
+│   │   ├── tex_parser.py
 │   │   ├── claim_extractor.py
 │   │   ├── dag_builder.py
 │   │   │
@@ -429,8 +429,8 @@ Every agent file must:
 - Set agent_id as a class variable
 - Implement run() using self._mock_result() with a realistic output shape
 
-Stubs for Person A's agents (parser.py, claim_extractor.py, dag_builder.py):
-- parser.py mock output: {"title": "Mock Paper", "sections": [], "equations": [], "bibliography": [], "raw_text": ""}
+Stubs for Person A's agents (tex_parser.py, claim_extractor.py, dag_builder.py):
+- tex_parser.py output shape: {"title": "Paper title", "sections": [], "equations": [], "bibliography": [], "raw_text": ""}
 - claim_extractor.py mock output: {"claims": [{"claim_id": "claim_001", "text": "Mock theorem", "claim_type": "theorem", "section": "1", "equations": [], "citations": [], "dependencies": []}]}
 - dag_builder.py mock output: {"edges": [], "adjacency": {}, "roots": ["claim_001"], "topological_order": ["claim_001"]}
 
@@ -442,7 +442,7 @@ Stubs for Person B's agents: return empty/minimal valid shapes matching what the
 - defender.py mock: {"rebuttals": []}
 - verdict_aggregator.py mock: {"claim_id": "claim_001", "verdict": "SUPPORTED", "confidence": 0.8, "is_cascaded": False, "cascade_source": None, "challenges": [], "rebuttals": [], "verification_results": []}
 - cascade.py mock: {"updated_verdicts": {}}
-- report_agent.py mock: {"markdown": "# Mock Report"}
+- report_agent.py output shape: {"markdown": "# Review Report"}
 
 Stubs for Person D's agents:
 - claim_filter.py mock: {"testable": ["claim_001"], "theoretical": [], "classifications": {}}
@@ -532,9 +532,9 @@ api/review.py — mount at /review:
 - POST /review → create job, return {"job_id": str, "status": "queued"}
 - GET /review/{job_id}/status → {"status": str, "completed_claims": 0, "total_claims": 0}
 - GET /review/{job_id}/stream → SSE with one heartbeat comment, then closes
-- GET /review/{job_id}/report → 202 {"detail": "in progress"} or mock ReviewReport
+- GET /review/{job_id}/report → completed ReviewReport or 202 while processing
 - GET /review/{job_id}/dag → {"nodes": [], "edges": []}
-- GET /review/{job_id}/report/markdown → plain text "# Mock Report"
+- GET /review/{job_id}/report/markdown → completed markdown report
 
 api/poc.py — mount at /poc:
 - POST /poc → {"session_id": str, "status": "queued"}
@@ -650,7 +650,7 @@ curl http://localhost:8000/health        # should return {"status": "ok"}
 open http://localhost:5173               # should show PaperCourt landing page
 
 ## Who owns what
-Person A: backend/models/, backend/core/, backend/agents/parser.py, claim_extractor.py, dag_builder.py
+Person A: backend/models/, backend/core/, backend/agents/tex_parser.py, claim_extractor.py, dag_builder.py
 Person B: backend/agents/ (review agents), backend/core/orchestrators/review.py, backend/api/review.py
 Person C: frontend/ (all of it)
 Person D: backend/agents/ (poc agents), backend/core/orchestrators/poc.py, backend/api/poc.py
@@ -665,7 +665,7 @@ Never edit another person's owned files without coordinating first.
 
 Include all dependencies upfront so everyone can install once:
 fastapi, uvicorn[standard], pydantic[email], pydantic-settings, python-dotenv,
-python-multipart, sse-starlette, openai, pymupdf, sympy, scipy, numpy,
+python-multipart, sse-starlette, openai, sympy, scipy, numpy,
 sentence-transformers, chromadb, networkx, httpx, tenacity, python-json-logger
 
 ---
@@ -676,7 +676,7 @@ VERIFY THE SCAFFOLD WORKS by running:
 3. curl http://localhost:8000/review/test-id/dag → {"nodes": [], "edges": []}
 4. cd frontend && npm run dev → page loads without errors
 5. python -c "from models import ClaimUnit, PoCSpec, ReviewReport; print('models ok')"
-6. python -c "from agents.parser import ParserAgent; a = ParserAgent(); print(a.agent_id)"
+6. python -c "from agents.tex_parser import TexParserAgent; a = TexParserAgent(); print(a.agent_id)"
 
 All six checks must pass before anyone starts Phase 1.
 ```
@@ -685,12 +685,12 @@ All six checks must pass before anyone starts Phase 1.
 
 ## PHASE 1 — Parser + DAG
 
-### Prompt 1.1 — ParserAgent
+### Prompt 1.1 — TexParserAgent
 
 ```
-Implement ParserAgent in backend/agents/parser.py.
+Implement TexParserAgent in backend/agents/tex_parser.py.
 
-INPUT: A PDF file path (str).
+INPUT: assembled TeX text from an arXiv e-print source bundle.
 OUTPUT: AgentResult where output contains:
 {
   "title": str,
@@ -702,14 +702,14 @@ OUTPUT: AgentResult where output contains:
 }
 
 IMPLEMENTATION:
-1. Use PyMuPDF (fitz) to extract text. Install with: pip install pymupdf
-2. Section detection: identify headings using font size heuristics (text blocks where font size > body average) and common math paper heading patterns ("1.", "2.", "Theorem", "Proof", "References").
-3. Equation extraction: extract all text blocks containing LaTeX delimiters ($...$, $$...$$, \begin{equation}, \begin{align}). Assign sequential IDs like "eq_1", "eq_2".
-4. Bibliography: detect the References/Bibliography section; split into individual entries by numbered pattern [1], [2] or \bibitem.
-5. If PyMuPDF extraction fails (scanned PDF with no text layer), set a flag `is_scanned: true` in output and return whatever partial content is available. Do not raise — degrade gracefully.
-6. Add a `parse_pdf(file_path: str) -> dict` convenience function that instantiates and runs the agent.
+1. Strip TeX comments and identify the document body.
+2. Section detection: identify `\section`, `\subsection`, `\subsubsection`, and `\paragraph` headings.
+3. Equation extraction: extract math from `$...$`, `$$...$$`, `\[...\]`, and equation-like environments. Assign sequential IDs like "eq_1", "eq_2".
+4. Bibliography: parse `thebibliography`, `\bibitem`, and `\bibliography{...}` references.
+5. Preserve math spans in raw text so downstream symbolic and numeric agents can inspect original notation.
+6. Add a `parse_tex_text(tex_text: str) -> dict` convenience function that instantiates and runs the parser.
 
-Write a simple test at the bottom under `if __name__ == "__main__"` that runs the parser on a hardcoded test PDF path and prints the section count and equation count.
+Write a simple test script that parses a representative TeX fixture and prints the section count and equation count.
 ```
 
 ### Prompt 1.2 — ClaimExtractorAgent
@@ -717,7 +717,7 @@ Write a simple test at the bottom under `if __name__ == "__main__"` that runs th
 ```
 Implement ClaimExtractorAgent in backend/agents/claim_extractor.py.
 
-INPUT: The parsed output dict from ParserAgent (sections, equations, bibliography, raw_text).
+INPUT: The parsed output dict from TexParserAgent (sections, equations, bibliography, raw_text).
 OUTPUT: AgentResult where output contains:
 {
   "claims": [ClaimUnit, ...]   // list of fully populated ClaimUnit objects as dicts
@@ -728,7 +728,7 @@ ClaimUnit fields (already defined in models/claim.py):
 - text: str (the claim as stated in the paper)
 - claim_type: Literal["theorem", "lemma", "corollary", "proposition", "assertion"]
 - section: str (which section it appears in)
-- equations: List[str] (equation IDs from ParserAgent output that belong to this claim)
+- equations: List[str] (equation IDs from TexParserAgent output that belong to this claim)
 - citations: List[str] (reference IDs cited within this claim or its proof)
 - dependencies: List[str] (leave empty for now — DAGBuilderAgent fills this)
 
@@ -777,11 +777,11 @@ IMPLEMENTATION:
 ### Prompt 1.4 — Pipeline integration test
 
 ```
-Wire ParserAgent → ClaimExtractorAgent → DAGBuilderAgent into a runnable pipeline script at backend/scripts/test_pipeline.py.
+Wire arXiv source ingestion → TexParserAgent → ClaimExtractorAgent → DAGBuilderAgent into a runnable pipeline script at backend/scripts/test_pipeline.py.
 
 The script should:
-1. Accept a PDF file path as a command-line argument
-2. Run all three agents in sequence, passing outputs forward
+1. Accept an arXiv URL or bare article id as a command-line argument
+2. Fetch `https://arxiv.org/e-print/{id}`, assemble TeX, and run all three agents in sequence
 3. Print a formatted summary:
    - Paper title
    - Number of sections parsed
@@ -792,9 +792,9 @@ The script should:
 4. If any agent returns status="inconclusive", print a warning but continue
 5. Save the full pipeline output as JSON to outputs/{paper_hash}_pipeline.json
 
-Find a real arXiv paper to test with. Download one with clearly labeled lemmas and theorems — a combinatorics or linear algebra paper works best (e.g. arXiv:2301.00001 or similar). 
+Find a real arXiv paper to test with. Use one with clearly labeled lemmas and theorems — a combinatorics or linear algebra paper works best (e.g. arXiv:2301.00001 or similar).
 
-The script must run with: python scripts/test_pipeline.py path/to/paper.pdf
+The script must run with: python scripts/test_pipeline.py https://arxiv.org/abs/1706.03762
 ```
 
 ---
@@ -988,10 +988,10 @@ Wire Review Mode end-to-end in backend/api/review.py.
 ROUTES TO IMPLEMENT:
 
 POST /review
-- Accept multipart file upload (PDF)
-- Save file to a temp directory as /tmp/papercourt/{job_id}.pdf
+- Accept an arXiv URL/id
+- Fetch and assemble the arXiv e-print source under /tmp/papercourt/{job_id}
 - Create job in job_store with status="queued"
-- Launch ReviewOrchestrator as a background task (asyncio.create_task) — run the full pipeline: ParserAgent → ClaimExtractorAgent → DAGBuilderAgent → ReviewOrchestrator
+- Launch ReviewOrchestrator as a background task (asyncio.create_task) — run the full pipeline: TexParserAgent → ClaimExtractorAgent → DAGBuilderAgent → ReviewOrchestrator
 - Return: {"job_id": str, "status": "queued"}
 
 GET /review/{job_id}/status
@@ -1039,12 +1039,12 @@ PAGES/COMPONENTS TO BUILD:
 2. Header component:
    - Left: "PAPERCOURT" in monospace with a small glyph (⚖ or similar)
    - Center: mode tabs — [Review] [Reader] [Research] — only Review is active for now, others are dimmed
-   - Right: upload button (opens modal)
+   - Right: arXiv URL button (opens modal)
 
-3. UploadModal component:
-   - Drag-and-drop PDF zone
-   - On drop/select: POST /review with the file
-   - Show upload progress, then transition to "Analyzing paper..."
+3. SubmissionModal component:
+   - arXiv URL/id input
+   - On submit: POST /review with the arXiv value
+   - Show submission progress, then transition to "Analyzing paper..."
    - On success: navigate to /review/{job_id}
 
 4. ReviewPage at route /review/:jobId:
@@ -1111,7 +1111,7 @@ Polish the ReviewPage DAG experience with the following improvements:
    - Normal edges: thin grey (#374151), animated dashed line moving in dependency direction
    - Cascade edges (connecting a REFUTED source to a cascaded target): turn red (#EF4444), add a bright sweep animation traveling along the edge direction to visualize failure propagation
 
-3. LOADING STATE: While the pipeline is in "parsing" or "extracting" phase (before any nodes appear), show a centered loading indicator with live status text: "Parsing PDF...", "Extracting claims...", "Building dependency graph..."
+3. LOADING STATE: While the pipeline is ingesting source or extracting claims (before any nodes appear), show a centered loading indicator with live status text: "Fetching TeX source...", "Extracting claims...", "Building dependency graph..."
 
 4. NODE TOOLTIP: On hover (not click), show a small tooltip with: full claim text preview (first 120 chars), claim type, current confidence score if verdict is available.
 
@@ -1189,7 +1189,7 @@ Include conversation_history in the messages array for context.
 Implement ReaderOrchestrator and Reader Mode API routes.
 
 READER ORCHESTRATOR (backend/core/orchestrators/reader.py):
-1. Runs the shared pipeline (Parser → ClaimExtractor → DAGBuilder) on the uploaded PDF
+1. Runs the shared pipeline (TexParser → ClaimExtractor → DAGBuilder) on the submitted arXiv paper
 2. Identifies entry-point claims: root nodes (no intra-paper dependencies) that also have the fewest prerequisites (initially estimated by claim complexity — shorter claims with no equations are simpler)
 3. Marks those 1-3 claims as "start_here" in the session state
 4. Does NOT pre-generate annotations for all claims — annotations are generated lazily on demand when the user clicks a node (to save cost)
@@ -1212,7 +1212,7 @@ Add reader sessions to job_store.py:
 API ROUTES (backend/api/reader.py):
 
 POST /read
-- Accept: multipart PDF + form field "level" (default: "undergraduate")  
+- Accept: arXiv URL/id + form field "level" (default: "undergraduate")
 - Create session, launch ReaderOrchestrator as background task
 - Return: {"session_id": str, "status": "processing"}
 
@@ -1500,7 +1500,7 @@ async def run_research_loop(session_id, query):
     emit_event(session_id, "draft_complete", {})
     
     # Self-review: run full Review Mode pipeline on the draft
-    # Save draft as temp PDF or pass as text to a text-based review path
+    # Pass draft text to the self-review path
     self_review = await SelfReviewAgent.run(draft.markdown, proven_hypotheses)
     emit_event(session_id, "self_review_complete", {verdict_summary: self_review.summary})
   
@@ -1608,10 +1608,10 @@ Stream all research events in plain language:
 ### Prompt 6.1 — Mode switcher + unified session
 
 ```
-Add a unified mode switcher so users can switch between Review and Reader modes for the same uploaded paper without re-uploading.
+Add a unified mode switcher so users can switch between Review and Reader modes for the same submitted paper.
 
 BACKEND:
-1. Add a unified session concept: when a PDF is uploaded via /review, also create a reader session for the same paper and link the two by paper_hash.
+1. Add a unified session concept: when an arXiv paper is submitted via /review, also create a reader session for the same paper and link the two by paper_hash.
 2. Add GET /paper/{paper_hash}/sessions → returns {review_job_id, reader_session_id} if both exist.
 3. The DAG data (claims + edges) should be computed once and shared between modes — store it in a shared paper_store keyed by paper_hash.
 
@@ -1655,7 +1655,7 @@ Add production-quality error handling and observability across the backend.
 
 3. COST TRACKING: Add a simple cost tracker. Every GPT-4o API call should record: agent_id, input_tokens, output_tokens, estimated_cost (use $0.005/1K input, $0.015/1K output). Store per job_id. Expose via GET /review/{job_id}/cost.
 
-4. JOB CLEANUP: Add a background task that runs every 5 minutes and deletes temp PDF files + event bus channels for jobs older than 2 hours.
+4. JOB CLEANUP: Add a background task that runs every 5 minutes and deletes temp source files + event bus channels for jobs older than 2 hours.
 
 5. HEALTH CHECK: Add GET /health → {"status": "ok", "agents": int, "active_jobs": int, "uptime_seconds": float}
 
@@ -1736,7 +1736,7 @@ IMPLEMENTATION:
 ```
 Implement ScaffoldGeneratorAgent in backend/agents/scaffold_generator.py.
 
-INPUT: PoCSpec dict (with success_criteria populated) + the full ClaimUnit dict + paper metadata (title, abstract, relevant sections from ParserAgent output).
+INPUT: PoCSpec dict (with success_criteria populated) + the full ClaimUnit dict + paper metadata (title, abstract, relevant sections from TexParserAgent output).
 OUTPUT: AgentResult where output contains the completed PoCSpec with scaffold_files populated:
 {
   "scaffold_files": {
@@ -1876,7 +1876,7 @@ SESSION STORE for PoC:
 API ROUTES (backend/api/poc.py):
 
 POST /poc
-- Accept multipart PDF upload
+- Accept arXiv URL/id
 - Create session, launch PoCOrchestrator as background task
 - Return: {"session_id": str, "status": "processing"}
 
@@ -1999,7 +1999,7 @@ Below banner:
 
 ```
 Phase 0:  [ ] 0.1 Project scaffold
-Phase 1:  [ ] 1.1 ParserAgent
+Phase 1:  [ ] 1.1 TexParserAgent
           [ ] 1.2 ClaimExtractorAgent  
           [ ] 1.3 DAGBuilderAgent
           [ ] 1.4 Pipeline integration test  ← CHECKPOINT
@@ -2033,7 +2033,7 @@ Phase 7:  [ ] 7.1 ClaimFilterAgent + MetricExtractorAgent
 ## Hackathon Build Order (36 hours, 4 people)
 
 For the hackathon, target only Phases 0–3 and 7.1–7.4 (PoC backend only, no UI).
-Demo story: upload paper → live DAG review → download scaffold → show the zip contents.
+Demo story: enter arXiv URL → live DAG review → download scaffold → show the zip contents.
 PoC UI can be described verbally during pitch if not built in time.
 
 ```

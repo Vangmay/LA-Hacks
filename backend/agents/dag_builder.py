@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import List
+from typing import List, Optional
 
 from openai import AsyncOpenAI
 
@@ -13,9 +13,10 @@ logger = logging.getLogger(__name__)
 _SYSTEM_PROMPT = (
     "You are a mathematical dependency analyzer. "
     "Given a list of claims from a paper, determine which claims logically depend on which others. "
-    "A claim B depends on A if understanding or proving B requires A to be established first. "
+    "The repository DAG convention is: an edge A -> B means claim A depends on claim B, "
+    "so B must be established before A. "
     'Return ONLY a JSON object with one key "edges" whose value is an array of dependency edges: '
-    '[{"from": claim_id, "to": claim_id}] where \'to\' depends on \'from\'. '
+    '[{"from": claim_id, "to": claim_id}] where \'from\' depends on \'to\'. '
     "Be conservative — only add an edge if the dependency is clear."
 )
 
@@ -23,7 +24,13 @@ _SYSTEM_PROMPT = (
 class DAGBuilderAgent(BaseAgent):
     agent_id = "dag_builder"
 
-    _client = AsyncOpenAI(api_key=settings.openai_api_key)
+    def __init__(self, client: Optional[AsyncOpenAI] = None) -> None:
+        self._client = client
+
+    def _get_client(self) -> AsyncOpenAI:
+        if self._client is None:
+            self._client = AsyncOpenAI(api_key=settings.openai_api_key)
+        return self._client
 
     async def run(self, context: AgentContext) -> AgentResult:
         claims: List[dict] = context.extra.get("claims", [])
@@ -110,7 +117,7 @@ class DAGBuilderAgent(BaseAgent):
 
     async def _call_openai(self, user_prompt: str):
         try:
-            response = await self._client.chat.completions.create(
+            response = await self._get_client().chat.completions.create(
                 model=settings.openai_model,
                 messages=[
                     {"role": "system", "content": _SYSTEM_PROMPT},

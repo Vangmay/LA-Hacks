@@ -118,10 +118,10 @@ class DefenderAgent(BaseAgent):
             logger.warning(
                 "Rebuttal validation failed for %s: %s", challenge_id, e
             )
-            fallback = (rebuttal_text or raw or "(no rebuttal)").strip()
+            text_value = (rebuttal_text or raw or "(no rebuttal)").strip()
             return Rebuttal(
                 challenge_id=challenge_id,
-                rebuttal_text=fallback or "(no rebuttal)",
+                rebuttal_text=text_value or "(no rebuttal)",
                 supporting_evidence=[],
             )
 

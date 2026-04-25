@@ -22,7 +22,7 @@ open http://localhost:5173               # should show PaperCourt landing page
 
 ## Who owns what
 
-- **Person A**: `backend/models/`, `backend/core/`, and `backend/agents/{parser,claim_extractor,dag_builder}.py`
+- **Person A**: `backend/models/`, `backend/core/`, and `backend/agents/{tex_parser,claim_extractor,dag_builder}.py`
 - **Person B**: `backend/agents/` (review agents), `backend/core/orchestrators/review.py`, `backend/api/review.py`
 - **Person C**: `frontend/` (all of it)
 - **Person D**: `backend/agents/` (poc agents), `backend/core/orchestrators/poc.py`, `backend/api/poc.py`
@@ -48,5 +48,5 @@ curl http://localhost:8000/health                              # {"status": "ok"
 curl http://localhost:8000/review/test-id/dag                  # {"nodes": [], "edges": []}
 cd frontend && npm run dev                                     # page loads
 python -c "from models import ClaimUnit, PoCSpec, ReviewReport; print('models ok')"
-python -c "from agents.parser import ParserAgent; print(ParserAgent().agent_id)"
+python -c "from agents.tex_parser import TexParserAgent; print(TexParserAgent().agent_id)"
 ```

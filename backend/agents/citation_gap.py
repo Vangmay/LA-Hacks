@@ -1,5 +1,6 @@
 import json
 import logging
+from typing import Optional
 
 from openai import AsyncOpenAI
 
@@ -20,7 +21,13 @@ _SYSTEM_PROMPT = (
 class CitationGapAgent(BaseAgent):
     agent_id = "citation_gap"
 
-    _client = AsyncOpenAI(api_key=settings.openai_api_key)
+    def __init__(self, client: Optional[AsyncOpenAI] = None) -> None:
+        self._client = client
+
+    def _get_client(self) -> AsyncOpenAI:
+        if self._client is None:
+            self._client = AsyncOpenAI(api_key=settings.openai_api_key)
+        return self._client
 
     async def run(self, context: AgentContext) -> AgentResult:
         claim = context.claim
@@ -32,7 +39,7 @@ class CitationGapAgent(BaseAgent):
         })
 
         try:
-            response = await self._client.chat.completions.create(
+            response = await self._get_client().chat.completions.create(
                 model=settings.openai_model,
                 messages=[
                     {"role": "system", "content": _SYSTEM_PROMPT},
