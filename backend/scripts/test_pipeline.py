@@ -1,4 +1,4 @@
-"""End-to-end pipeline test: PDF -> ParserAgent -> ClaimExtractorAgent -> DAGBuilderAgent.
+"""End-to-end pipeline test: PDF -> Parser -> ClaimExtractor -> DAGBuilder -> SymbolicVerifier.
 
 Usage (from backend/):
     python scripts/test_pipeline.py path/to/paper.pdf
@@ -26,6 +26,8 @@ from agents.base import AgentContext
 from agents.claim_extractor import ClaimExtractorAgent
 from agents.dag_builder import DAGBuilderAgent
 from agents.parser import ParserAgent
+from agents.symbolic_verifier import SymbolicVerifierAgent
+from models import ClaimUnit
 from config import settings
 
 
@@ -101,6 +103,20 @@ async def run(pdf_path: str) -> int:
         _save(pipeline_output, paper_hash)
         return 1
 
+    # ── Equation matching (link parser equations to claims by proximity) ───────
+    eq_list = parsed.get("equations", [])  # [{"id", "latex", "section"}]
+    raw_text = parsed.get("raw_text", "")
+    if eq_list:
+        for claim in claims:
+            claim_pos = raw_text.find(claim["text"][:50])
+            matched_latex = []
+            for eq in eq_list:
+                eq_pos = raw_text.find(eq["latex"][:30])
+                if eq_pos != -1 and claim_pos != -1 and abs(eq_pos - claim_pos) < 600:
+                    matched_latex.append(eq["latex"])
+            if matched_latex:
+                claim["equations"] = matched_latex
+
     # ── Step 3: DAG builder ───────────────────────────────────────────────────
     print("\n=== DAGBuilderAgent ===")
     dag_ctx = AgentContext(job_id="manual-test", extra={"claims": claims})
@@ -133,6 +149,33 @@ async def run(pdf_path: str) -> int:
             continue
         snippet = c["text"][:80].replace("\n", " ")
         print(f"  {cid} ({c['claim_type']}): {snippet}...")
+
+    # ── Step 4: Symbolic verifier (per claim, in parallel) ───────────────────
+    print("\n=== SymbolicVerifierAgent ===")
+    verifier = SymbolicVerifierAgent()
+    sym_tasks = []
+    for c in claims:
+        claim_unit = ClaimUnit.model_validate(c)
+        sym_ctx = AgentContext(job_id="manual-test", claim=claim_unit)
+        sym_tasks.append(verifier.run(sym_ctx))
+
+    sym_results = await asyncio.gather(*sym_tasks, return_exceptions=True)
+
+    sym_output = {}
+    for c, result in zip(claims, sym_results):
+        cid = c["claim_id"]
+        if isinstance(result, Exception):
+            print(f"  WARNING: {cid} raised exception — {result}")
+            sym_output[cid] = {"status": "error", "evidence": str(result)}
+            continue
+        if result.status == "inconclusive":
+            print(f"  WARNING: {cid} returned inconclusive — {result.output.get('evidence')}")
+        o = result.output
+        sym_output[cid] = o
+        badge = {"passed": "✓", "failed": "✗", "inconclusive": "?"}.get(o["status"], "?")
+        print(f"  {badge} {cid}: {o['status']} (conf={o['confidence']}) — {o['evidence'][:80]}")
+
+    pipeline_output["symbolic_verifier"] = sym_output
 
     # ── Save JSON output ──────────────────────────────────────────────────────
     _save(pipeline_output, paper_hash)
