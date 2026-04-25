@@ -43,7 +43,7 @@ papercourt/
 │   │   ├── verdict.py            # ClaimVerdict
 │   │   ├── report.py             # ReviewReport
 │   │   ├── events.py             # DAGEvent, DAGEventType
-│   │   ├── reader.py             # ClaimAnnotation, Exercise, Prerequisite, ComprehensionLevel, ComprehensionStatus
+│   │   ├── reader.py             # AtomAnnotation, Exercise, Prerequisite, ComprehensionLevel, ComprehensionStatus
 │   │   ├── poc.py                # PoCSpec, MetricCriterion, ExperimentResult, ReproducibilityReport, GapAnalysisEntry, ClaimTestability, ReproductionStatus
 │   │   └── research.py           # Hypothesis, KnowledgeNode, ResearchSession
 │   │
@@ -378,7 +378,7 @@ from .adversarial import Challenge, Rebuttal
 from .verdict import ClaimVerdict
 from .report import ReviewReport
 from .events import DAGEvent, DAGEventType
-from .reader import ClaimAnnotation, ComprehensionLevel, ComprehensionStatus, Exercise, Prerequisite
+from .reader import AtomAnnotation, ComprehensionLevel, ComprehensionStatus, Exercise, Prerequisite
 from .poc import PoCSpec, MetricCriterion, ExperimentResult, ReproducibilityReport, GapAnalysisEntry, ClaimTestability, ReproductionStatus
 from .research import Hypothesis, KnowledgeNode, ResearchSession
 ```
@@ -1139,10 +1139,10 @@ Polish the ReviewPage DAG experience with the following improvements:
 Implement the five Reader Mode agents. Each agent follows the same BaseAgent interface.
 
 1. ExplainerAgent (backend/agents/explainer.py):
-INPUT: ClaimUnit dict + comprehension_level (Literal["layperson","undergraduate","graduate","expert"])
+INPUT: ResearchAtom dict + comprehension_level (Literal["layperson","undergraduate","graduate","expert"])
 OUTPUT: {"explanation": str, "key_insight": str, "worked_example": str | null}
 
-System prompt: "You are a mathematical expositor. Explain this claim at the specified level. 
+System prompt: "You are a mathematical expositor. Explain this atom at the specified level. 
 - layperson: no equations, use everyday analogies, focus on what the result means
 - undergraduate: minimal jargon, one intuitive example, light formalism
 - graduate: full formalism, proof sketch, connection to standard results
@@ -1150,35 +1150,35 @@ System prompt: "You are a mathematical expositor. Explain this claim at the spec
 Return JSON with: explanation (full explanation at level), key_insight (one sentence core takeaway), worked_example (a concrete example if applicable, null otherwise)."
 
 2. PrerequisiteMapperAgent (backend/agents/prerequisite_mapper.py):
-INPUT: ClaimUnit dict
+INPUT: ResearchAtom dict
 OUTPUT: {"prerequisites": [{"concept": str, "description": str, "resource_links": [str]}]}
 
-System prompt: "Identify mathematical concepts from OUTSIDE this paper that a reader needs to understand this claim. For each, provide: concept name, one-sentence description, and 1-2 resource links. For resource links, use real Wikipedia URLs (https://en.wikipedia.org/wiki/[Topic]) for fundamental concepts. Return JSON array."
+System prompt: "Identify mathematical concepts from OUTSIDE this paper that a reader needs to understand this atom. For each, provide: concept name, one-sentence description, and 1-2 resource links. For resource links, use real Wikipedia URLs (https://en.wikipedia.org/wiki/[Topic]) for fundamental concepts. Return JSON array."
 
 After getting GPT-4o response, validate each Wikipedia URL with a HEAD request (use httpx async). Replace any 404 links with the Wikipedia search URL for that concept.
 
 3. GlossaryAgent (backend/agents/glossary_agent.py):
-INPUT: ClaimUnit dict
+INPUT: ResearchAtom dict
 OUTPUT: {"glossary": {"term": "definition", ...}}
 
-System prompt: "Extract all non-standard mathematical terms from this claim text and provide one-sentence definitions. Include notation that may be unfamiliar. Return a JSON object mapping term → definition."
+System prompt: "Extract all non-standard mathematical terms from this atom's text and provide one-sentence definitions. Include notation that may be unfamiliar. Return a JSON object mapping term → definition."
 
 4. ExerciseGeneratorAgent (backend/agents/exercise_generator.py):
-INPUT: ClaimUnit dict + comprehension_level
+INPUT: ResearchAtom dict + comprehension_level
 OUTPUT: {"exercises": [Exercise dict, ...]}
 
 Exercise types to generate (generate one of each if applicable):
-- conceptual: "Which of the following correctly interprets this claim? (A)... (B)... (C)..." type:counterexample_mcq
-- computational: a numerical or algebraic calculation that tests the claim. type:computational
+- conceptual: "Which of the following correctly interprets this atom? (A)... (B)... (C)..." type:counterexample_mcq
+- computational: a numerical or algebraic calculation that tests the atom. type:computational
 - proof_fill: "Fill in the missing step: Given X, we know Y because ___." type:proof_fill
 
-System prompt: "Generate 2-3 exercises to test understanding of this mathematical claim at the given level. Return JSON array of Exercise objects with fields: prompt, exercise_type, answer_key."
+System prompt: "Generate 2-3 exercises to test understanding of this research atom at the given level. Return JSON array of Exercise objects with fields: prompt, exercise_type, answer_key."
 
 5. SocraticTutorAgent (backend/agents/socratic_tutor.py):
-INPUT: ClaimUnit dict + user_message (str) + conversation_history (list of {role, content})
+INPUT: ResearchAtom dict + user_message (str) + conversation_history (list of {role, content})
 OUTPUT: {"response": str}
 
-System prompt: "You are a Socratic math tutor. The student is asking about a specific claim from a paper. Your job is to guide them to understanding through questions and targeted explanations — not to just give answers. Stay strictly scoped to this claim. If the student's objection reveals a genuine gap in the claim, acknowledge it. Be concise. Return JSON: {response: str}"
+System prompt: "You are a Socratic math tutor. The student is asking about a specific atom from a paper. Your job is to guide them to understanding through questions and targeted explanations — not to just give answers. Stay strictly scoped to this atom. If the student's objection reveals a genuine gap in the atom, acknowledge it. Be concise. Return JSON: {response: str}"
 
 Include conversation_history in the messages array for context.
 ```
@@ -1189,11 +1189,11 @@ Include conversation_history in the messages array for context.
 Implement ReaderOrchestrator and Reader Mode API routes.
 
 READER ORCHESTRATOR (backend/core/orchestrators/reader.py):
-1. Runs the shared pipeline (TexParser → ClaimExtractor → DAGBuilder) on the submitted arXiv paper
-2. Identifies entry-point claims: root nodes (no intra-paper dependencies) that also have the fewest prerequisites (initially estimated by claim complexity — shorter claims with no equations are simpler)
-3. Marks those 1-3 claims as "start_here" in the session state
-4. Does NOT pre-generate annotations for all claims — annotations are generated lazily on demand when the user clicks a node (to save cost)
-5. Caches all generated ClaimAnnotations in the session store keyed by (session_id, claim_id)
+1. Runs the shared pipeline (arXiv e-print → tex_parser → AtomExtractorAgent → GraphBuilderAgent) on the submitted arXiv paper
+2. Identifies entry-point atoms: root nodes in the ResearchGraph (no intra-paper dependencies) that also have the fewest prerequisites (initially estimated by atom complexity — shorter atoms with no equations are simpler)
+3. Marks those 1-3 atoms as "start_here" in the session state
+4. Does NOT pre-generate annotations for all atoms — annotations are generated lazily on demand when the user clicks a node (to save cost)
+5. Caches all generated AtomAnnotations in the session store keyed by (session_id, atom_id)
 
 READER SESSION STORE: 
 Add reader sessions to job_store.py:
@@ -1201,11 +1201,11 @@ Add reader sessions to job_store.py:
   "session_id": str,
   "status": str,
   "comprehension_level": ComprehensionLevel,
-  "claims": {claim_id: ClaimUnit},
-  "dag": DAG,
-  "annotations": {claim_id: ClaimAnnotation},   # populated lazily
-  "comprehension_states": {claim_id: ComprehensionStatus},
-  "start_here": [claim_id],
+  "atoms": {atom_id: ResearchAtom},
+  "graph": ResearchGraph,
+  "annotations": {atom_id: AtomAnnotation},   # populated lazily
+  "comprehension_states": {atom_id: ComprehensionStatus},
+  "start_here": [atom_id],
   "paper_metadata": dict
 }
 
@@ -1216,40 +1216,40 @@ POST /read
 - Create session, launch ReaderOrchestrator as background task
 - Return: {"session_id": str, "status": "processing"}
 
-GET /read/{session_id}/dag
-- Return DAG snapshot with comprehension_status overlay per node
+GET /read/{session_id}/graph
+- Return ResearchGraph snapshot with comprehension_status overlay per node
 - Include start_here flags
-- Same format as review DAG but with comprehension_status instead of verdict
+- Same format as review graph but with comprehension_status instead of verdict
 
-GET /read/{session_id}/claim/{claim_id}
+GET /read/{session_id}/atom/{atom_id}
 - If annotation cached: return it immediately
 - If not cached: run all 4 agents in parallel (Explainer, PrerequisiteMapper, GlossaryAgent, ExerciseGenerator) using asyncio.gather
 - Cache result in session store
-- Return full ClaimAnnotation dict
+- Return full AtomAnnotation dict
 - Typical latency target: < 15s
 
-POST /read/{session_id}/claim/{claim_id}/tutor
+POST /read/{session_id}/atom/{atom_id}/tutor
 - Body: {"message": str, "history": [{role, content}]}
 - Run SocraticTutorAgent
 - Return {"response": str}
 
-POST /read/{session_id}/claim/{claim_id}/grade
+POST /read/{session_id}/atom/{atom_id}/grade
 - Body: {"exercise_id": str, "answer": str}
 - GPT-4o grading call: compare answer to answer_key, return {correct: bool, feedback: str}
 - Update exercise in session store
 
-PATCH /read/{session_id}/claim/{claim_id}/status
+PATCH /read/{session_id}/atom/{atom_id}/status
 - Body: {"status": "understood" | "in_progress" | "flagged"}
 - Update comprehension_states in session store
 - Return updated state
 
 GET /read/{session_id}/study-guide
-- Compile all visited ClaimAnnotations into a structured markdown study guide:
+- Compile all visited AtomAnnotations into a structured markdown study guide:
   - Paper title and metadata
   - Comprehension progress summary
-  - Per-claim sections (in topological order): explanation, prerequisites, exercises with answers
-  - Full glossary (deduplicated across all claims)
-  - Prerequisite reading list (deduplicated, ordered by how many claims depend on each concept)
+  - Per-atom sections (in topological order from ResearchGraph): explanation, prerequisites, exercises with answers
+  - Full glossary (deduplicated across all atoms)
+  - Prerequisite reading list (deduplicated, ordered by how many atoms depend on each concept)
 - Return as text/markdown
 ```
 
@@ -1263,8 +1263,8 @@ The mode selector in the header should now switch between Review and Reader mode
 NEW COMPONENTS:
 
 1. ReaderPage at route /read/:sessionId:
-   - Same layout as ReviewPage (DAG canvas + side panel)
-   - DAG nodes colored by comprehension status instead of verdict:
+   - Same layout as ReviewPage (graph canvas + side panel)
+   - Graph nodes colored by comprehension status instead of verdict:
      - unvisited: #374151 (dark grey)
      - in_progress: #1D4ED8 (blue)
      - understood: #15803D (green)  
@@ -1293,22 +1293,22 @@ NEW COMPONENTS:
    - Completed exercises show answer key inline
    
    TUTOR TAB:
-   - Chat interface scoped to this claim
+   - Chat interface scoped to this atom
    - Message history displayed as chat bubbles
-   - Input at bottom: "Ask about this claim..."
-   - Calls POST /read/{sessionId}/claim/{claimId}/tutor
+   - Input at bottom: "Ask about this atom..."
+   - Calls POST /read/{sessionId}/atom/{atomId}/tutor
    - Loading state while waiting for response
 
 3. ProgressPanel (replaces ActivityFeed in reader mode):
-   - Claims understood: {n}/{total} with a progress bar
-   - Claims flagged: list of claim IDs with click-to-navigate
+   - Atoms understood: {n}/{total} with a progress bar
+   - Atoms flagged: list of atom IDs with click-to-navigate
    - "Export Study Guide" button at bottom → fetches /read/{sessionId}/study-guide → downloads as .md
 
 4. Comprehension status controls on each node:
    - On hover: show three small icon buttons: ✓ (understood) / ⟳ (in progress) / ⚑ (flagged)
    - Clicking updates status via PATCH endpoint and immediately recolors the node
 
-Transitions between Review and Reader mode (when both are available for the same paper) should be smooth — the DAG canvas position and zoom state should be preserved.
+Transitions between Review and Reader mode (when both are available for the same paper) should be smooth — the graph canvas position and zoom state should be preserved.
 ```
 
 ---
@@ -1613,7 +1613,7 @@ Add a unified mode switcher so users can switch between Review and Reader modes 
 BACKEND:
 1. Add a unified session concept: when an arXiv paper is submitted via /review, also create a reader session for the same paper and link the two by paper_hash.
 2. Add GET /paper/{paper_hash}/sessions → returns {review_job_id, reader_session_id} if both exist.
-3. The DAG data (claims + edges) should be computed once and shared between modes — store it in a shared paper_store keyed by paper_hash.
+3. The graph data (atoms + edges) should be computed once and shared between modes — store it in a shared paper_store keyed by paper_hash.
 
 FRONTEND:
 1. When on ReviewPage or ReaderPage, the mode tabs in the header should be active (not dimmed) once both sessions exist for this paper.
