@@ -16,3 +16,4 @@ networkx
 httpx
 tenacity
 python-json-logger
+pydantic-ai
