@@ -1,0 +1,225 @@
+"""Config for the research deep-dive control plane."""
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from config import settings
+
+
+class ModelProfile(BaseModel):
+    """OpenAI-compatible model settings for one orchestration role class."""
+
+    model_config = ConfigDict(protected_namespaces=())
+
+    provider: str
+    model: str
+    api_key_env: str
+    base_url: str = ""
+    reasoning_effort: str = ""
+    max_output_tokens: int = 2048
+    timeout_seconds: float = 180.0
+    min_interval_seconds: float = 0.0
+
+
+class DeepDiveConfig(BaseModel):
+    """Runtime budgets and filesystem layout for research deep-dive runs.
+
+    Values are copied from global settings by default so deployments can tune
+    behavior from environment variables without editing orchestration code.
+    """
+
+    model_config = ConfigDict(protected_namespaces=())
+
+    workspace_root: Path = Field(default_factory=lambda: Path(settings.deepdive_workspace_root))
+    max_investigators: int = Field(default_factory=lambda: settings.deepdive_max_investigators)
+    subagents_per_investigator: int = Field(
+        default_factory=lambda: settings.deepdive_subagents_per_investigator
+    )
+    min_personas_per_investigator: int = Field(
+        default_factory=lambda: settings.deepdive_min_personas_per_investigator
+    )
+    max_personas_per_investigator: int = Field(
+        default_factory=lambda: settings.deepdive_max_personas_per_investigator
+    )
+    require_persona_diversity: bool = Field(
+        default_factory=lambda: settings.deepdive_require_persona_diversity
+    )
+    dynamic_roster_enabled: bool = Field(
+        default_factory=lambda: settings.deepdive_dynamic_roster_enabled
+    )
+    dynamic_roster_fallback_to_deterministic: bool = Field(
+        default_factory=lambda: settings.deepdive_dynamic_roster_fallback_to_deterministic
+    )
+    dynamic_roster_model_role: str = Field(
+        default_factory=lambda: settings.deepdive_dynamic_roster_model_role
+    )
+    min_constructive_archetypes: int = Field(
+        default_factory=lambda: settings.deepdive_min_constructive_archetypes
+    )
+    min_skeptical_archetypes: int = Field(
+        default_factory=lambda: settings.deepdive_min_skeptical_archetypes
+    )
+    min_prior_work_archetypes: int = Field(
+        default_factory=lambda: settings.deepdive_min_prior_work_archetypes
+    )
+    min_recent_future_archetypes: int = Field(
+        default_factory=lambda: settings.deepdive_min_recent_future_archetypes
+    )
+    max_duplicate_archetype_functions: int = Field(
+        default_factory=lambda: settings.deepdive_max_duplicate_archetype_functions
+    )
+    subagent_max_tool_calls: int = Field(
+        default_factory=lambda: settings.deepdive_subagent_max_tool_calls
+    )
+    investigator_max_rounds: int = Field(
+        default_factory=lambda: settings.deepdive_investigator_max_rounds
+    )
+    max_parallel_subagents: int = Field(
+        default_factory=lambda: settings.deepdive_max_parallel_subagents
+    )
+    stage_timeout_seconds: int = Field(
+        default_factory=lambda: settings.deepdive_stage_timeout_seconds
+    )
+    default_search_limit: int = Field(
+        default_factory=lambda: settings.deepdive_default_search_limit
+    )
+    report_detail_level: str = Field(default_factory=lambda: settings.deepdive_report_detail_level)
+    final_report_min_spinoff_proposals: int = Field(
+        default_factory=lambda: settings.deepdive_final_report_min_spinoff_proposals
+    )
+    final_report_min_evidence_items_per_proposal: int = Field(
+        default_factory=lambda: settings.deepdive_final_report_min_evidence_items_per_proposal
+    )
+    final_report_min_open_questions: int = Field(
+        default_factory=lambda: settings.deepdive_final_report_min_open_questions
+    )
+    critique_min_points_per_lens: int = Field(
+        default_factory=lambda: settings.deepdive_critique_min_points_per_lens
+    )
+    http_timeout_seconds: float = Field(
+        default_factory=lambda: settings.deepdive_http_timeout_seconds
+    )
+    model_timeout_seconds: float = Field(
+        default_factory=lambda: settings.deepdive_model_timeout_seconds
+    )
+    model_max_retries: int = Field(default_factory=lambda: settings.deepdive_model_max_retries)
+    model_retry_max_delay_seconds: float = Field(
+        default_factory=lambda: settings.deepdive_model_retry_max_delay_seconds
+    )
+    tool_result_char_limit: int = Field(
+        default_factory=lambda: settings.deepdive_tool_result_char_limit
+    )
+    workspace_write_char_budget: int = Field(
+        default_factory=lambda: settings.deepdive_workspace_write_char_budget
+    )
+    subagent_max_workspace_tool_calls: int = Field(
+        default_factory=lambda: settings.deepdive_subagent_max_workspace_tool_calls
+    )
+    subagent_max_steps: int = Field(
+        default_factory=lambda: settings.deepdive_subagent_max_steps
+    )
+    semantic_scholar_min_interval_seconds: float = Field(
+        default_factory=lambda: settings.deepdive_semantic_scholar_min_interval_seconds
+    )
+    semantic_scholar_max_retries: int = Field(
+        default_factory=lambda: settings.deepdive_semantic_scholar_max_retries
+    )
+    serpapi_max_requests: int = Field(
+        default_factory=lambda: settings.deepdive_serpapi_max_requests
+    )
+    llm_action_protocol: Literal["json_action"] = Field(
+        default_factory=lambda: settings.deepdive_llm_action_protocol
+    )
+    thinking_profile: ModelProfile = Field(
+        default_factory=lambda: ModelProfile(
+            provider=settings.deepdive_thinking_provider,
+            model=settings.deepdive_thinking_model or settings.openai_model,
+            api_key_env=settings.deepdive_thinking_api_key_env,
+            base_url=settings.deepdive_thinking_base_url or settings.openai_base_url,
+            reasoning_effort=settings.deepdive_thinking_reasoning_effort,
+            max_output_tokens=settings.deepdive_max_output_tokens_thinking,
+            timeout_seconds=settings.deepdive_model_timeout_seconds,
+            min_interval_seconds=settings.deepdive_thinking_min_interval_seconds,
+        )
+    )
+    light_profile: ModelProfile = Field(
+        default_factory=lambda: ModelProfile(
+            provider=settings.deepdive_light_provider,
+            model=settings.deepdive_light_model,
+            api_key_env=settings.deepdive_light_api_key_env,
+            base_url=settings.deepdive_light_base_url,
+            reasoning_effort=settings.deepdive_light_reasoning_effort,
+            max_output_tokens=settings.deepdive_max_output_tokens_light,
+            timeout_seconds=settings.deepdive_model_timeout_seconds,
+            min_interval_seconds=settings.deepdive_light_min_interval_seconds,
+        )
+    )
+
+    def normalized(self) -> "DeepDiveConfig":
+        min_personas = max(1, self.min_personas_per_investigator)
+        max_personas = max(min_personas, self.max_personas_per_investigator)
+        return self.model_copy(
+            update={
+                "max_investigators": max(1, self.max_investigators),
+                "subagents_per_investigator": max(1, self.subagents_per_investigator),
+                "min_personas_per_investigator": min_personas,
+                "max_personas_per_investigator": max_personas,
+                "dynamic_roster_model_role": self.dynamic_roster_model_role.strip()
+                or "investigator",
+                "min_constructive_archetypes": max(0, self.min_constructive_archetypes),
+                "min_skeptical_archetypes": max(0, self.min_skeptical_archetypes),
+                "min_prior_work_archetypes": max(0, self.min_prior_work_archetypes),
+                "min_recent_future_archetypes": max(0, self.min_recent_future_archetypes),
+                "max_duplicate_archetype_functions": max(
+                    1, self.max_duplicate_archetype_functions
+                ),
+                "subagent_max_tool_calls": max(1, self.subagent_max_tool_calls),
+                "investigator_max_rounds": max(1, self.investigator_max_rounds),
+                "max_parallel_subagents": max(1, self.max_parallel_subagents),
+                "stage_timeout_seconds": max(1, self.stage_timeout_seconds),
+                "default_search_limit": max(1, self.default_search_limit),
+                "report_detail_level": self.report_detail_level.strip() or "extensive",
+                "final_report_min_spinoff_proposals": max(1, self.final_report_min_spinoff_proposals),
+                "final_report_min_evidence_items_per_proposal": max(
+                    1, self.final_report_min_evidence_items_per_proposal
+                ),
+                "final_report_min_open_questions": max(1, self.final_report_min_open_questions),
+                "critique_min_points_per_lens": max(1, self.critique_min_points_per_lens),
+                "http_timeout_seconds": max(1.0, self.http_timeout_seconds),
+                "model_timeout_seconds": max(1.0, self.model_timeout_seconds),
+                "model_max_retries": max(1, self.model_max_retries),
+                "model_retry_max_delay_seconds": max(1.0, self.model_retry_max_delay_seconds),
+                "tool_result_char_limit": max(1000, self.tool_result_char_limit),
+                "workspace_write_char_budget": max(1000, self.workspace_write_char_budget),
+                "subagent_max_workspace_tool_calls": max(
+                    1, self.subagent_max_workspace_tool_calls
+                ),
+                "subagent_max_steps": max(
+                    self.subagent_max_tool_calls + 120,
+                    self.subagent_max_steps,
+                ),
+                "semantic_scholar_min_interval_seconds": max(
+                    0.0, self.semantic_scholar_min_interval_seconds
+                ),
+                "semantic_scholar_max_retries": max(1, self.semantic_scholar_max_retries),
+                "serpapi_max_requests": max(0, self.serpapi_max_requests),
+                "thinking_profile": self.thinking_profile.model_copy(
+                    update={
+                        "model": self.thinking_profile.model or settings.openai_model,
+                        "max_output_tokens": max(256, self.thinking_profile.max_output_tokens),
+                        "timeout_seconds": max(1.0, self.thinking_profile.timeout_seconds),
+                        "min_interval_seconds": max(0.0, self.thinking_profile.min_interval_seconds),
+                    }
+                ),
+                "light_profile": self.light_profile.model_copy(
+                    update={
+                        "max_output_tokens": max(256, self.light_profile.max_output_tokens),
+                        "timeout_seconds": max(1.0, self.light_profile.timeout_seconds),
+                        "min_interval_seconds": max(0.0, self.light_profile.min_interval_seconds),
+                    }
+                ),
+            }
+        )
