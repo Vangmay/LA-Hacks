@@ -86,6 +86,10 @@
   be on by default, with explicit opt-out flags, and Gemma-oriented time,
   interval, output-token, step, and workspace budgets should default high while
   external search APIs remain deliberately budgeted.
+- A CLI option named `subagents_per_investigator` must be an exact execution
+  contract for live E2E runs. Dynamic roster planning can choose the personas,
+  but it should not silently expand the requested 3x3 topology into a larger
+  run unless there is a separate explicit expansion flag.
 - Novelty mode needs its own artifact and prompt spine. Treat `proposal_seeds.md`
   as the raw idea layer, force proposal collision checks, reject vague future
   work, and have investigators/critics/finalizer transform evidence into

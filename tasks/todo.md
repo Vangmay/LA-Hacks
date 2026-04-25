@@ -33,7 +33,8 @@
 - [x] Re-run offline verification after the stage-aware repair and novelty
   prompt changes.
 - [x] Make dynamic roster and Gemma-heavy execution the default live settings.
-- [ ] Run the monitored live Gemma novelty E2E: arXiv `1706.03762`, objective
+- [x] Make the live CLI honor an explicit 3x3 dynamic roster request exactly.
+- [ ] In progress: run the monitored live Gemma novelty E2E: arXiv `1706.03762`, objective
   `novelty_ideation`, 3 investigators, 3 subagents each.
 - [ ] Commit the latest fix chunk and leave generated live artifacts untracked.
 

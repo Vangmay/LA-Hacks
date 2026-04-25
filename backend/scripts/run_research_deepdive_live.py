@@ -173,7 +173,7 @@ async def main_async() -> None:
         max_investigators=args.max_investigators,
         subagents_per_investigator=args.subagents_per_investigator,
         min_personas_per_investigator=args.subagents_per_investigator,
-        max_personas_per_investigator=max(args.subagents_per_investigator, 7),
+        max_personas_per_investigator=args.subagents_per_investigator,
         subagent_max_tool_calls=args.subagent_tool_calls,
         subagent_max_workspace_tool_calls=args.subagent_workspace_tool_calls,
         subagent_max_steps=args.subagent_steps,
