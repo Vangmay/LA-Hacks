@@ -304,6 +304,16 @@ class LiveAgentRunner:
                     workspace_tool_calls_used=workspace_tool_calls_used,
                 )
                 continue
+            if not isinstance(action, dict):
+                self._handle_non_object_json_action(
+                    trace_path,
+                    messages,
+                    action,
+                    llm_steps=llm_steps,
+                    research_tool_calls_used=research_tool_calls_used,
+                    workspace_tool_calls_used=workspace_tool_calls_used,
+                )
+                continue
             self._write_trace(trace_path, {"type": "llm_action", "step": llm_steps, "action": action})
 
             action_type = action.get("action")
@@ -629,6 +639,16 @@ class LiveAgentRunner:
                     workspace_tool_calls_used=workspace_tool_calls_used,
                 )
                 continue
+            if not isinstance(action, dict):
+                self._handle_non_object_json_action(
+                    trace_path,
+                    messages,
+                    action,
+                    llm_steps=llm_steps,
+                    research_tool_calls_used=research_tool_calls_used,
+                    workspace_tool_calls_used=workspace_tool_calls_used,
+                )
+                continue
             self._write_trace(trace_path, {"type": "llm_action", "step": llm_steps, "action": action})
             action_type = action.get("action")
             if action_type == "final":
@@ -839,6 +859,38 @@ class LiveAgentRunner:
                     "as exactly one JSON object. Return exactly one corrected JSON object now. "
                     "Use JSON string escaping for markdown newlines and quotes; keep every tool "
                     "parameter inside `arguments`."
+                ),
+            }
+        )
+
+    def _handle_non_object_json_action(
+        self,
+        trace_path: Path,
+        messages: list[dict[str, str]],
+        action: Any,
+        *,
+        llm_steps: int,
+        research_tool_calls_used: int,
+        workspace_tool_calls_used: int,
+    ) -> None:
+        rendered = json.dumps(action, default=str)[:4000]
+        self._write_rejected_action_trace(
+            trace_path,
+            action={"json_value": action},
+            reason="model response JSON was not an object action",
+            llm_steps=llm_steps,
+            research_tool_calls_used=research_tool_calls_used,
+            workspace_tool_calls_used=workspace_tool_calls_used,
+        )
+        messages.append({"role": "assistant", "content": rendered})
+        messages.append(
+            {
+                "role": "user",
+                "content": (
+                    "Rejected response without spending any tool budget: JSON was valid, "
+                    "but the action loop requires exactly one JSON object, not a list or "
+                    "scalar. Return exactly one corrected JSON object now with `action` "
+                    "and `arguments` fields."
                 ),
             }
         )

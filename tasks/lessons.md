@@ -94,6 +94,10 @@
   Malformed model JSON should become a rejected action and repair prompt; an
   unrecoverable subagent/tool failure should write an explicit error handoff and
   let sibling subagents, investigators, critique, and finalization continue.
+- Provider-level JSON parsing should not impose one schema on every caller.
+  Dynamic roster planning may legitimately return a top-level JSON array, while
+  subagent action loops require a JSON object and should reject non-object JSON
+  locally as a recoverable action-protocol error.
 - Novelty mode needs its own artifact and prompt spine. Treat `proposal_seeds.md`
   as the raw idea layer, force proposal collision checks, reject vague future
   work, and have investigators/critics/finalizer transform evidence into

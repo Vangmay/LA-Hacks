@@ -97,7 +97,7 @@ class DeepDiveLLMProvider:
         role: AgentModelRole,
         messages: list[dict[str, str]],
         require_json: bool = True,
-    ) -> dict[str, Any]:
+    ) -> Any:
         profile = self.profile_for(role)
         if not profile.model:
             raise RuntimeError(f"missing model name for {role.value}")
@@ -114,7 +114,7 @@ class DeepDiveLLMProvider:
         response = await self._chat_completion(profile, kwargs)
         content = normalize_model_content(response.choices[0].message.content or "")
         try:
-            return parse_model_json_object(content)
+            return parse_model_json(content)
         except json.JSONDecodeError as exc:
             raise LLMJSONParseError(
                 provider=profile.provider,
@@ -207,8 +207,8 @@ def normalize_model_content(content: str) -> str:
     return cleaned
 
 
-def parse_model_json_object(content: str) -> dict[str, Any]:
-    """Parse provider JSON while tolerating common action-protocol rough edges."""
+def parse_model_json(content: str) -> Any:
+    """Parse provider JSON while tolerating common response-format rough edges."""
 
     normalized = normalize_model_content(content)
     candidates = [normalized]
@@ -224,12 +224,17 @@ def parse_model_json_object(content: str) -> dict[str, Any]:
             except json.JSONDecodeError as exc:
                 last_error = exc
                 continue
-            if not isinstance(parsed, dict):
-                raise json.JSONDecodeError("top-level JSON value is not an object", candidate, 0)
             return parsed
     if last_error is not None:
         raise last_error
     raise json.JSONDecodeError("no JSON object found", normalized, 0)
+
+
+def parse_model_json_object(content: str) -> dict[str, Any]:
+    parsed = parse_model_json(content)
+    if not isinstance(parsed, dict):
+        raise json.JSONDecodeError("top-level JSON value is not an object", content, 0)
+    return parsed
 
 
 def _extract_first_json_object(content: str) -> str:

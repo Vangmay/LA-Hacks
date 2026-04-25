@@ -26,7 +26,12 @@ from research_deepdive import (  # noqa: E402
     validate_research_taste_roster,
 )
 from research_deepdive.agent_runner import LiveAgentRunner, action_instructions  # noqa: E402
-from research_deepdive.llm import LLMJSONParseError, normalize_model_content, parse_model_json_object  # noqa: E402
+from research_deepdive.llm import (  # noqa: E402
+    LLMJSONParseError,
+    normalize_model_content,
+    parse_model_json,
+    parse_model_json_object,
+)
 from research_deepdive.models import (  # noqa: E402
     AgentExitReason,
     AgentRunResult,
@@ -184,6 +189,7 @@ async def _exercise_live_runner_budget_contract(root: Path) -> None:
                 '"content":"## Proposal Seed: malformed literal\n\n- Status: raw"}}'
             ),
         ),
+        [{"action": "append_workspace_markdown", "arguments": {"path": "memory.md", "content": "bad list"}}],
         {"action": "paper_bulk_search", "arguments": {"query": "should not execute", "limit": 1}},
         {
             "action": "append_workspace_markdown",
@@ -284,7 +290,7 @@ async def _exercise_live_runner_budget_contract(root: Path) -> None:
 
     _assert(result.research_tool_calls_used == 1, "only valid search should spend research budget")
     _assert(result.workspace_tool_calls_used == 5, "valid workspace tools should spend only workspace budget")
-    _assert(result.llm_steps_used == 11, "rejected actions should consume LLM steps, not tool budgets")
+    _assert(result.llm_steps_used == 12, "rejected actions should consume LLM steps, not tool budgets")
     executed = [name for name, _ in fake_tools.calls]
     _assert(executed == [
         "read_workspace_markdown",
@@ -302,11 +308,12 @@ async def _exercise_live_runner_budget_contract(root: Path) -> None:
         if line.strip()
     ]
     rejections = [entry for entry in trace_lines if entry.get("type") == "rejected_action"]
-    _assert(len(rejections) == 4, f"expected four rejected actions, saw {len(rejections)}")
+    _assert(len(rejections) == 5, f"expected five rejected actions, saw {len(rejections)}")
     reasons = " ".join(entry["reason"] for entry in rejections)
     _assert("top level" in reasons, "top-level query rejection missing from trace")
     _assert("arguments.path" in reasons, "workspace missing path rejection missing from trace")
     _assert("not parseable" in reasons, "malformed JSON rejection missing from trace")
+    _assert("not an object action" in reasons, "non-object JSON rejection missing from trace")
     _assert("budget is exhausted" in reasons, "research budget rejection missing from trace")
     for entry in rejections:
         _assert(entry["research_tool_calls_used"] <= 1, "rejection trace has invalid research counter")
@@ -704,6 +711,8 @@ async def main_async() -> None:
         'prefix {"action":"append_workspace_markdown","arguments":{"path":"proposal_seeds.md","content":"line one\nline two"}} suffix'
     )
     _assert(parsed["arguments"]["content"] == "line one\nline two", "JSON parser should tolerate embedded action objects and literal newlines")
+    roster = parse_model_json('[{"taste_id":"dynamic"}]')
+    _assert(isinstance(roster, list) and roster[0]["taste_id"] == "dynamic", "provider JSON parser should allow roster arrays")
 
     instructions = action_instructions(1200)
     _assert("Invalid search" in instructions, "action prompt should show invalid top-level query example")
