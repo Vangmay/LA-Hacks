@@ -119,6 +119,8 @@ python backend/scripts/test_dag_builder.py
 python backend/scripts/test_defender.py
 python backend/scripts/test_prompt_2_agents.py
 python backend/scripts/test_review_tex_flow.py
+python backend/scripts/test_reader_agents.py
+python backend/scripts/test_reader_api.py
 ```
 
 Live E2E with OpenAI and arXiv:
