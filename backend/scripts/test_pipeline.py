@@ -35,8 +35,13 @@ from agents.base import AgentContext  # noqa: E402
 from agents.cascade import apply_cascade  # noqa: E402
 from agents.challenge_agent import ChallengeAgent  # noqa: E402
 from agents.defense_agent import DefenseAgent  # noqa: E402
+from agents.exercise_generator import ExerciseGeneratorAgent  # noqa: E402
+from agents.explainer import ExplainerAgent  # noqa: E402
+from agents.glossary_agent import GlossaryAgent  # noqa: E402
 from agents.graph_builder import GraphBuilderAgent  # noqa: E402
+from agents.prerequisite_mapper import PrerequisiteMapperAgent  # noqa: E402
 from agents.report_agent import build_review_report  # noqa: E402
+from agents.socratic_tutor import SocraticTutorAgent  # noqa: E402
 from agents.verdict_aggregator import aggregate_verdict  # noqa: E402
 from checks import run_algebraic_sanity, run_citation_probe, run_numeric_probe  # noqa: E402
 from config import settings  # noqa: E402
@@ -136,6 +141,10 @@ async def run_one(arxiv_value: str, max_review_atoms: Optional[int]) -> int:
         graph = await _build_graph(job_id, atoms)
         pipeline["graph"] = graph.model_dump()
         print(f"  edges={len(graph.edges)} roots={len(graph.roots)} warnings={len(graph.warnings)}")
+
+        print("=== reader mode probe (one atom) ===")
+        reader_annotation = await _run_reader_probe(job_id, atoms)
+        pipeline["reader_probe"] = reader_annotation
 
         review_atoms = [a for a in atoms if is_reviewable(a)]
         if max_review_atoms is not None:
@@ -268,6 +277,69 @@ async def _review_atoms(
         else:
             verdicts.append(result)
     return verdicts
+
+
+async def _run_reader_probe(job_id: str, atoms: list[ResearchAtom]) -> dict[str, Any]:
+    """Run all five Reader Mode agents on the most important available atom."""
+    from models import AtomImportance  # noqa: PLC0415
+
+    priority = [AtomImportance.CORE, AtomImportance.HIGH, AtomImportance.MEDIUM, AtomImportance.LOW]
+    probe_atom: Optional[ResearchAtom] = None
+    for importance in priority:
+        candidates = [a for a in atoms if a.importance == importance]
+        if candidates:
+            probe_atom = candidates[0]
+            break
+    if probe_atom is None:
+        print("  no atoms to probe")
+        return {}
+
+    print(f"  probing atom: {probe_atom.atom_id} [{probe_atom.atom_type.value}] {probe_atom.text[:80]!r}")
+
+    ctx = AgentContext(
+        job_id=job_id,
+        atom=probe_atom,
+        extra={"comprehension_level": "graduate"},
+    )
+
+    explainer, prereqs, glossary, exercises = await asyncio.gather(
+        ExplainerAgent().run(ctx),
+        PrerequisiteMapperAgent().run(ctx),
+        GlossaryAgent().run(ctx),
+        ExerciseGeneratorAgent().run(ctx),
+    )
+
+    tutor_ctx = AgentContext(
+        job_id=job_id,
+        atom=probe_atom,
+        extra={
+            "user_message": "What is the key insight of this atom and why does it matter?",
+            "history": [],
+        },
+    )
+    tutor = await SocraticTutorAgent().run(tutor_ctx)
+
+    for label, result in [
+        ("explainer", explainer),
+        ("prerequisites", prereqs),
+        ("glossary", glossary),
+        ("exercises", exercises),
+        ("tutor", tutor),
+    ]:
+        status = result.status
+        err = f" ({result.error})" if result.error else ""
+        print(f"    {label}: {status}{err}")
+
+    return {
+        "atom_id": probe_atom.atom_id,
+        "atom_type": probe_atom.atom_type.value,
+        "comprehension_level": "graduate",
+        "explainer": explainer.output,
+        "prerequisites": prereqs.output,
+        "glossary": glossary.output,
+        "exercises": exercises.output,
+        "tutor": tutor.output,
+    }
 
 
 def _print_atom_samples(atoms: list[ResearchAtom], limit: int = 12) -> None:

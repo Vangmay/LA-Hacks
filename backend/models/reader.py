@@ -32,8 +32,8 @@ class Exercise(BaseModel):
     graded: Optional[bool] = None
 
 
-class ClaimAnnotation(BaseModel):
-    claim_id: str
+class AtomAnnotation(BaseModel):
+    atom_id: str
     level: ComprehensionLevel
     explanation: str
     glossary: dict

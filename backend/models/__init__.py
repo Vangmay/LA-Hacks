@@ -38,7 +38,7 @@ from .jobs import JobMode, JobStatus, ReviewJob
 
 # Stub modes still imported by their (unmodified) routers.
 from .reader import (
-    ClaimAnnotation,
+    AtomAnnotation,
     ComprehensionLevel,
     ComprehensionStatus,
     Exercise,
@@ -105,7 +105,7 @@ __all__ = [
     "JobStatus",
     "ReviewJob",
     # stub modes
-    "ClaimAnnotation",
+    "AtomAnnotation",
     "ComprehensionLevel",
     "ComprehensionStatus",
     "Exercise",
