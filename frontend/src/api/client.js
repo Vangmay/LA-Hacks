@@ -31,11 +31,8 @@ export const api = {
     claims: (sessionId) => fetch(`${BASE}/poc/${sessionId}/claims`).then(r => r.json()),
     spec: (sessionId, claimId) => fetch(`${BASE}/poc/${sessionId}/claim/${claimId}/spec`).then(r => r.json()),
     uploadResults: (sessionId, file) => postFile(`${BASE}/poc/${sessionId}/results`, file),
-    uploadResultsJson: (sessionId, data) => postJson(`${BASE}/poc/${sessionId}/results`, data),
     report: (sessionId) => fetch(`${BASE}/poc/${sessionId}/report`).then(r => r.json()),
-    reportMarkdown: (sessionId) => fetch(`${BASE}/poc/${sessionId}/report/markdown`).then(r => r.text()),
     stream: (sessionId) => new EventSource(`${BASE}/poc/${sessionId}/stream`),
     dag: (sessionId) => fetch(`${BASE}/poc/${sessionId}/dag`).then(r => r.json()),
-    scaffoldZipUrl: (sessionId) => `${BASE}/poc/${sessionId}/scaffold.zip`,
   },
 }
