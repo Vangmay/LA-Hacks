@@ -17,12 +17,18 @@ ACTION_INSTRUCTIONS = """Return exactly one JSON object.
 
 Allowed forms:
 
-{"action":"tool","tool_name":"<allowed tool>","arguments":{...},"memory_update":"short markdown note"}
+{"action":"<allowed tool>","arguments":{...},"memory_update":"short markdown note"}
 {"action":"final","summary":"short summary","handoff_markdown":"# Hand-Off\\n..."}
 
 Rules:
+- The `action` field must be exactly one allowed tool name or exactly `"final"`.
+- Do not use a separate `tool_name` field.
+- Valid: `{"action":"read_workspace_markdown","arguments":{"path":"memory.md"}}`.
+- Invalid: `{"action":"tool","tool_name":"read_workspace_markdown","arguments":{"path":"memory.md"}}`.
 - Use only allowed tools.
 - Prefer workspace append/write tools after research tools so durable memory stays current.
+- Keep each workspace write concise enough to fit in one valid JSON object.
+- For long notes, append a compact summary first and continue in a later action.
 - Before final, ensure handoff_markdown contains searched queries, important papers, findings, uncertainty, and next steps.
 - Do not include prose outside the JSON object.
 """
@@ -76,12 +82,12 @@ class LiveAgentRunner:
                 exit_reason = AgentExitReason.COMPLETED
                 break
 
-            if action_type != "tool":
+            if action_type == "tool":
+                raise RuntimeError(f"{plan.subagent_id} used obsolete tool_name protocol: {action}")
+            if action_type not in plan.allowed_tools:
                 raise RuntimeError(f"{plan.subagent_id} returned invalid action: {action}")
 
-            tool_name = action.get("tool_name")
-            if tool_name not in plan.allowed_tools:
-                raise RuntimeError(f"{plan.subagent_id} requested disallowed tool: {tool_name}")
+            tool_name = str(action_type)
             if tool_calls_used >= plan.max_tool_calls:
                 exit_reason = AgentExitReason.MAX_TOOL_CALLS_REACHED
                 break

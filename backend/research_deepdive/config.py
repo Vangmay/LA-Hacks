@@ -21,6 +21,7 @@ class ModelProfile(BaseModel):
     reasoning_effort: str = ""
     max_output_tokens: int = 2048
     timeout_seconds: float = 180.0
+    min_interval_seconds: float = 0.0
 
 
 class DeepDiveConfig(BaseModel):
@@ -67,6 +68,10 @@ class DeepDiveConfig(BaseModel):
     model_timeout_seconds: float = Field(
         default_factory=lambda: settings.deepdive_model_timeout_seconds
     )
+    model_max_retries: int = Field(default_factory=lambda: settings.deepdive_model_max_retries)
+    model_retry_max_delay_seconds: float = Field(
+        default_factory=lambda: settings.deepdive_model_retry_max_delay_seconds
+    )
     tool_result_char_limit: int = Field(
         default_factory=lambda: settings.deepdive_tool_result_char_limit
     )
@@ -78,6 +83,9 @@ class DeepDiveConfig(BaseModel):
     )
     semantic_scholar_max_retries: int = Field(
         default_factory=lambda: settings.deepdive_semantic_scholar_max_retries
+    )
+    serpapi_max_requests: int = Field(
+        default_factory=lambda: settings.deepdive_serpapi_max_requests
     )
     llm_action_protocol: Literal["json_action"] = Field(
         default_factory=lambda: settings.deepdive_llm_action_protocol
@@ -91,6 +99,7 @@ class DeepDiveConfig(BaseModel):
             reasoning_effort=settings.deepdive_thinking_reasoning_effort,
             max_output_tokens=settings.deepdive_max_output_tokens_thinking,
             timeout_seconds=settings.deepdive_model_timeout_seconds,
+            min_interval_seconds=settings.deepdive_thinking_min_interval_seconds,
         )
     )
     light_profile: ModelProfile = Field(
@@ -102,6 +111,7 @@ class DeepDiveConfig(BaseModel):
             reasoning_effort=settings.deepdive_light_reasoning_effort,
             max_output_tokens=settings.deepdive_max_output_tokens_light,
             timeout_seconds=settings.deepdive_model_timeout_seconds,
+            min_interval_seconds=settings.deepdive_light_min_interval_seconds,
         )
     )
 
@@ -121,23 +131,28 @@ class DeepDiveConfig(BaseModel):
                 "default_search_limit": max(1, self.default_search_limit),
                 "http_timeout_seconds": max(1.0, self.http_timeout_seconds),
                 "model_timeout_seconds": max(1.0, self.model_timeout_seconds),
+                "model_max_retries": max(1, self.model_max_retries),
+                "model_retry_max_delay_seconds": max(1.0, self.model_retry_max_delay_seconds),
                 "tool_result_char_limit": max(1000, self.tool_result_char_limit),
                 "subagent_max_steps": max(1, self.subagent_max_steps),
                 "semantic_scholar_min_interval_seconds": max(
                     0.0, self.semantic_scholar_min_interval_seconds
                 ),
                 "semantic_scholar_max_retries": max(1, self.semantic_scholar_max_retries),
+                "serpapi_max_requests": max(0, self.serpapi_max_requests),
                 "thinking_profile": self.thinking_profile.model_copy(
                     update={
                         "model": self.thinking_profile.model or settings.openai_model,
                         "max_output_tokens": max(256, self.thinking_profile.max_output_tokens),
                         "timeout_seconds": max(1.0, self.thinking_profile.timeout_seconds),
+                        "min_interval_seconds": max(0.0, self.thinking_profile.min_interval_seconds),
                     }
                 ),
                 "light_profile": self.light_profile.model_copy(
                     update={
                         "max_output_tokens": max(256, self.light_profile.max_output_tokens),
                         "timeout_seconds": max(1.0, self.light_profile.timeout_seconds),
+                        "min_interval_seconds": max(0.0, self.light_profile.min_interval_seconds),
                     }
                 ),
             }

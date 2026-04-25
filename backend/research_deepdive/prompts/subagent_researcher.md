@@ -42,7 +42,7 @@ In live mode, you operate through a strict JSON action protocol. Return exactly
 one JSON object per turn:
 
 ```json
-{"action":"tool","tool_name":"<allowed tool>","arguments":{},"memory_update":"short markdown note"}
+{"action":"<allowed tool>","arguments":{},"memory_update":"short markdown note"}
 ```
 
 or:
@@ -52,6 +52,8 @@ or:
 ```
 
 Do not write prose outside the JSON object during the live action loop.
+Do not use a separate `tool_name` field; put the tool name directly in
+`action`.
 
 ## Required Handoff
 

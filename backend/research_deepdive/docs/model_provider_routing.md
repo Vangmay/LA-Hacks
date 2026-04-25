@@ -38,7 +38,7 @@ The live tool loop does not depend on provider-native tool tokens. The model is
 prompted to emit:
 
 ```json
-{"action":"tool","tool_name":"paper_bulk_search","arguments":{"query":"..."}}
+{"action":"paper_bulk_search","arguments":{"query":"..."}}
 ```
 
 or:

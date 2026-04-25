@@ -52,6 +52,7 @@ class DeepDiveOrchestrator:
             result_char_limit=self.config.tool_result_char_limit,
             semantic_scholar_min_interval_seconds=self.config.semantic_scholar_min_interval_seconds,
             semantic_scholar_max_retries=self.config.semantic_scholar_max_retries,
+            serpapi_max_requests=self.config.serpapi_max_requests,
         )
         self.live_runner = LiveAgentRunner(
             llm=self.llm,

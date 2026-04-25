@@ -14,7 +14,7 @@ import httpx
 
 from config import settings
 
-from .tools import PAPER_FIELDS, PAPER_FIELDS_WITH_EMBEDDING
+from .tools import PAPER_FIELDS, PAPER_FIELDS_WITH_EMBEDDING, SEARCH_PAPER_FIELDS
 from .workspace import WorkspaceManager
 
 
@@ -60,6 +60,18 @@ def prefix_fields(prefix: str, fields: str) -> str:
     return ",".join(f"{prefix}.{field}" for field in fields.split(","))
 
 
+def normalize_bulk_sort(sort_value: Any) -> str | None:
+    if not sort_value:
+        return None
+    sort_text = str(sort_value).strip()
+    if not sort_text or sort_text.lower() == "relevance":
+        return None
+    field = sort_text.split(":", 1)[0]
+    if field not in {"paperId", "publicationDate", "citationCount"}:
+        return None
+    return sort_text
+
+
 class ToolRuntime:
     def __init__(
         self,
@@ -69,11 +81,15 @@ class ToolRuntime:
         result_char_limit: int,
         semantic_scholar_min_interval_seconds: float = 1.2,
         semantic_scholar_max_retries: int = 4,
+        serpapi_max_requests: int = 50,
     ) -> None:
         self.workspace = workspace
         self.result_char_limit = result_char_limit
         self.semantic_scholar_min_interval_seconds = semantic_scholar_min_interval_seconds
         self.semantic_scholar_max_retries = semantic_scholar_max_retries
+        self.serpapi_max_requests = serpapi_max_requests
+        self._serpapi_requests_used = 0
+        self._serpapi_lock = asyncio.Lock()
         self._s2_lock = asyncio.Lock()
         self._last_s2_request_at = 0.0
         self.client = httpx.AsyncClient(timeout=http_timeout_seconds, follow_redirects=True)
@@ -91,10 +107,11 @@ class ToolRuntime:
             "batch_get_papers",
             "rank_candidates_by_specter2_similarity",
             "read_workspace_file",
+            "read_workspace_markdown",
             "write_workspace_markdown",
             "append_workspace_markdown",
         }
-        if settings.serpapi_api_key:
+        if self._serpapi_key():
             names.add("google_scholar_search")
         return names
 
@@ -114,6 +131,9 @@ class ToolRuntime:
         if settings.semantic_scholar_api_key:
             return {"x-api-key": settings.semantic_scholar_api_key}
         return {}
+
+    def _serpapi_key(self) -> str:
+        return settings.serpapi_api_key or settings.serp_api_key
 
     async def _s2_get(self, path: str, params: dict[str, Any]) -> dict[str, Any]:
         for attempt in range(1, self.semantic_scholar_max_retries + 1):
@@ -225,7 +245,12 @@ class ToolRuntime:
 
     async def _tool_paper_bulk_search(self, arguments: dict[str, Any], _: Path) -> dict[str, Any]:
         params = dict(arguments)
-        params.setdefault("fields", PAPER_FIELDS)
+        params["fields"] = SEARCH_PAPER_FIELDS
+        normalized_sort = normalize_bulk_sort(params.get("sort"))
+        if normalized_sort:
+            params["sort"] = normalized_sort
+        else:
+            params.pop("sort", None)
         params.setdefault("limit", 25)
         data = await self._s2_get("/paper/search/bulk", params)
         return {
@@ -290,11 +315,19 @@ class ToolRuntime:
         return {"ranked_candidates": ranked, "missing_embeddings": missing}
 
     async def _tool_google_scholar_search(self, arguments: dict[str, Any], _: Path) -> dict[str, Any]:
-        if not settings.serpapi_api_key:
+        serpapi_key = self._serpapi_key()
+        if not serpapi_key:
             raise RuntimeError("SERPAPI_API_KEY is required for google_scholar_search")
+        async with self._serpapi_lock:
+            if self._serpapi_requests_used >= self.serpapi_max_requests:
+                raise RuntimeError(
+                    f"SerpAPI request budget exhausted: "
+                    f"{self._serpapi_requests_used}/{self.serpapi_max_requests}"
+                )
+            self._serpapi_requests_used += 1
         params = dict(arguments)
         query = params.pop("query")
-        params.update({"engine": "google_scholar", "q": query, "api_key": settings.serpapi_api_key})
+        params.update({"engine": "google_scholar", "q": query, "api_key": serpapi_key})
         response = await self.client.get(SERPAPI_BASE, params={k: v for k, v in params.items() if v is not None and v != ""})
         response.raise_for_status()
         data = response.json()
@@ -312,6 +345,9 @@ class ToolRuntime:
             end_line=arguments.get("end_line"),
         )
         return {"content": content, "line_count": line_count}
+
+    async def _tool_read_workspace_markdown(self, arguments: dict[str, Any], workspace_path: Path) -> dict[str, Any]:
+        return await self._tool_read_workspace_file(arguments, workspace_path)
 
     async def _tool_write_workspace_markdown(self, arguments: dict[str, Any], workspace_path: Path) -> dict[str, Any]:
         path = self.workspace.write_owned_markdown(workspace_path, arguments["path"], arguments["content"])

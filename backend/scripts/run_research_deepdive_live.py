@@ -29,6 +29,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout-seconds", type=int, default=1800)
     parser.add_argument("--semantic-scholar-interval", type=float, default=1.2)
     parser.add_argument("--semantic-scholar-retries", type=int, default=4)
+    parser.add_argument("--serpapi-max-requests", type=int, default=50)
     return parser.parse_args()
 
 
@@ -60,6 +61,7 @@ async def main_async() -> None:
         stage_timeout_seconds=args.timeout_seconds,
         semantic_scholar_min_interval_seconds=args.semantic_scholar_interval,
         semantic_scholar_max_retries=args.semantic_scholar_retries,
+        serpapi_max_requests=args.serpapi_max_requests,
     )
     require_key(config.thinking_profile.api_key_env)
     require_key(config.light_profile.api_key_env)

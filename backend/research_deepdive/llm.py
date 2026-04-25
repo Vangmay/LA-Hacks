@@ -4,11 +4,13 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import random
 import re
+import time
 from typing import Any
 
 import httpx
-from openai import AsyncOpenAI
+from openai import APIConnectionError, APITimeoutError, AsyncOpenAI, RateLimitError
 
 from config import settings
 
@@ -53,6 +55,8 @@ class DeepDiveLLMProvider:
     def __init__(self, config: DeepDiveConfig) -> None:
         self.config = config
         self._clients: dict[str, AsyncOpenAI] = {}
+        self._request_locks: dict[str, asyncio.Lock] = {}
+        self._last_request_at: dict[str, float] = {}
 
     def profile_for(self, role: AgentModelRole) -> ModelProfile:
         if role in THINKING_ROLES:
@@ -98,10 +102,7 @@ class DeepDiveLLMProvider:
         if profile.reasoning_effort:
             kwargs["reasoning_effort"] = profile.reasoning_effort
 
-        response = await asyncio.wait_for(
-            self._client_for(profile).chat.completions.create(**kwargs),
-            timeout=profile.timeout_seconds,
-        )
+        response = await self._chat_completion(profile, kwargs)
         content = normalize_model_content(response.choices[0].message.content or "")
         try:
             return json.loads(content)
@@ -126,11 +127,53 @@ class DeepDiveLLMProvider:
         }
         if profile.reasoning_effort:
             kwargs["reasoning_effort"] = profile.reasoning_effort
-        response = await asyncio.wait_for(
-            self._client_for(profile).chat.completions.create(**kwargs),
-            timeout=profile.timeout_seconds,
-        )
+        response = await self._chat_completion(profile, kwargs)
         return strip_provider_thoughts(response.choices[0].message.content or "")
+
+    async def _chat_completion(self, profile: ModelProfile, kwargs: dict[str, Any]) -> Any:
+        for attempt in range(1, self.config.model_max_retries + 1):
+            await self._pace_profile(profile)
+            try:
+                return await asyncio.wait_for(
+                    self._client_for(profile).chat.completions.create(**kwargs),
+                    timeout=profile.timeout_seconds,
+                )
+            except (RateLimitError, APITimeoutError, APIConnectionError) as exc:
+                if attempt == self.config.model_max_retries:
+                    raise
+                await asyncio.sleep(self._retry_delay_seconds(exc, attempt))
+        raise RuntimeError("unreachable LLM retry state")
+
+    async def _pace_profile(self, profile: ModelProfile) -> None:
+        interval = profile.min_interval_seconds
+        if interval <= 0:
+            return
+        key = f"{profile.api_key_env}|{profile.base_url}|{profile.model}"
+        lock = self._request_locks.setdefault(key, asyncio.Lock())
+        async with lock:
+            elapsed = time.monotonic() - self._last_request_at.get(key, 0.0)
+            wait = interval - elapsed
+            if wait > 0:
+                await asyncio.sleep(wait)
+            self._last_request_at[key] = time.monotonic()
+
+    def _retry_delay_seconds(self, exc: Exception, attempt: int) -> float:
+        retry_after = getattr(getattr(exc, "response", None), "headers", {}).get("retry-after")
+        if retry_after:
+            try:
+                return min(float(retry_after), self.config.model_retry_max_delay_seconds)
+            except ValueError:
+                pass
+        match = re.search(
+            r"(?:retry in|try again in|retryDelay['\"]?:\s*['\"]?)(?:\s*)([0-9.]+)s",
+            str(exc),
+            flags=re.IGNORECASE,
+        )
+        if match:
+            return min(float(match.group(1)), self.config.model_retry_max_delay_seconds)
+        base = max(1.0, min(8.0, self.config.model_retry_max_delay_seconds))
+        jitter = random.uniform(0.0, 0.25 * base)
+        return min(self.config.model_retry_max_delay_seconds, base * (2 ** (attempt - 1)) + jitter)
 
     async def aclose(self) -> None:
         for client in self._clients.values():

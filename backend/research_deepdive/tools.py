@@ -11,6 +11,11 @@ PAPER_FIELDS = (
     "publicationTypes,citationCount,influentialCitationCount,referenceCount,"
     "fieldsOfStudy,s2FieldsOfStudy,tldr,openAccessPdf"
 )
+SEARCH_PAPER_FIELDS = (
+    "paperId,externalIds,url,title,abstract,year,publicationDate,authors,venue,"
+    "publicationTypes,citationCount,influentialCitationCount,referenceCount,"
+    "fieldsOfStudy,s2FieldsOfStudy,openAccessPdf"
+)
 PAPER_FIELDS_WITH_EMBEDDING = f"{PAPER_FIELDS},embedding.specter_v2"
 
 
@@ -269,16 +274,20 @@ def build_default_tool_registry() -> dict[str, ToolSpec]:
                     "sort": {"type": "string"},
                     "limit": {"type": "integer"},
                     "token": {"type": ["string", "null"]},
-                    "fields": {"type": "string"},
                 },
                 ["query"],
             ),
             output_schema=_paper_array_output("papers"),
-            input_example={"query": '"transformer" + "machine translation"', "year": "2017-", "sort": "citationCount:desc", "limit": 50, "fields": PAPER_FIELDS},
+            input_example={"query": '"transformer" + "machine translation"', "year": "2017-", "sort": "citationCount:desc", "limit": 50, "fields": SEARCH_PAPER_FIELDS},
             output_example={"papers": [{"paperId": "...", "title": "..."}], "next_token": "abc"},
             reads=["Semantic Scholar bulk search"],
             fallback_tools=["paper_relevance_search", "google_scholar_search"],
-            notes=["Use for recall. Query searches title/abstract words and supports phrases, required terms, exclusions, OR, and grouping."],
+            notes=[
+                "Use for recall. Query searches title/abstract words and supports phrases, required terms, exclusions, OR, and grouping.",
+                "`tldr` is not accepted by the bulk-search endpoint; use batch_get_papers after search if TLDR is needed.",
+                "Live runtime owns the endpoint-safe field list for this tool; do not pass a `fields` argument.",
+                "`sort` must be `paperId`, `publicationDate`, or `citationCount` with optional `:asc`/`:desc`; omit sort for relevance-like behavior.",
+            ],
         ),
         _tool(
             name="paper_relevance_search",
@@ -759,6 +768,16 @@ def build_default_tool_registry() -> dict[str, ToolSpec]:
             name="read_workspace_file",
             category="workspace",
             purpose="Read a markdown or JSON artifact from an allowed workspace path.",
+            input_schema=_schema({"path": {"type": "string"}, "start_line": {"type": "integer"}, "end_line": {"type": "integer"}}, ["path"]),
+            output_schema=_schema({"content": {"type": "string"}, "line_count": {"type": "integer"}}, ["content"]),
+            input_example={"path": "memory.md", "start_line": 1, "end_line": 120},
+            output_example={"content": "# Memory\\n...", "line_count": 45},
+            reads=["own workspace", "shared read-only run artifacts"],
+        ),
+        _tool(
+            name="read_workspace_markdown",
+            category="workspace",
+            purpose="Read a markdown artifact from an allowed workspace path. Use this for memory.md, queries.md, papers.md, findings.md, and handoff.md.",
             input_schema=_schema({"path": {"type": "string"}, "start_line": {"type": "integer"}, "end_line": {"type": "integer"}}, ["path"]),
             output_schema=_schema({"content": {"type": "string"}, "line_count": {"type": "integer"}}, ["content"]),
             input_example={"path": "memory.md", "start_line": 1, "end_line": 120},

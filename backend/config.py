@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     gemma_api_key: str = ""
     semantic_scholar_api_key: str = ""
     serpapi_api_key: str = ""
+    serp_api_key: str = ""
     openai_model: str = "gpt-4o"
     openai_base_url: str = ""
     backend_port: int = 8000
@@ -27,23 +28,28 @@ class Settings(BaseSettings):
     deepdive_default_search_limit: int = 25
     deepdive_http_timeout_seconds: float = 60.0
     deepdive_model_timeout_seconds: float = 180.0
+    deepdive_model_max_retries: int = 5
+    deepdive_model_retry_max_delay_seconds: float = 90.0
     deepdive_tool_result_char_limit: int = 12000
     deepdive_subagent_max_steps: int = 12
     deepdive_semantic_scholar_min_interval_seconds: float = 1.2
     deepdive_semantic_scholar_max_retries: int = 4
+    deepdive_serpapi_max_requests: int = 50
     deepdive_llm_action_protocol: str = "json_action"
     deepdive_thinking_provider: str = "openai"
     deepdive_thinking_model: str = ""
     deepdive_thinking_api_key_env: str = "OPENAI_API_KEY"
     deepdive_thinking_base_url: str = ""
     deepdive_thinking_reasoning_effort: str = ""
+    deepdive_thinking_min_interval_seconds: float = 0.0
     deepdive_light_provider: str = "gemini_openai"
     deepdive_light_model: str = "gemma-4-26b-a4b-it"
     deepdive_light_api_key_env: str = "GEMMA_API_KEY"
     deepdive_light_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
     deepdive_light_reasoning_effort: str = ""
+    deepdive_light_min_interval_seconds: float = 4.2
     deepdive_max_output_tokens_thinking: int = 4096
-    deepdive_max_output_tokens_light: int = 2048
+    deepdive_max_output_tokens_light: int = 4096
 
     model_config = SettingsConfigDict(env_file=(".env", "backend/.env"), extra="ignore")
 
