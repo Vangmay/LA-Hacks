@@ -461,8 +461,20 @@ class DeepDiveOrchestrator:
         section_title: str,
     ) -> tuple[list[ResearchTaste], str]:
         if isinstance(response, list):
-            raw_items = response
-            rationale = "Planner returned a top-level roster list."
+            if len(response) == 1 and isinstance(response[0], dict) and (
+                isinstance(response[0].get("tastes"), list)
+                or isinstance(response[0].get("subagents"), list)
+            ):
+                wrapper = response[0]
+                raw_items = wrapper.get("tastes") or wrapper.get("subagents") or []
+                rationale = str(
+                    wrapper.get("rationale")
+                    or wrapper.get("planner_rationale")
+                    or "Planner returned a single wrapper object inside a top-level list."
+                )
+            else:
+                raw_items = response
+                rationale = "Planner returned a top-level roster list."
         elif isinstance(response, dict):
             raw_items = response.get("tastes") or response.get("subagents") or []
             rationale = str(response.get("rationale") or response.get("planner_rationale") or "")

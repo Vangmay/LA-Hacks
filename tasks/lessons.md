@@ -98,6 +98,10 @@
   Dynamic roster planning may legitimately return a top-level JSON array, while
   subagent action loops require a JSON object and should reject non-object JSON
   locally as a recoverable action-protocol error.
+- Dynamic roster parsing should accept common wrapper variants from Gemma, such
+  as a top-level list containing one object with a nested `tastes` or
+  `subagents` array. Validate the resulting roster count/diversity after
+  unwrapping rather than falling back before the semantic parser sees it.
 - Novelty mode needs its own artifact and prompt spine. Treat `proposal_seeds.md`
   as the raw idea layer, force proposal collision checks, reject vague future
   work, and have investigators/critics/finalizer transform evidence into
