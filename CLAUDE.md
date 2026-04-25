@@ -22,19 +22,19 @@ The live DAG is the primary UI — nodes update in real time via SSE as agents r
 
 ## Stack
 
-| Layer | Technology |
-|---|---|
-| Backend | Python 3.11, FastAPI, Pydantic v2, uvicorn |
-| Async | asyncio, asyncio.gather, sse-starlette |
-| LLM | OpenAI API (gpt-4o) via `openai.AsyncOpenAI` |
-| PDF parsing | PyMuPDF (fitz) |
-| Symbolic verification | SymPy |
-| Numeric verification | SciPy, NumPy |
-| Embeddings | sentence-transformers (all-MiniLM-L6-v2) |
-| Vector store | ChromaDB |
-| Graph | NetworkX |
-| Frontend | React 18 + Vite, Tailwind CSS, React Flow, React Router v6 |
-| SSE client | Native browser EventSource API |
+| Layer                 | Technology                                                 |
+| --------------------- | ---------------------------------------------------------- |
+| Backend               | Python 3.11, FastAPI, Pydantic v2, uvicorn                 |
+| Async                 | asyncio, asyncio.gather, sse-starlette                     |
+| LLM                   | OpenAI API (gpt-4o) via `openai.AsyncOpenAI`               |
+| PDF parsing           | PyMuPDF (fitz)                                             |
+| Symbolic verification | SymPy                                                      |
+| Numeric verification  | SciPy, NumPy                                               |
+| Embeddings            | sentence-transformers (all-MiniLM-L6-v2)                   |
+| Vector store          | ChromaDB                                                   |
+| Graph                 | NetworkX                                                   |
+| Frontend              | React 18 + Vite, Tailwind CSS, React Flow, React Router v6 |
+| SSE client            | Native browser EventSource API                             |
 
 ---
 
@@ -105,6 +105,7 @@ async def run(self, context: AgentContext) -> AgentResult:
 `AgentResult` fields: `agent_id`, `claim_id`, `status`, `output`, `confidence`, `error`.
 
 **Rules:**
+
 - Never raise exceptions inside `run()`. Catch all errors, return `status="error"` with the error message.
 - Never return `status="error"` AND raise. Pick one.
 - `output` must always be a dict that matches the agent's documented output shape, even on error (use empty/default values).
@@ -170,6 +171,30 @@ results = await asyncio.gather(
 # Filter out exceptions and handle them
 ```
 
+# Use PydanticAI for structured outputs inside agent run() methods
+
+from pydantic_ai import Agent as PydanticAgent
+
+# Define at class level, not inside run() — avoid re-instantiating on every call
+
+class AttackerAgent(BaseAgent):
+agent_id = "attacker"
+\_llm = PydanticAgent(
+'openai:gpt-4o',
+result_type=list[Challenge],
+system_prompt="You are a hostile peer reviewer..."
+)
+
+    async def run(self, context: AgentContext) -> AgentResult:
+        result = await self._llm.run(context.claim.text)
+        return AgentResult(
+            agent_id=self.agent_id,
+            claim_id=context.claim.claim_id,
+            status="success",
+            output={"challenges": [c.model_dump() for c in result.data]},
+            confidence=0.8,
+        )
+
 ### SSE Events
 
 Emit a `DAGEvent` via the event bus at every meaningful state transition. Do not batch events — emit immediately.
@@ -217,10 +242,10 @@ async def get_report(job_id: str):
 **Never** hardcode API URLs in components. Always import from `src/api/client.js`:
 
 ```js
-import { api } from '../api/client'
+import { api } from "../api/client";
 
-const dag = await api.review.dag(jobId)
-const stream = api.review.stream(jobId)   // returns EventSource
+const dag = await api.review.dag(jobId);
+const stream = api.review.stream(jobId); // returns EventSource
 ```
 
 ---
@@ -247,6 +272,7 @@ The `DAG` class in `core/dag.py` uses this edge direction convention:
 > An edge from `A → B` means **A depends on B** (B must be established before A).
 
 This means:
+
 - `dag.get_roots()` returns claims with **no dependencies** — process these first
 - `dag.topological_sort()` returns claims in the order they should be processed
 - `dag.get_descendants(node_id)` returns all claims that would be affected if `node_id` is refuted
@@ -311,13 +337,13 @@ Store at `backend/tests/fixtures/test_paper.pdf` (gitignored). This paper has cl
 
 Build in this order. Do not move to the next phase until the current one passes its checkpoint.
 
-| Phase | Owner | Checkpoint |
-|---|---|---|
-| 0 — Scaffold | Person A | All 6 verify checks pass |
-| 1 — Parser + DAG | Person A | `python scripts/test_pipeline.py test_paper.pdf` prints claims + DAG |
-| 2 — Review agents | Person B | `POST /review` returns full ReviewReport JSON for test paper |
-| 3 — Live DAG UI | Person C | Upload PDF, watch nodes turn green/red in browser in real time |
-| 7 (partial) — PoC backend | Person D | `GET /poc/{id}/scaffold.zip` downloads a real runnable scaffold |
+| Phase                     | Owner    | Checkpoint                                                           |
+| ------------------------- | -------- | -------------------------------------------------------------------- |
+| 0 — Scaffold              | Person A | All 6 verify checks pass                                             |
+| 1 — Parser + DAG          | Person A | `python scripts/test_pipeline.py test_paper.pdf` prints claims + DAG |
+| 2 — Review agents         | Person B | `POST /review` returns full ReviewReport JSON for test paper         |
+| 3 — Live DAG UI           | Person C | Upload PDF, watch nodes turn green/red in browser in real time       |
+| 7 (partial) — PoC backend | Person D | `GET /poc/{id}/scaffold.zip` downloads a real runnable scaffold      |
 
 Phases 4 (Reader), 5 (Research), 6 (polish) are post-hackathon unless ahead of schedule.
 
