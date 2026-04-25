@@ -13,22 +13,79 @@ from .tool_runtime import ToolRuntime
 from .workspace import WorkspaceManager
 
 
-ACTION_INSTRUCTIONS = """Return exactly one JSON object.
+WORKSPACE_TOOLS = {
+    "read_workspace_file",
+    "read_workspace_markdown",
+    "write_workspace_markdown",
+    "append_workspace_markdown",
+    "patch_workspace_file",
+}
+
+TOP_LEVEL_ARGUMENT_KEYS = {
+    "content",
+    "end_line",
+    "fields",
+    "heading",
+    "ids",
+    "limit",
+    "offset",
+    "paper_id",
+    "path",
+    "query",
+    "replacement",
+    "sort",
+    "start_line",
+    "year",
+}
+
+
+def action_instructions(workspace_write_char_budget: int) -> str:
+    return f"""Return exactly one JSON object.
 
 Allowed forms:
 
-{"action":"<allowed tool>","arguments":{...},"memory_update":"short markdown note"}
-{"action":"final","summary":"short summary","handoff_markdown":"# Hand-Off\\n..."}
+{{"action":"<allowed tool>","arguments":{{...}},"memory_update":"short markdown note"}}
+{{"action":"final","summary":"short summary","handoff_markdown":"# Hand-Off\\n..."}}
 
 Rules:
 - The `action` field must be exactly one allowed tool name or exactly `"final"`.
 - Do not use a separate `tool_name` field.
-- Valid: `{"action":"read_workspace_markdown","arguments":{"path":"memory.md"}}`.
-- Invalid: `{"action":"tool","tool_name":"read_workspace_markdown","arguments":{"path":"memory.md"}}`.
+- Valid: `{{"action":"read_workspace_markdown","arguments":{{"path":"memory.md"}}}}`.
+- Valid search:
+  `{{"action":"paper_bulk_search","arguments":{{"query":"attention ablation","limit":20}}}}`.
+- Valid workspace append:
+  `{{"action":"append_workspace_markdown","arguments":{{"path":"findings.md","heading":"Closest prior work","content":"..."}}}}`.
+- Invalid: `{{"action":"tool","tool_name":"read_workspace_markdown","arguments":{{"path":"memory.md"}}}}`.
+- Invalid search:
+  `{{"action":"paper_bulk_search","query":"attention ablation","limit":20}}`.
+- Invalid workspace append:
+  `{{"action":"append_workspace_markdown","arguments":{{"heading":"Closest prior work","content":"..."}}}}`.
 - Use only allowed tools.
+- Every tool parameter must be inside the `arguments` object. Never put `query`,
+  `paper_id`, `limit`, `fields`, `year`, `sort`, `path`, `heading`, or
+  `content` at the top level.
+- Every workspace read/write/append action must include `arguments.path`.
+- Every workspace write/append action must include `arguments.content`.
 - Prefer workspace append/write tools after research tools so durable memory stays current.
+- Workspace read/write/append tools have a separate high budget and do not
+  spend the research/API budget.
+- Search/API tools spend the research budget. When that budget is exhausted,
+  you must switch into workspace-only finalization: update `queries.md`,
+  `papers.md`, `findings.md`, `memory.md`, and then return `final`.
+- For `papers.md`, write at most one paper record per action.
+- For `findings.md`, write at most one finding or proposal seed per action.
+- Do not place full abstracts in workspace write/append action payloads; store
+  paper ID, title, year, source, and a compact relevance note.
+- Avoid raw double quote characters inside string values; use apostrophes in
+  markdown notes unless you correctly JSON-escape the quotes.
 - Keep each workspace write concise enough to fit in one valid JSON object.
-- For long notes, append a compact summary first and continue in a later action.
+- Keep `write_workspace_markdown` and `append_workspace_markdown` `content`
+  payloads under `{workspace_write_char_budget}` characters per action.
+- For long notes, split them across multiple append actions instead of one large
+  JSON payload.
+- The markdown files should be detailed overall. The per-action budget is only
+  a JSON safety boundary; continue appending additional chunks until the
+  appropriate files contain enough evidence, papers, query details, and findings.
 - Before final, ensure handoff_markdown contains searched queries, important papers, findings, uncertainty, and next steps.
 - Do not include prose outside the JSON object.
 """
@@ -42,11 +99,15 @@ class LiveAgentRunner:
         tools: ToolRuntime,
         workspace: WorkspaceManager,
         max_steps: int,
+        workspace_write_char_budget: int,
+        max_workspace_tool_calls: int,
     ) -> None:
         self.llm = llm
         self.tools = tools
         self.workspace = workspace
         self.max_steps = max_steps
+        self.workspace_write_char_budget = workspace_write_char_budget
+        self.max_workspace_tool_calls = max_workspace_tool_calls
 
     async def run_subagent(self, plan: SubagentPlan, stage: ResearchStage) -> AgentRunResult:
         messages: list[dict[str, str]] = [
@@ -54,18 +115,24 @@ class LiveAgentRunner:
             {
                 "role": "user",
                 "content": (
-                    ACTION_INSTRUCTIONS
+                    action_instructions(self.workspace_write_char_budget)
                     + "\nAllowed executable tools:\n"
                     + "\n".join(f"- {name}" for name in sorted(plan.allowed_tools))
                     + "\n\nStart by reading memory.md, then execute the strongest research loop for your taste."
+                    + "\n\nCurrent artifact status:\n"
+                    + self._artifact_status(plan.workspace_path)
+                    + "\n\n"
+                    + self._documentation_repair_directive(plan.workspace_path)
                 ),
             },
         ]
         trace_path = plan.workspace_path / "tool_calls.jsonl"
-        tool_calls_used = 0
+        research_tool_calls_used = 0
+        workspace_tool_calls_used = 0
         llm_steps = 0
         exit_reason = AgentExitReason.MAX_TOOL_CALLS_REACHED
         summary = ""
+        research_budget_exhausted = False
 
         for _ in range(self.max_steps):
             llm_steps += 1
@@ -74,6 +141,20 @@ class LiveAgentRunner:
 
             action_type = action.get("action")
             if action_type == "final":
+                repair_target = self._documentation_repair_target(plan.workspace_path)
+                if repair_target:
+                    messages.append({"role": "assistant", "content": json.dumps(action)})
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": (
+                                f"`{repair_target}` is still empty, so final handoff is premature. "
+                                "Return exactly one JSON object now using `append_workspace_markdown` "
+                                f"with `arguments.path` set to `{repair_target}` and detailed content."
+                            ),
+                        }
+                    )
+                    continue
                 handoff = action.get("handoff_markdown", "")
                 if not handoff:
                     raise RuntimeError(f"{plan.subagent_id} final action omitted handoff_markdown")
@@ -82,19 +163,62 @@ class LiveAgentRunner:
                 exit_reason = AgentExitReason.COMPLETED
                 break
 
-            if action_type == "tool":
-                raise RuntimeError(f"{plan.subagent_id} used obsolete tool_name protocol: {action}")
-            if action_type not in plan.allowed_tools:
-                raise RuntimeError(f"{plan.subagent_id} returned invalid action: {action}")
+            validation_error = self._action_validation_error(action, plan)
+            if validation_error:
+                self._write_rejected_action_trace(
+                    trace_path,
+                    action=action,
+                    reason=validation_error,
+                    llm_steps=llm_steps,
+                    research_tool_calls_used=research_tool_calls_used,
+                    workspace_tool_calls_used=workspace_tool_calls_used,
+                )
+                messages.append({"role": "assistant", "content": json.dumps(action)})
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            "Rejected action without spending any tool budget: "
+                            f"{validation_error}\n\n"
+                            "Return exactly one corrected JSON object. Keep every tool parameter "
+                            "inside `arguments`; workspace actions need `arguments.path`, and "
+                            "workspace write/append actions need `arguments.content`."
+                        ),
+                    }
+                )
+                continue
 
             tool_name = str(action_type)
-            if tool_calls_used >= plan.max_tool_calls:
-                exit_reason = AgentExitReason.MAX_TOOL_CALLS_REACHED
-                break
 
             arguments = action.get("arguments")
-            if not isinstance(arguments, dict):
-                raise RuntimeError(f"{plan.subagent_id} provided invalid arguments for {tool_name}: {arguments}")
+            assert isinstance(arguments, dict)
+
+            is_workspace_tool = tool_name in WORKSPACE_TOOLS
+            if is_workspace_tool:
+                if workspace_tool_calls_used >= self.max_workspace_tool_calls:
+                    raise RuntimeError(
+                        f"{plan.subagent_id} exceeded workspace tool budget "
+                        f"({self.max_workspace_tool_calls})"
+                    )
+            else:
+                if research_budget_exhausted or research_tool_calls_used >= plan.max_tool_calls:
+                    research_budget_exhausted = True
+                    self._write_rejected_action_trace(
+                        trace_path,
+                        action=action,
+                        reason="research/API tool budget is exhausted; only workspace tools and final are allowed",
+                        llm_steps=llm_steps,
+                        research_tool_calls_used=research_tool_calls_used,
+                        workspace_tool_calls_used=workspace_tool_calls_used,
+                    )
+                    messages.append({"role": "assistant", "content": json.dumps(action)})
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": self._research_budget_exhausted_message(plan.workspace_path),
+                        }
+                    )
+                    continue
 
             try:
                 result = await self.tools.execute(tool_name, arguments, plan.workspace_path)
@@ -106,17 +230,23 @@ class LiveAgentRunner:
                         "tool_name": tool_name,
                         "arguments": arguments,
                         "error": str(exc),
-                        "tool_calls_used": tool_calls_used,
+                        "research_tool_calls_used": research_tool_calls_used,
+                        "workspace_tool_calls_used": workspace_tool_calls_used,
                     },
                 )
                 raise
-            tool_calls_used += 1
+            if is_workspace_tool:
+                workspace_tool_calls_used += 1
+            else:
+                research_tool_calls_used += 1
             trace_entry = {
                 "type": "tool_result",
                 "tool_name": tool_name,
                 "arguments": arguments,
                 "result": result,
-                "tool_calls_used": tool_calls_used,
+                "tool_calls_used": research_tool_calls_used + workspace_tool_calls_used,
+                "research_tool_calls_used": research_tool_calls_used,
+                "workspace_tool_calls_used": workspace_tool_calls_used,
             }
             self._write_trace(trace_path, trace_entry)
 
@@ -130,11 +260,34 @@ class LiveAgentRunner:
                 )
 
             messages.append({"role": "assistant", "content": json.dumps(action)})
-            messages.append({"role": "user", "content": "Tool result:\n" + json.dumps(result, default=str)})
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "Tool result:\n"
+                        + json.dumps(result, default=str)
+                        + "\n\nCurrent artifact status:\n"
+                        + self._artifact_status(plan.workspace_path)
+                        + "\n\n"
+                        + self._documentation_repair_directive(plan.workspace_path)
+                        + (
+                            "\n\n" + self._research_budget_exhausted_message(plan.workspace_path)
+                            if research_budget_exhausted
+                            else ""
+                        )
+                    ),
+                }
+            )
 
-            if tool_calls_used >= plan.max_tool_calls:
+            if not is_workspace_tool and research_tool_calls_used >= plan.max_tool_calls:
                 exit_reason = AgentExitReason.MAX_TOOL_CALLS_REACHED
-                break
+                research_budget_exhausted = True
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": self._research_budget_exhausted_message(plan.workspace_path),
+                    }
+                )
 
         if not (plan.workspace_path / "handoff.md").exists():
             handoff = await self._force_handoff(plan, messages, exit_reason)
@@ -146,14 +299,23 @@ class LiveAgentRunner:
             agent_id=plan.subagent_id,
             stage=stage,
             exit_reason=exit_reason,
-            tool_calls_used=tool_calls_used,
+            tool_calls_used=research_tool_calls_used,
             workspace_path=plan.workspace_path,
-            artifacts=[plan.workspace_path / "handoff.md", trace_path],
+            artifacts=[
+                plan.workspace_path / "handoff.md",
+                plan.workspace_path / "findings.md",
+                plan.workspace_path / "papers.md",
+                plan.workspace_path / "queries.md",
+                plan.workspace_path / "memory.md",
+                trace_path,
+            ],
             summary=summary or f"{plan.subagent_id} completed live research loop.",
             model_provider=profile.provider,
             model_name=profile.model,
             llm_steps_used=llm_steps,
             tool_trace_path=trace_path,
+            research_tool_calls_used=research_tool_calls_used,
+            workspace_tool_calls_used=workspace_tool_calls_used,
         )
 
     async def _force_handoff(
@@ -187,3 +349,126 @@ class LiveAgentRunner:
         entry = {"ts": datetime.now(timezone.utc).isoformat(), **entry}
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(entry, default=str) + "\n")
+
+    def _write_rejected_action_trace(
+        self,
+        path: Path,
+        *,
+        action: dict[str, Any],
+        reason: str,
+        llm_steps: int,
+        research_tool_calls_used: int,
+        workspace_tool_calls_used: int,
+    ) -> None:
+        self._write_trace(
+            path,
+            {
+                "type": "rejected_action",
+                "step": llm_steps,
+                "action": action,
+                "reason": reason,
+                "research_tool_calls_used": research_tool_calls_used,
+                "workspace_tool_calls_used": workspace_tool_calls_used,
+            },
+        )
+
+    def _action_validation_error(self, action: dict[str, Any], plan: SubagentPlan) -> str:
+        action_type = action.get("action")
+        if action_type == "tool":
+            return "obsolete `action=tool` protocol is not supported; put the tool name directly in `action`"
+        if not isinstance(action_type, str):
+            return "`action` must be a string tool name or `final`"
+        if action_type not in plan.allowed_tools:
+            return f"`{action_type}` is not an allowed executable tool for this agent"
+        arguments = action.get("arguments")
+        if not isinstance(arguments, dict):
+            misplaced = sorted(TOP_LEVEL_ARGUMENT_KEYS.intersection(action))
+            if misplaced:
+                return (
+                    "tool parameters appeared at the top level instead of inside `arguments`: "
+                    + ", ".join(misplaced)
+                )
+            return "`arguments` must be an object"
+        misplaced = sorted(TOP_LEVEL_ARGUMENT_KEYS.intersection(action))
+        if misplaced:
+            return (
+                "tool parameters appeared at the top level instead of inside `arguments`: "
+                + ", ".join(misplaced)
+            )
+        if action_type in WORKSPACE_TOOLS:
+            if not arguments.get("path"):
+                return f"`{action_type}` requires `arguments.path`"
+            if action_type in {"write_workspace_markdown", "append_workspace_markdown"}:
+                content = arguments.get("content")
+                if not isinstance(content, str) or not content.strip():
+                    return f"`{action_type}` requires non-empty `arguments.content`"
+        return ""
+
+    def _artifact_status(self, workspace_path: Path) -> str:
+        rows = []
+        for relative_path in ("memory.md", "queries.md", "papers.md", "findings.md", "handoff.md"):
+            path = workspace_path / relative_path
+            if not path.exists():
+                rows.append(f"- `{relative_path}`: missing")
+                continue
+            text = path.read_text(encoding="utf-8")
+            meaningful = _meaningful_markdown_chars(text)
+            state = "empty" if meaningful == 0 else "has content"
+            rows.append(f"- `{relative_path}`: {state}; {meaningful} meaningful chars")
+        return "\n".join(rows)
+
+    def _documentation_repair_directive(self, workspace_path: Path) -> str:
+        target = self._documentation_repair_target(workspace_path)
+        if not target:
+            return (
+                "Documentation status: required markdown files have started accumulating content. "
+                "Keep enriching them with detailed, chunked notes as research progresses."
+            )
+        return (
+            "Documentation repair needed before more broad searching: "
+            f"`{target}` is still empty. The next action must append a detailed, "
+            "chunked note to that file using `append_workspace_markdown`. Do not run "
+            "another search until this file has substantive content."
+        )
+
+    def _documentation_repair_target(self, workspace_path: Path) -> str:
+        for relative_path in ("queries.md", "papers.md", "findings.md"):
+            path = workspace_path / relative_path
+            text = path.read_text(encoding="utf-8") if path.exists() else ""
+            if _meaningful_markdown_chars(text) == 0:
+                return relative_path
+        return ""
+
+    def _research_budget_exhausted_message(self, workspace_path: Path) -> str:
+        return (
+            "Research/API tool budget is exhausted. Search/API tools are now forbidden. "
+            "You still have a separate large workspace-tool budget. Use only workspace "
+            "tools to make the markdown artifacts detailed: update `queries.md`, "
+            "`papers.md`, `findings.md`, and `memory.md`, then return `final` with "
+            "a handoff. Current artifact status:\n"
+            + self._artifact_status(workspace_path)
+            + "\n\n"
+            + self._documentation_repair_directive(workspace_path)
+        )
+
+
+def _meaningful_markdown_chars(text: str) -> int:
+    meaningful_lines = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        meaningful_lines.append(stripped)
+    return len("\n".join(meaningful_lines))
+
+
+def _action_updates_markdown(action: dict[str, Any], relative_path: str) -> bool:
+    if action.get("action") not in {"append_workspace_markdown", "write_workspace_markdown"}:
+        return False
+    arguments = action.get("arguments")
+    if not isinstance(arguments, dict):
+        return False
+    if arguments.get("path") != relative_path:
+        return False
+    content = arguments.get("content")
+    return isinstance(content, str) and bool(content.strip())

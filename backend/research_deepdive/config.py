@@ -88,6 +88,12 @@ class DeepDiveConfig(BaseModel):
     tool_result_char_limit: int = Field(
         default_factory=lambda: settings.deepdive_tool_result_char_limit
     )
+    workspace_write_char_budget: int = Field(
+        default_factory=lambda: settings.deepdive_workspace_write_char_budget
+    )
+    subagent_max_workspace_tool_calls: int = Field(
+        default_factory=lambda: settings.deepdive_subagent_max_workspace_tool_calls
+    )
     subagent_max_steps: int = Field(
         default_factory=lambda: settings.deepdive_subagent_max_steps
     )
@@ -154,6 +160,10 @@ class DeepDiveConfig(BaseModel):
                 "model_max_retries": max(1, self.model_max_retries),
                 "model_retry_max_delay_seconds": max(1.0, self.model_retry_max_delay_seconds),
                 "tool_result_char_limit": max(1000, self.tool_result_char_limit),
+                "workspace_write_char_budget": max(1000, self.workspace_write_char_budget),
+                "subagent_max_workspace_tool_calls": max(
+                    1, self.subagent_max_workspace_tool_calls
+                ),
                 "subagent_max_steps": max(1, self.subagent_max_steps),
                 "semantic_scholar_min_interval_seconds": max(
                     0.0, self.semantic_scholar_min_interval_seconds

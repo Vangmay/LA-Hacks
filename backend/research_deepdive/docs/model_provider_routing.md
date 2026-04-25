@@ -24,27 +24,27 @@ Light profile:
 
 ## Default Deep-Dive Model
 
-The default deep-dive provider is Google Gemini through the OpenAI-compatible
-Gemini endpoint:
+The default deep-dive provider is hosted Gemma through Google's
+OpenAI-compatible endpoint:
 
-- thinking profile model: `gemini-3.1-pro-preview`
+- thinking profile model: `gemma-4-26b-a4b-it`
 - thinking profile reasoning effort: `high`
-- light/search profile model: `gemini-3.1-pro-preview`
-- light/search profile reasoning effort: `medium`
-- API key: `GEMINI_API_KEY`
+- light/search profile model: `gemma-4-26b-a4b-it`
+- light/search profile reasoning effort: `high`
+- API key: `GEMMA_API_KEY`
 - base URL: `https://generativelanguage.googleapis.com/v1beta/openai/`
 
 This keeps Director, Investigator, Critique, Revision, and Finalization on a
-high-reasoning model while search subagents and helper roles use the same model
-with medium reasoning for tool-heavy work.
+high-reasoning model while search subagents and helper roles use the same
+thinking-enabled model for tool-heavy work.
 
 ## OpenAI-Compatible Providers
 
 Google documents an OpenAI-compatible Gemini API endpoint. The key settings are:
 
-- API key: `GEMINI_API_KEY`
+- API key: `GEMMA_API_KEY` or another configured Google AI Studio key env var
 - base URL: `https://generativelanguage.googleapis.com/v1beta/openai/`
-- model: a Gemini model enabled for the key
+- model: a Gemini/Gemma model enabled for the key
 
 The deep-dive code uses the ordinary `openai.AsyncOpenAI` chat-completions
 client with a configured `base_url`, so OpenAI and Google-compatible models use
@@ -65,6 +65,18 @@ or:
 
 The orchestrator validates the tool name, runs the Python implementation, logs
 the call, and appends durable markdown memory.
+
+All tool parameters must remain inside `arguments`. Provider models sometimes
+drift toward top-level `query` or `limit` keys after long tool contexts, so the
+runtime repeats valid and invalid action examples in the live loop.
+
+Workspace write actions are intentionally bounded by
+`DEEPDIVE_WORKSPACE_WRITE_CHAR_BUDGET`. Long notes should be split across
+multiple append actions so the model returns one complete JSON object instead
+of a response that is cut off mid-payload. Paper notes should be compact: one
+paper per append action, with IDs/titles/years/source/relevance notes rather
+than pasted abstracts. This is not a cap on the final artifact detail; agents
+should keep appending chunks until the markdown files are substantively filled.
 
 ## Official References
 

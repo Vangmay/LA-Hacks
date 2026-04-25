@@ -35,6 +35,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--semantic-scholar-interval", type=float, default=1.2)
     parser.add_argument("--semantic-scholar-retries", type=int, default=4)
     parser.add_argument("--serpapi-max-requests", type=int, default=50)
+    parser.add_argument("--tool-result-char-limit", type=int, default=settings.deepdive_tool_result_char_limit)
+    parser.add_argument(
+        "--workspace-write-char-budget",
+        type=int,
+        default=settings.deepdive_workspace_write_char_budget,
+    )
     parser.add_argument("--thinking-provider", default=settings.deepdive_thinking_provider)
     parser.add_argument("--thinking-model", default=settings.deepdive_thinking_model)
     parser.add_argument("--thinking-api-key-env", default=settings.deepdive_thinking_api_key_env)
@@ -48,6 +54,11 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=settings.deepdive_thinking_min_interval_seconds,
     )
+    parser.add_argument(
+        "--thinking-output-tokens",
+        type=int,
+        default=settings.deepdive_max_output_tokens_thinking,
+    )
     parser.add_argument("--light-provider", default=settings.deepdive_light_provider)
     parser.add_argument("--light-model", default=settings.deepdive_light_model)
     parser.add_argument("--light-api-key-env", default=settings.deepdive_light_api_key_env)
@@ -57,6 +68,11 @@ def parse_args() -> argparse.Namespace:
         "--light-min-interval",
         type=float,
         default=settings.deepdive_light_min_interval_seconds,
+    )
+    parser.add_argument(
+        "--light-output-tokens",
+        type=int,
+        default=settings.deepdive_max_output_tokens_light,
     )
     parser.add_argument("--report-detail-level", default=settings.deepdive_report_detail_level)
     parser.add_argument(
@@ -107,6 +123,7 @@ async def main_async() -> None:
             "api_key_env": args.thinking_api_key_env,
             "base_url": args.thinking_base_url,
             "reasoning_effort": args.thinking_reasoning_effort,
+            "max_output_tokens": args.thinking_output_tokens,
             "min_interval_seconds": args.thinking_min_interval,
         }
     )
@@ -117,6 +134,7 @@ async def main_async() -> None:
             "api_key_env": args.light_api_key_env,
             "base_url": args.light_base_url,
             "reasoning_effort": args.light_reasoning_effort,
+            "max_output_tokens": args.light_output_tokens,
             "min_interval_seconds": args.light_min_interval,
         }
     )
@@ -132,6 +150,8 @@ async def main_async() -> None:
         semantic_scholar_min_interval_seconds=args.semantic_scholar_interval,
         semantic_scholar_max_retries=args.semantic_scholar_retries,
         serpapi_max_requests=args.serpapi_max_requests,
+        tool_result_char_limit=args.tool_result_char_limit,
+        workspace_write_char_budget=args.workspace_write_char_budget,
         report_detail_level=args.report_detail_level,
         final_report_min_spinoff_proposals=args.min_spinoff_proposals,
         final_report_min_evidence_items_per_proposal=args.min_evidence_items_per_proposal,

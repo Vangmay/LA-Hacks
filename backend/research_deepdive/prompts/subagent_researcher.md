@@ -59,6 +59,34 @@ or:
 Do not write prose outside the JSON object during the live action loop.
 Do not use a separate `tool_name` field; put the tool name directly in
 `action`.
+Every tool parameter must be inside the `arguments` object. For example:
+
+```json
+{"action":"paper_bulk_search","arguments":{"query":"attention ablation","limit":20}}
+```
+
+Do not put `query`, `paper_id`, `limit`, `fields`, `year`, `sort`, `path`,
+`heading`, or `content` at the top level.
+Workspace tools require explicit file paths. For example:
+
+```json
+{"action":"append_workspace_markdown","arguments":{"path":"findings.md","heading":"Closest prior work","content":"..."}}
+```
+
+Never call a workspace read/write/append tool without `arguments.path`, and
+never call a workspace write/append tool without `arguments.content`.
+For `papers.md`, append at most one paper record per action. Do not write full
+abstracts into workspace action payloads; use paper ID, title, year, source,
+and a compact relevance note.
+For `findings.md`, append at most one finding or proposal seed per action.
+Avoid raw double quote characters inside JSON string values; use apostrophes in
+markdown notes unless you correctly JSON-escape the quotes.
+After each tool result, the runtime will show current artifact status. Treat
+empty `queries.md`, `papers.md`, or `findings.md` as a documentation failure to
+repair in the next action.
+The files should be detailed overall. Do not compress away evidence just because
+one JSON action is bounded; write multiple append actions until each file has
+substantive query logs, paper records, and findings appropriate to its purpose.
 
 ## Required Handoff
 

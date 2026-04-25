@@ -101,6 +101,8 @@ class AgentRunResult(BaseModel):
     stage: ResearchStage
     exit_reason: AgentExitReason
     tool_calls_used: int
+    research_tool_calls_used: int = 0
+    workspace_tool_calls_used: int = 0
     workspace_path: Path
     artifacts: list[Path] = Field(default_factory=list)
     summary: str = ""

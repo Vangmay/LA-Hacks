@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
 import tempfile
 from pathlib import Path
@@ -21,13 +22,174 @@ from research_deepdive import (  # noqa: E402
     build_default_tool_registry,
     generate_research_tastes,
 )
-from research_deepdive.models import ResearchStage  # noqa: E402
+from research_deepdive.agent_runner import LiveAgentRunner, action_instructions  # noqa: E402
 from research_deepdive.llm import normalize_model_content  # noqa: E402
+from research_deepdive.models import ResearchStage, ResearchTaste, SubagentPlan  # noqa: E402
+from research_deepdive.workspace import WorkspaceManager  # noqa: E402
 
 
 def _assert(condition: bool, message: str) -> None:
     if not condition:
         raise AssertionError(message)
+
+
+class FakeActionLLM:
+    def __init__(self, actions: list[dict]) -> None:
+        self.actions = list(actions)
+        self.messages: list[list[dict[str, str]]] = []
+
+    async def chat_json(self, *, role: AgentModelRole, messages: list[dict[str, str]], require_json: bool = True) -> dict:
+        self.messages.append(messages)
+        if not self.actions:
+            raise AssertionError("fake LLM action queue exhausted")
+        return self.actions.pop(0)
+
+    async def chat_markdown(self, *, role: AgentModelRole, messages: list[dict[str, str]]) -> str:
+        self.messages.append(messages)
+        return "# Forced Hand-Off\n\nFake forced handoff."
+
+    def profile_for(self, role: AgentModelRole) -> ModelProfile:
+        return ModelProfile(provider="fake", model="fake-model", api_key_env="FAKE_API_KEY")
+
+
+class FakeToolRuntime:
+    def __init__(self, workspace: WorkspaceManager) -> None:
+        self.workspace = workspace
+        self.calls: list[tuple[str, dict]] = []
+
+    async def execute(self, tool_name: str, arguments: dict, workspace_path: Path) -> dict:
+        self.calls.append((tool_name, dict(arguments)))
+        if tool_name == "read_workspace_markdown":
+            content, line_count = self.workspace.read_owned_text(
+                workspace_path,
+                arguments["path"],
+                start_line=arguments.get("start_line", 1),
+                end_line=arguments.get("end_line"),
+            )
+            return {"content": content, "line_count": line_count}
+        if tool_name == "append_workspace_markdown":
+            path = self.workspace.append_owned_markdown(
+                workspace_path,
+                arguments["path"],
+                arguments["content"],
+                heading=arguments.get("heading", ""),
+            )
+            return {"path": path.name}
+        if tool_name == "write_workspace_markdown":
+            path = self.workspace.write_owned_markdown(
+                workspace_path,
+                arguments["path"],
+                arguments["content"],
+            )
+            return {"path": path.name}
+        if tool_name == "paper_bulk_search":
+            return {
+                "papers": [{"paperId": "TEST1", "title": "Test Paper", "year": 2020}],
+                "total": 1,
+                "warnings": [],
+            }
+        raise AssertionError(f"unexpected fake tool call: {tool_name}")
+
+
+async def _exercise_live_runner_budget_contract(root: Path) -> None:
+    workspace = WorkspaceManager(root)
+    subagent_path = root / "run" / "investigators" / "investigator_01" / "subagents" / "subagent_01"
+    taste = ResearchTaste(
+        taste_id="test_taste",
+        label="Test Taste",
+        worldview="Probe exact runtime accounting.",
+        search_biases=["budget edge cases"],
+        evidence_preferences=["trace evidence"],
+        failure_modes_to_watch=["silent budget spending"],
+        required_counterbalance="strict validation",
+    )
+    plan = SubagentPlan(
+        subagent_id="subagent_01",
+        investigator_id="investigator_01",
+        section_id="section_01",
+        section_title="Runtime",
+        taste=taste,
+        workspace_path=subagent_path,
+        system_prompt="You are a test subagent.",
+        allowed_tools=["append_workspace_markdown", "paper_bulk_search", "read_workspace_markdown"],
+        max_tool_calls=1,
+        model_role=AgentModelRole.SEARCH_SUBAGENT,
+    )
+    workspace.initialize_subagent(plan)
+    fake_tools = FakeToolRuntime(workspace)
+    actions = [
+        {"action": "read_workspace_markdown", "arguments": {"path": "memory.md"}},
+        {"action": "paper_bulk_search", "query": "attention ablation", "limit": 20},
+        {"action": "append_workspace_markdown", "arguments": {"heading": "No path", "content": "missing path"}},
+        {"action": "paper_bulk_search", "arguments": {"query": "attention ablation", "limit": 1}},
+        {"action": "paper_bulk_search", "arguments": {"query": "should not execute", "limit": 1}},
+        {
+            "action": "append_workspace_markdown",
+            "arguments": {
+                "path": "queries.md",
+                "heading": "Query log",
+                "content": "Query: attention ablation; params limit=1; result count=1.",
+            },
+        },
+        {
+            "action": "append_workspace_markdown",
+            "arguments": {
+                "path": "papers.md",
+                "heading": "Paper TEST1",
+                "content": "- TEST1. Test Paper. 2020. Source: Semantic Scholar. Relevance: runtime fixture.",
+            },
+        },
+        {
+            "action": "append_workspace_markdown",
+            "arguments": {
+                "path": "findings.md",
+                "heading": "Finding",
+                "content": "Finding: budget accounting is traceable. Evidence: TEST1. Uncertainty: fixture only.",
+            },
+        },
+        {
+            "action": "final",
+            "summary": "done",
+            "handoff_markdown": "# Hand-Off\n\nSearched attention ablation. Promoted TEST1. Finding recorded.",
+        },
+    ]
+    runner = LiveAgentRunner(
+        llm=FakeActionLLM(actions),
+        tools=fake_tools,
+        workspace=workspace,
+        max_steps=20,
+        workspace_write_char_budget=1200,
+        max_workspace_tool_calls=100,
+    )
+    result = await runner.run_subagent(plan, ResearchStage.SUBAGENT_RESEARCH)
+
+    _assert(result.research_tool_calls_used == 1, "only valid search should spend research budget")
+    _assert(result.workspace_tool_calls_used == 4, "valid workspace tools should spend only workspace budget")
+    _assert(result.llm_steps_used == 9, "rejected actions should consume LLM steps, not tool budgets")
+    executed = [name for name, _ in fake_tools.calls]
+    _assert(executed == [
+        "read_workspace_markdown",
+        "paper_bulk_search",
+        "append_workspace_markdown",
+        "append_workspace_markdown",
+        "append_workspace_markdown",
+    ], f"unexpected executed tools: {executed}")
+    _assert("should not execute" not in str(fake_tools.calls), "research call after budget exhaustion executed")
+
+    trace_lines = [
+        json.loads(line)
+        for line in (subagent_path / "tool_calls.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    rejections = [entry for entry in trace_lines if entry.get("type") == "rejected_action"]
+    _assert(len(rejections) == 3, f"expected three rejected actions, saw {len(rejections)}")
+    reasons = " ".join(entry["reason"] for entry in rejections)
+    _assert("top level" in reasons, "top-level query rejection missing from trace")
+    _assert("arguments.path" in reasons, "workspace missing path rejection missing from trace")
+    _assert("budget is exhausted" in reasons, "research budget rejection missing from trace")
+    for entry in rejections:
+        _assert(entry["research_tool_calls_used"] <= 1, "rejection trace has invalid research counter")
+        _assert(entry["workspace_tool_calls_used"] <= 1, "invalid actions should not spend workspace budget")
 
 
 async def main_async() -> None:
@@ -76,22 +238,35 @@ async def main_async() -> None:
     normalized = normalize_model_content('<thought>hidden</thought>```json\n{"action":"final"}\n```')
     _assert(normalized == '{"action":"final"}', "model content normalization should strip thoughts and JSON fences")
 
+    instructions = action_instructions(1200)
+    _assert("Invalid search" in instructions, "action prompt should show invalid top-level query example")
+    _assert("arguments.path" in instructions, "action prompt should require workspace paths")
+    _assert("separate high budget" in instructions, "action prompt should explain split budgets")
+
     default_config = DeepDiveConfig()
     _assert(
-        default_config.thinking_profile.model == "gemini-3.1-pro-preview",
-        "thinking profile should default to Gemini 3.1 Pro",
+        default_config.thinking_profile.model == "gemma-4-26b-a4b-it",
+        "thinking profile should default to Gemma",
     )
     _assert(
         default_config.thinking_profile.reasoning_effort == "high",
         "thinking profile should use high reasoning by default",
     )
     _assert(
-        default_config.light_profile.model == "gemini-3.1-pro-preview",
-        "light profile should default to Gemini 3.1 Pro",
+        default_config.thinking_profile.api_key_env == "GEMMA_API_KEY",
+        "thinking profile should default to the Gemma key env var",
     )
     _assert(
-        default_config.light_profile.reasoning_effort == "medium",
-        "light profile should use medium reasoning by default",
+        default_config.light_profile.model == "gemma-4-26b-a4b-it",
+        "light profile should default to Gemma",
+    )
+    _assert(
+        default_config.light_profile.reasoning_effort == "high",
+        "light profile should use high reasoning by default",
+    )
+    _assert(
+        default_config.light_profile.api_key_env == "GEMMA_API_KEY",
+        "light profile should default to the Gemma key env var",
     )
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -116,9 +291,9 @@ async def main_async() -> None:
             light_profile=ModelProfile(
                 provider="gemini_openai",
                 model="light-test-model",
-                api_key_env="GEMINI_API_KEY",
+                api_key_env="GEMMA_API_KEY",
                 base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-                reasoning_effort="medium",
+                reasoning_effort="high",
             ),
         )
         provider = DeepDiveLLMProvider(config)
@@ -130,6 +305,9 @@ async def main_async() -> None:
             provider.profile_for(AgentModelRole.SEARCH_SUBAGENT).model == "light-test-model",
             "search subagent should use light model profile",
         )
+
+        await _exercise_live_runner_budget_contract(Path(tmp) / "runner")
+
         orchestrator = DeepDiveOrchestrator(config=config)
         result = await orchestrator.run(
             DeepDiveRunRequest(

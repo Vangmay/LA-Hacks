@@ -59,6 +59,8 @@ class DeepDiveOrchestrator:
             tools=self.tool_runtime,
             workspace=self.workspace,
             max_steps=self.config.subagent_max_steps,
+            workspace_write_char_budget=self.config.workspace_write_char_budget,
+            max_workspace_tool_calls=self.config.subagent_max_workspace_tool_calls,
         )
 
     async def run(self, request: DeepDiveRunRequest) -> DeepDiveRunResult:

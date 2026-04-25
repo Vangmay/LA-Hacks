@@ -40,3 +40,27 @@
   provider preflight with the exact configured model, base URL, API-key env var,
   and reasoning-effort setting. This catches SDK-signature problems and provider
   quota blocks before a long multi-agent run begins.
+- For this project, search/tool subagents are not necessarily "light" in model
+  quality. If the user asks for thinking-only execution, keep the routing bucket
+  but point every profile at the thinking-capable model and verify the generated
+  action JSON under live tool pressure.
+- A one-time system prompt telling agents to document is not enough. The live
+  loop must feed back artifact status after tool results so the next action can
+  see whether `queries.md`, `papers.md`, or `findings.md` is still empty and
+  repair the documentation gap.
+- Long tool-result contexts make weaker JSON-action adherence worse. Keep tool
+  result snippets focused, repeat that every parameter belongs inside
+  `arguments`, and show both valid and invalid action examples in the live loop.
+- Research/API tool budgets and workspace-writing budgets must be separate.
+  Writing detailed markdown is core agent work, not a scarce external API
+  action. Exhausting search budget should transition the agent into a
+  workspace-only finalization phase, not immediately force a handoff.
+- Higher-level synthesis agents need evidence bundles, not only summaries.
+  Investigator synthesis, cross-investigator synthesis, critique, and finalizer
+  stages should receive subagent findings/papers/queries/memory/handoffs and
+  selected trace summaries so thin handoffs cannot collapse the final report.
+- Prompting an investigator to "dynamically generate" subagents is not the same
+  as implementing dynamic roster planning. If subagent prompts and folders are
+  created before any planner LLM call, the system is deterministic even if the
+  prompt describes a dynamic architecture. Live planning must happen before
+  subagent creation, with schema validation and explicit deterministic fallback.
