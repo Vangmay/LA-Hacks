@@ -1,5 +1,30 @@
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { api } from '../api/client'
 
 export default function Home() {
+  const navigate = useNavigate()
+  const [arxivUrl, setArxivUrl] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleSubmit(e) {
+    e?.preventDefault()
+    const url = arxivUrl.trim()
+    if (!url || submitting) return
+    setSubmitting(true)
+    setError('')
+    try {
+      const res = await api.review.submit(url)
+      const jobId = res?.job_id || res?.jobId
+      if (!jobId) throw new Error(res?.detail || 'No job_id returned')
+      navigate(`/review/${jobId}`)
+    } catch (err) {
+      setError(err.message || 'Submit failed')
+      setSubmitting(false)
+    }
+  }
+
   return (
     <div className="min-h-screen w-full bg-[#181c2f] flex flex-col items-center justify-center relative overflow-hidden font-sans">
       {/* Background vignette and overlays */}
@@ -146,7 +171,27 @@ export default function Home() {
                 </defs>
               </svg>
               <div className="mt-2 text-white text-2xl font-bold dropzone-text-glow" style={{fontFamily:'Fira Sans, sans-serif', letterSpacing:'0.08em'}}>DROP A PAPER HERE</div>
-              <div className="text-[#00eaff] text-sm mt-1">or paste <a href="#" className="underline">arXiv link</a></div>
+              <form onSubmit={handleSubmit} className="mt-3 flex flex-col items-center gap-2 w-full px-6">
+                <div className="text-[#00eaff] text-sm">or paste an arXiv link</div>
+                <div className="flex gap-2 w-full max-w-[420px]">
+                  <input
+                    type="text"
+                    value={arxivUrl}
+                    onChange={(e) => setArxivUrl(e.target.value)}
+                    placeholder="https://arxiv.org/abs/1706.03762"
+                    disabled={submitting}
+                    className="flex-1 px-3 py-2 rounded-md bg-[#0f1226] text-white text-sm border border-[#00eaff]/40 focus:border-[#00eaff] focus:outline-none placeholder-white/30"
+                  />
+                  <button
+                    type="submit"
+                    disabled={submitting || !arxivUrl.trim()}
+                    className="px-4 py-2 rounded-md bg-[#00eaff] text-[#0f1226] font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#33f0ff]"
+                  >
+                    {submitting ? 'Submitting…' : 'Review'}
+                  </button>
+                </div>
+                {error && <div className="text-red-400 text-xs">{error}</div>}
+              </form>
             </div>
           </div>
         </div>
