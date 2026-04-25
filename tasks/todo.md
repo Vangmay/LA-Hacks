@@ -44,7 +44,7 @@
 - [x] Audit backend docstrings and comments for stale ingestion wording.
 - [x] Rewrite docstrings to describe the arXiv URL to TeX source pipeline directly.
 - [x] Re-run focused offline and live URL-to-TeX tests.
-- [ ] Commit the cleanup as a separate chunk.
+- [x] Commit the cleanup as a separate chunk.
 
 ## Cleanup Review
 
