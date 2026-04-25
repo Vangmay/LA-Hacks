@@ -27,6 +27,7 @@ from agents.claim_extractor import ClaimExtractorAgent
 from agents.dag_builder import DAGBuilderAgent
 from agents.parser import ParserAgent
 from agents.symbolic_verifier import SymbolicVerifierAgent
+from agents.attacker import AttackerAgent
 from models import ClaimUnit
 from config import settings
 
@@ -176,6 +177,37 @@ async def run(pdf_path: str) -> int:
         print(f"  {badge} {cid}: {o['status']} (conf={o['confidence']}) — {o['evidence'][:80]}")
 
     pipeline_output["symbolic_verifier"] = sym_output
+
+    # ── Step 5: Attacker (per claim, in parallel) ────────────────────────────
+    print("\n=== AttackerAgent ===")
+    attacker = AttackerAgent()
+    atk_tasks = []
+    for c, sym_res in zip(claims, sym_results):
+        claim_unit = ClaimUnit.model_validate(c)
+        sym_out = sym_res.output if not isinstance(sym_res, Exception) else {}
+        atk_ctx = AgentContext(
+            job_id="manual-test",
+            claim=claim_unit,
+            extra={"verification_results": [sym_out] if sym_out else []},
+        )
+        atk_tasks.append(attacker.run(atk_ctx))
+
+    atk_results = await asyncio.gather(*atk_tasks, return_exceptions=True)
+
+    atk_output = {}
+    for c, result in zip(claims, atk_results):
+        cid = c["claim_id"]
+        if isinstance(result, Exception):
+            print(f"  WARNING: {cid} raised exception — {result}")
+            atk_output[cid] = {"challenges": []}
+            continue
+        challenges = result.output.get("challenges", [])
+        atk_output[cid] = {"challenges": challenges}
+        print(f"  {cid}: {len(challenges)} challenge(s)")
+        for ch in challenges:
+            print(f"    [{ch['attacker_agent']}] {ch['challenge_text'][:100]}")
+
+    pipeline_output["attacker"] = atk_output
 
     # ── Save JSON output ──────────────────────────────────────────────────────
     _save(pipeline_output, paper_hash)

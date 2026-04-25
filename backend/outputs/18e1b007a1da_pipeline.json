@@ -1,0 +1,486 @@
+{
+  "paper_hash": "18e1b007a1da",
+  "parser": {
+    "title": "Attention Is All You Need",
+    "sections": 25,
+    "equations": 0,
+    "bibliography": 40
+  },
+  "extractor": {
+    "status": "success",
+    "total_claims": 8,
+    "by_type": {
+      "assertion": 8
+    },
+    "claims": [
+      {
+        "claim_id": "claim_001",
+        "text": "The Transformer is the first sequence transduction model relying entirely on self-attention to compute representations of its input and output without using sequence-aligned RNNs or convolution.",
+        "claim_type": "assertion",
+        "section": "2 Background",
+        "equations": [],
+        "citations": [],
+        "dependencies": [
+          "claim_002",
+          "claim_003",
+          "claim_004",
+          "claim_005",
+          "claim_007",
+          "claim_008"
+        ]
+      },
+      {
+        "claim_id": "claim_002",
+        "text": "The Transformer allows for significantly more parallelization and can reach a new state of the art in translation quality after being trained for as little as twelve hours on eight P100 GPUs.",
+        "claim_type": "assertion",
+        "section": "Introduction",
+        "equations": [],
+        "citations": [
+          "[9]",
+          "[16]",
+          "[18]"
+        ],
+        "dependencies": []
+      },
+      {
+        "claim_id": "claim_003",
+        "text": "On the WMT 2014 English-to-German translation task, the big transformer model (Transformer (big)) outperforms the best previously reported models (including ensembles) by more than 2.0 BLEU, establishing a new state-of-the-art BLEU score of 28.4.",
+        "claim_type": "assertion",
+        "section": "6.1 Machine Translation",
+        "equations": [],
+        "citations": [],
+        "dependencies": []
+      },
+      {
+        "claim_id": "claim_004",
+        "text": "On the WMT 2014 English-to-French translation task, our big model achieves a BLEU score of 41.0, outperforming all of the previously published single models, at less than 1/4 the training cost of the previous state-of-the-art model.",
+        "claim_type": "assertion",
+        "section": "6.1 Machine Translation",
+        "equations": [],
+        "citations": [
+          "[38]"
+        ],
+        "dependencies": []
+      },
+      {
+        "claim_id": "claim_005",
+        "text": "The Transformer outperforms the BerkeleyParser even when training only on the WSJ training set of 40K sentences.",
+        "claim_type": "assertion",
+        "section": "6.3 English Constituency Parsing",
+        "equations": [],
+        "citations": [],
+        "dependencies": []
+      },
+      {
+        "claim_id": "claim_006",
+        "text": "Despite the lack of task-specific tuning, our model performs surprisingly well, yielding better results than all previously reported models with the exception of the Recurrent Neural Network Grammar.",
+        "claim_type": "assertion",
+        "section": "6.3 English Constituency Parsing",
+        "equations": [],
+        "citations": [],
+        "dependencies": []
+      },
+      {
+        "claim_id": "claim_007",
+        "text": "The shorter the paths between any combination of positions in the input and output sequences, the easier it is to learn long-range dependencies.",
+        "claim_type": "assertion",
+        "section": "4 Why Self-Attention",
+        "equations": [],
+        "citations": [],
+        "dependencies": [
+          "claim_002"
+        ]
+      },
+      {
+        "claim_id": "claim_008",
+        "text": "A self-attention layer connects all positions with a constant number of sequentially executed operations, whereas a recurrent layer requires O(n) sequential operations.",
+        "claim_type": "assertion",
+        "section": "4 Why Self-Attention",
+        "equations": [],
+        "citations": [],
+        "dependencies": [
+          "claim_007"
+        ]
+      }
+    ]
+  },
+  "dag": {
+    "status": "success",
+    "edges": [
+      {
+        "from": "claim_001",
+        "to": "claim_002"
+      },
+      {
+        "from": "claim_001",
+        "to": "claim_003"
+      },
+      {
+        "from": "claim_001",
+        "to": "claim_004"
+      },
+      {
+        "from": "claim_001",
+        "to": "claim_005"
+      },
+      {
+        "from": "claim_001",
+        "to": "claim_007"
+      },
+      {
+        "from": "claim_001",
+        "to": "claim_008"
+      },
+      {
+        "from": "claim_007",
+        "to": "claim_002"
+      },
+      {
+        "from": "claim_008",
+        "to": "claim_007"
+      }
+    ],
+    "adjacency": {
+      "claim_007": [
+        "claim_002"
+      ],
+      "claim_003": [],
+      "claim_005": [],
+      "claim_004": [],
+      "claim_006": [],
+      "claim_002": [],
+      "claim_001": [
+        "claim_002",
+        "claim_003",
+        "claim_004",
+        "claim_005",
+        "claim_007",
+        "claim_008"
+      ],
+      "claim_008": [
+        "claim_007"
+      ]
+    },
+    "roots": [
+      "claim_002",
+      "claim_003",
+      "claim_004",
+      "claim_005",
+      "claim_006"
+    ],
+    "topological_order": [
+      "claim_002",
+      "claim_003",
+      "claim_004",
+      "claim_005",
+      "claim_006",
+      "claim_007",
+      "claim_008",
+      "claim_001"
+    ]
+  },
+  "symbolic_verifier": {
+    "claim_001": {
+      "tier": "symbolic",
+      "status": "inconclusive",
+      "evidence": "no parseable equations found",
+      "confidence": 0.5
+    },
+    "claim_002": {
+      "tier": "symbolic",
+      "status": "inconclusive",
+      "evidence": "no parseable equations found",
+      "confidence": 0.5
+    },
+    "claim_003": {
+      "tier": "symbolic",
+      "status": "inconclusive",
+      "evidence": "no parseable equations found",
+      "confidence": 0.5
+    },
+    "claim_004": {
+      "tier": "symbolic",
+      "status": "inconclusive",
+      "evidence": "no parseable equations found",
+      "confidence": 0.5
+    },
+    "claim_005": {
+      "tier": "symbolic",
+      "status": "inconclusive",
+      "evidence": "no parseable equations found",
+      "confidence": 0.5
+    },
+    "claim_006": {
+      "tier": "symbolic",
+      "status": "inconclusive",
+      "evidence": "no parseable equations found",
+      "confidence": 0.5
+    },
+    "claim_007": {
+      "tier": "symbolic",
+      "status": "inconclusive",
+      "evidence": "no parseable equations found",
+      "confidence": 0.5
+    },
+    "claim_008": {
+      "tier": "symbolic",
+      "status": "inconclusive",
+      "evidence": "no parseable equations found",
+      "confidence": 0.5
+    }
+  },
+  "attacker": {
+    "claim_001": {
+      "challenges": [
+        {
+          "challenge_id": "ch_claim_001_001",
+          "claim_id": "claim_001",
+          "attacker_agent": "attacker",
+          "challenge_text": "Demonstrate that prior to the Transformer model's introduction in 2017, no other sequence transduction models relied entirely on self-attention without using any form of sequence-aligned RNNs or convolutions. The claim doesn't explicitly account for less-known or unpublished models that might have already employed self-attention.",
+          "supporting_evidence": [
+            "The claim states that the Transformer is the first such model, but it does not provide evidence or references to prior works to substantiate the claim as truly novel in this aspect."
+          ]
+        },
+        {
+          "challenge_id": "ch_claim_001_002",
+          "claim_id": "claim_001",
+          "attacker_agent": "attacker",
+          "challenge_text": "Clarify the specific contribution of self-attention in the computation of input and output representations versus previous models that may have utilized self-attention as a component among others. The claim asserts a complete reliance on self-attention, which requires evidence that other components do not play a comparable structural role.",
+          "supporting_evidence": [
+            "The claim implies a new paradigm shift with the use of self-attention, but this needs to be contextualized against earlier models to support the assertion that it completely omits RNNs and convolutions."
+          ]
+        }
+      ]
+    },
+    "claim_002": {
+      "challenges": [
+        {
+          "challenge_id": "ch_claim_002_001",
+          "claim_id": "claim_002",
+          "attacker_agent": "attacker",
+          "challenge_text": "The claim that the Transformer can reach a new state of the art in translation quality after being trained for as little as twelve hours on eight P100 GPUs lacks empirical evidence and concrete results. There is no specific benchmark or dataset mentioned to support this assertion.",
+          "supporting_evidence": [
+            "The original Transformer paper by Vaswani et al. (2017) provides specific results using the WMT 2014 English-to-German dataset to claim state-of-the-art performance. No such dataset is specified here."
+          ]
+        },
+        {
+          "challenge_id": "ch_claim_002_002",
+          "claim_id": "claim_002",
+          "attacker_agent": "attacker",
+          "challenge_text": "The claim uses the term 'significantly more parallelization' without quantifying the degree of parallelization or comparing it with previous models. This makes it difficult to evaluate the validity of the claim relative to other architectures.",
+          "supporting_evidence": [
+            "In computer architecture, 'parallelization' is a quantifiable metric often expressed in terms of operations per second or similar measures. Baseline numbers from earlier models such as RNNs or LSTMs would be necessary to establish what 'significant' improvement looks like."
+          ]
+        },
+        {
+          "challenge_id": "ch_claim_002_003",
+          "claim_id": "claim_002",
+          "attacker_agent": "attacker",
+          "challenge_text": "The hardware specifics, 'eight P100 GPUs', are mentioned without clear context on required hyperparameters, training data size, or network architecture details which could drastically affect the feasibility of achieving such performance in twelve hours.",
+          "supporting_evidence": [
+            "Empirical results, such as those provided in hardware-specific AI research, typically include detailed configuration setups, such as batch sizes, learning rates, and model specifications, to substantiate claims."
+          ]
+        },
+        {
+          "challenge_id": "ch_claim_002_sub_001",
+          "claim_id": "claim_002",
+          "attacker_agent": "citation_gap",
+          "challenge_text": "The Transformer allows for significantly more parallelization: No specific citation provided for the claim of increased parallelization capabilities compared to other models.",
+          "supporting_evidence": []
+        },
+        {
+          "challenge_id": "ch_claim_002_sub_002",
+          "claim_id": "claim_002",
+          "attacker_agent": "citation_gap",
+          "challenge_text": "can reach a new state of the art in translation quality: The claim about reaching state of the art in translation quality is general and should be backed by specific benchmarks or comparisons, ideally cited directly with relevant studies or benchmarks.",
+          "supporting_evidence": []
+        },
+        {
+          "challenge_id": "ch_claim_002_sub_003",
+          "claim_id": "claim_002",
+          "attacker_agent": "citation_gap",
+          "challenge_text": "after being trained for as little as twelve hours on eight P100 GPUs: The citation should ideally include specific experiments or results validating these exact training conditions and outcomes.",
+          "supporting_evidence": []
+        }
+      ]
+    },
+    "claim_003": {
+      "challenges": [
+        {
+          "challenge_id": "ch_claim_003_001",
+          "claim_id": "claim_003",
+          "attacker_agent": "attacker",
+          "challenge_text": "Verify the reported BLEU score of 28.4 for the Transformer (big) model on the WMT 2014 English-to-German task against historical data to ensure there is no reporting error.",
+          "supporting_evidence": [
+            "Claim text states a BLEU score of 28.4 which needs to be cross-referenced with published benchmarks or official results."
+          ]
+        },
+        {
+          "challenge_id": "ch_claim_003_002",
+          "claim_id": "claim_003",
+          "attacker_agent": "attacker",
+          "challenge_text": "Examine whether there is an accurate comparison between the Transformer (big) model's BLEU score and the best previously reported models, ensuring that the claimed 'more than 2.0 BLEU' improvement is consistently documented across comparable published works.",
+          "supporting_evidence": [
+            "The claim mentions outperforming previous models by more than 2.0 BLEU, yet without clear references, it's essential to verify if all prior models, including ensembles, were indeed surpassed by this margin."
+          ]
+        },
+        {
+          "challenge_id": "ch_claim_003_003",
+          "claim_id": "claim_003",
+          "attacker_agent": "attacker",
+          "challenge_text": "Confirm that the method used to calculate the BLEU score is consistent with the methods traditionally used in the WMT 2014 benchmark to ensure comparability.",
+          "supporting_evidence": [
+            "The consistency in BLEU score calculation methodologies is crucial to authenticate the claim of establishing a new state-of-the-art."
+          ]
+        }
+      ]
+    },
+    "claim_004": {
+      "challenges": [
+        {
+          "challenge_id": "ch_claim_004_001",
+          "claim_id": "claim_004",
+          "attacker_agent": "attacker",
+          "challenge_text": "The claim that the big model outperforms all previously published single models in the WMT 2014 English-to-French task with a BLEU score of 41.0 needs specific comparative evidence. Provide the BLEU scores of the previously published models to verify that 41.0 is indeed superior.",
+          "supporting_evidence": [
+            "The claim lacks a list of the BLEU scores of prior models for comparison.",
+            "Without evidence of previous models' performances, the superiority claim is speculative."
+          ]
+        },
+        {
+          "challenge_id": "ch_claim_004_002",
+          "claim_id": "claim_004",
+          "attacker_agent": "attacker",
+          "challenge_text": "The assertion that the training cost is less than 1/4 of the previous state-of-the-art model is not substantiated with any quantifiable measures or definitions of 'training cost.' Specify the metrics used to calculate training costs for both models.",
+          "supporting_evidence": [
+            "'Training cost' is a vague term without context or specific metrics.",
+            "Verification requires clear definition and quantification of training costs for apples-to-apples comparison."
+          ]
+        },
+        {
+          "challenge_id": "ch_claim_004_sub_001",
+          "claim_id": "claim_004",
+          "attacker_agent": "citation_gap",
+          "challenge_text": "BLEU score of 41.0: The claim of a BLEU score of 41.0 needs a direct citation to specific data or experimental results supporting this score.",
+          "supporting_evidence": []
+        },
+        {
+          "challenge_id": "ch_claim_004_sub_002",
+          "claim_id": "claim_004",
+          "attacker_agent": "citation_gap",
+          "challenge_text": "outperforming all previously published single models: The claim that it outperforms all previously published single models would require a citation providing a comparative analysis or a review of previous performance results.",
+          "supporting_evidence": []
+        },
+        {
+          "challenge_id": "ch_claim_004_sub_003",
+          "claim_id": "claim_004",
+          "attacker_agent": "citation_gap",
+          "challenge_text": "less than 1/4 the training cost: The assertion regarding training cost needs citations detailing the training costs of both the current model and the previous state-of-the-art model for comparison.",
+          "supporting_evidence": []
+        }
+      ]
+    },
+    "claim_005": {
+      "challenges": [
+        {
+          "challenge_id": "ch_claim_005_001",
+          "claim_id": "claim_005",
+          "attacker_agent": "attacker",
+          "challenge_text": "The claim specifies that the Transformer 'outperforms' the BerkeleyParser, but it does not define the metric used for comparison (e.g., accuracy, F1-score, etc.). Without a clearly defined performance metric, it is impossible to objectively verify or falsify this claim.",
+          "supporting_evidence": [
+            "The claim text 'The Transformer outperforms the BerkeleyParser' lacks specification of performance metrics."
+          ]
+        },
+        {
+          "challenge_id": "ch_claim_005_002",
+          "claim_id": "claim_005",
+          "attacker_agent": "attacker",
+          "challenge_text": "The claim states the use of the WSJ training set of 40K sentences. It is essential to specify whether any data augmentation techniques, preprocessing steps, or subset selection were applied, as these could significantly influence the model's performance.",
+          "supporting_evidence": [
+            "The absence of details on data preparation steps in the claim makes it hard to replicate or evaluate the reported performance accurately."
+          ]
+        },
+        {
+          "challenge_id": "ch_claim_005_003",
+          "claim_id": "claim_005",
+          "attacker_agent": "attacker",
+          "challenge_text": "The claim lacks baseline results for the BerkeleyParser using the same WSJ training set of 40K sentences. Without these baseline results, there is no point of reference to establish that the Transformer indeed 'outperforms' it.",
+          "supporting_evidence": [
+            "Comparative claims require baseline performance metrics for the competing method, which are missing in this claim."
+          ]
+        }
+      ]
+    },
+    "claim_006": {
+      "challenges": [
+        {
+          "challenge_id": "ch_claim_006_001",
+          "claim_id": "claim_006",
+          "attacker_agent": "attacker",
+          "challenge_text": "The claim that the model yields better results than all previously reported models with the exception of the Recurrent Neural Network Grammar lacks comparative evidence. Provide specific metrics and results that demonstrate the model's performance relative to others.",
+          "supporting_evidence": [
+            "The claim text asserts superior performance without presenting any quantitative comparison or benchmarks against other models.",
+            "Given that no equations or datasets have been provided, it is impossible to verify the validity of this claim."
+          ]
+        },
+        {
+          "challenge_id": "ch_claim_006_002",
+          "claim_id": "claim_006",
+          "attacker_agent": "attacker",
+          "challenge_text": "The assertion about 'lack of task-specific tuning' requires clarification on how the model maintains or improves performance without such tuning.",
+          "supporting_evidence": [
+            "The claim text mentions the lack of task-specific tuning but does not explain the methodology or techniques that enable the model to still perform at a high level.",
+            "Without detailed information, it's unclear how the model compensates for the absence of tuning typically necessary for optimal performance."
+          ]
+        }
+      ]
+    },
+    "claim_007": {
+      "challenges": [
+        {
+          "challenge_id": "ch_claim_007_001",
+          "claim_id": "claim_007",
+          "attacker_agent": "attacker",
+          "challenge_text": "The claim lacks a quantitative definition or demonstration of 'shorter paths' and how they precisely relate to the ease of learning long-range dependencies. Without a specific model or equations to parse, the connection between path length and learning difficulty remains speculative.",
+          "supporting_evidence": [
+            "The symbolic check was inconclusive as there were no equations to verify.",
+            "The claim makes a statement about correlation without providing data or a model to support the assertion."
+          ]
+        },
+        {
+          "challenge_id": "ch_claim_007_002",
+          "claim_id": "claim_007",
+          "attacker_agent": "attacker",
+          "challenge_text": "The claim implies a direct relationship between path length and the ease of learning long-range dependencies without considering other critical factors like model architecture, data distribution, and learning algorithm, which could significantly influence learning capabilities.",
+          "supporting_evidence": [
+            "There are no parseable equations or models discussed that take into account these additional factors.",
+            "The assertion assumes a simplified scenario without accounting for complexities inherent in learning systems."
+          ]
+        }
+      ]
+    },
+    "claim_008": {
+      "challenges": [
+        {
+          "challenge_id": "ch_claim_008_001",
+          "claim_id": "claim_008",
+          "attacker_agent": "attacker",
+          "challenge_text": "The claim that a self-attention layer connects all positions with a constant number of sequentially executed operations is problematic. It ignores the fact that self-attention generally involves O(n^2) operations due to the need to compute attention scores for every pair of input positions.",
+          "supporting_evidence": [
+            "https://arxiv.org/abs/1706.03762",
+            "https://deepai.org/machine-learning-glossary-and-terms/self-attention"
+          ]
+        },
+        {
+          "challenge_id": "ch_claim_008_002",
+          "claim_id": "claim_008",
+          "attacker_agent": "attacker",
+          "challenge_text": "While recurrent layers require O(n) sequential operations due to their inherent sequential nature, the claim oversimplifies the comparison by not accounting for the computational complexity added by the quadratic operations in self-attention. Simply stating that a self-attention layer has constant sequential operations is misleading.",
+          "supporting_evidence": [
+            "https://www.analyticsvidhya.com/blog/2020/10/how-self-attention-mechanism-revolutionized-natural-language-processing/"
+          ]
+        }
+      ]
+    }
+  }
+}
