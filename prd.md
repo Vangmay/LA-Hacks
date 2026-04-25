@@ -7,21 +7,69 @@
 
 ---
 
-## v0.4 Implementation Note
+## Active v0.4 Product Contract
 
-The current implemented backend has moved from a `ClaimUnit`-centric design to
-a source-grounded `ResearchAtom` design. In the active Review Mode code, the
-shared core is:
+The current implemented backend uses a source-grounded `ResearchAtom` design.
+This is the active schema and implementation contract for Review Mode:
 
 `arXiv e-print source -> assembled TeX -> ParsedPaper -> ResearchAtom extraction -> ResearchGraph -> checks -> challenges/rebuttals -> AtomVerdict -> ReviewReport`.
 
-Older requirement text below that says "claim unit", `ClaimExtractorAgent`,
+### Active schema
+
+- `PaperSource` records arXiv/manual TeX provenance.
+- `ParsedPaper` records title, sections, equations, bibliography, raw text, and
+  assembled TeX.
+- `ResearchAtom` replaces `ClaimUnit`; an atom can be a definition, assumption,
+  theorem, lemma, proposition, construction, algorithm, bound, limitation,
+  technique, related-work claim, or assertion.
+- Each `ResearchAtom` carries `SourceSpan` grounding plus linked
+  `EquationBlock` and `CitationEntry` objects when available.
+- `ResearchGraph` replaces the old claim DAG and uses typed edges. Edge
+  direction is `source_id -> target_id`, meaning source depends on target.
+- `CheckResult` replaces old verification-tier output.
+- `Challenge` and `Rebuttal` replace the old attacker/defender free-form
+  payloads.
+- `AtomVerdict` replaces `ClaimVerdict`.
+- `ReviewReport` is the final JSON + markdown audit bundle.
+
+### Active review agents/services
+
+- `ingestion/arxiv.py`
+- `ingestion/tex_parser.py`
+- `agents/atom_extractor.py`
+- `agents/graph_builder.py`
+- `checks/algebraic_sanity.py`
+- `checks/numeric_probe.py`
+- `checks/citation_probe.py`
+- `agents/challenge_agent.py`
+- `agents/defense_agent.py`
+- `agents/verdict_aggregator.py`
+- `agents/cascade.py`
+- `agents/report_agent.py`
+
+### Active API
+
+- `POST /review/arxiv`
+- `POST /review`
+- `GET /review/{job_id}/status`
+- `GET /review/{job_id}/dag`
+- `GET /review/{job_id}/atoms/{atom_id}`
+- `GET /review/{job_id}/stream`
+- `GET /review/{job_id}/report`
+- `GET /review/{job_id}/report/markdown`
+
+Reader, PoC, and Research Mode remain mostly stubbed and should be updated to
+the atom schema when those modes are implemented.
+
+---
+
+## Archive: Pre-Revamp Claim-Centric PRD
+
+The sections below are retained as product-history context only. They describe
+the old claim-centric design and may mention `ClaimUnit`, `ClaimExtractorAgent`,
 `DAGBuilderAgent`, `SymbolicVerifierAgent`, `NumericAdversaryAgent`,
-`AttackerAgent`, or `DefenderAgent` should be read as the pre-revamp product
-language. The implemented v0.4 code uses `ResearchAtom`, `GraphBuilderAgent`,
-check services, `ChallengeAgent`, and `DefenseAgent` instead. Reader, PoC, and
-Research Mode remain mostly stubbed and may still use claim-oriented product
-language until those modes are rebuilt.
+`AttackerAgent`, or `DefenderAgent`. Those names are archived and are not the
+active backend contract.
 
 ---
 

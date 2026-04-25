@@ -1,27 +1,113 @@
-# AGENTS.md — PaperCourt
+# CLAUDE.md — PaperCourt
 
-## Workflow
+Read this before changing code in this repository.
 
-- For non-trivial work, write and maintain a checklist in `tasks/todo.md`.
-- Keep changes scoped to the requested area and the current v0.4 design.
-- If a test or assumption fails, stop, update the plan, and fix the root cause
-  before continuing.
-- Record final verification results in `tasks/todo.md`.
+## Current Implemented Design
 
-## Current Code Design
+PaperCourt v0.4 review mode is a TeX-first, source-grounded pipeline:
 
-The implemented review path is:
+`arXiv URL/id -> e-print source bundle -> assembled TeX -> ParsedPaper -> ResearchAtom -> ResearchGraph -> CheckResult -> Challenge/Rebuttal -> AtomVerdict -> ReviewReport`
 
-`arXiv source -> assembled TeX -> ParsedPaper -> ResearchAtom -> ResearchGraph -> CheckResult -> Challenge/Rebuttal -> AtomVerdict -> ReviewReport`
+The old `ClaimUnit`, `ClaimExtractorAgent`, `DAGBuilderAgent`,
+`TexParserAgent`, verifier-agent stack, and `utils.arxiv` path are removed.
+Do not reintroduce compatibility fallbacks for those names.
 
-Do not reintroduce the removed `ClaimUnit` pipeline or old modules such as
-`agents.claim_extractor`, `agents.dag_builder`, `agents.tex_parser`,
-`agents.symbolic_verifier`, `agents.numeric_adversary`, `agents.attacker`,
-`agents.defender`, or `utils.arxiv`.
+## Stack
 
-## Testing Standard
+| Layer | Technology |
+| --- | --- |
+| Backend | Python 3.11, FastAPI, Pydantic v2, uvicorn |
+| Async | asyncio, sse-starlette |
+| LLM | OpenAI API via `openai.AsyncOpenAI` and `settings.openai_model` |
+| TeX ingestion | arXiv e-print source download + safe TeX assembly |
+| Parser | `backend/ingestion/tex_parser.py` |
+| Symbolic check | SymPy service in `backend/checks/algebraic_sanity.py` |
+| Numeric check | SciPy/NumPy service in `backend/checks/numeric_probe.py` |
+| Frontend | React 18 + Vite, Tailwind CSS, React Flow |
 
-Before marking review-pipeline work complete, run:
+## Backend Layout
+
+```text
+backend/
+  ingestion/
+    arxiv.py          # parse/fetch arXiv e-print source and assemble TeX
+    tex_parser.py     # deterministic TeX -> ParsedPaper
+  models/
+    source.py         # PaperSource, ParsedPaper, SourceSpan, sections/equations/cites
+    atoms.py          # ResearchAtom and atom taxonomy
+    graph.py          # ResearchGraph and typed edge taxonomy
+    checks.py         # CheckResult and check statuses
+    adversarial.py    # Challenge and Rebuttal
+    verdict.py        # AtomVerdict
+    report.py         # ReviewReport
+    events.py         # DAGEvent emitted over SSE
+    jobs.py           # Review job metadata
+  agents/
+    atom_extractor.py
+    graph_builder.py
+    challenge_agent.py
+    defense_agent.py
+    verdict_aggregator.py
+    cascade.py
+    report_agent.py
+  checks/
+    algebraic_sanity.py
+    numeric_probe.py
+    citation_probe.py
+  core/
+    span_resolver.py
+    equation_linker.py
+    citation_linker.py
+    event_bus.py
+    job_store.py
+    orchestrators/review.py
+  api/review.py
+```
+
+Reader, PoC, and Research mode files are still mostly stubs. Keep their imports
+healthy, but do not expand those modes unless the task explicitly asks for it.
+
+## Core Conventions
+
+- Import public models from `models`, not from individual model modules, unless
+  there is a clear local reason.
+- `AgentContext` uses `parsed_paper`, `atom`, `graph`, `checks`, `challenges`,
+  and `rebuttals`. There is no `context.claim`.
+- Deterministic services such as ingestion, parsing, linkers, and checks should
+  stay as functions/services, not fake agents.
+- Every review artifact should carry source grounding when possible:
+  `SourceSpan`, `EquationBlock`, `CitationEntry`, or typed `Evidence`.
+- Use `settings.openai_model`; do not hardcode model names in agents.
+- LLM calls must use `AsyncOpenAI`, JSON mode when expecting structured output,
+  and explicit parse/error handling.
+- Keep the pipeline centralized. Do not add old-path fallback code that silently
+  bypasses the v0.4 atom pipeline.
+
+## Edge Direction
+
+`ResearchGraph` follows the existing DAG convention:
+
+`source_id -> target_id` means the source atom depends on the target atom.
+
+Process roots first. If a target atom is refuted or likely flawed, dependent
+source atoms are at cascade risk.
+
+## Review API
+
+- `POST /review/arxiv` with JSON `{ "arxiv_url": "https://arxiv.org/abs/..." }`
+- `POST /review` with form field `arxiv_url`
+- `GET /review/{job_id}/status`
+- `GET /review/{job_id}/dag`
+- `GET /review/{job_id}/atoms/{atom_id}`
+- `GET /review/{job_id}/stream`
+- `GET /review/{job_id}/report`
+- `GET /review/{job_id}/report/markdown`
+
+`/status` reports `completed_atoms` and `total_atoms`.
+
+## Verification
+
+Run these before calling a review-pipeline change done:
 
 ```bash
 PYTHONPATH=backend python -c "import main; import api.review; from models import ResearchAtom, ParsedPaper, AtomVerdict, ReviewReport; print('imports ok')"
@@ -35,24 +121,34 @@ python backend/scripts/test_prompt_2_agents.py
 python backend/scripts/test_review_tex_flow.py
 ```
 
-For extraction quality work, also run:
+Live E2E with OpenAI and arXiv:
 
 ```bash
 python backend/scripts/test_pipeline.py --papers-file good_papers.txt
 ```
 
-Then inspect the generated `backend/outputs/*_pipeline.json` files and compare
-the extracted atoms against the actual paper text.
+Inspect the generated JSON files under `backend/outputs/` and compare atom
+coverage against the paper text, especially atom types, sections, equations,
+citations, graph roots, and high-risk verdicts.
 
-## Documentation
+## Local Run
 
-When changing the pipeline contract, update:
+```bash
+cd backend
+cp .env.example .env
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
 
-- `CLAUDE.md`
-- `AGENTS.md`
-- `README.md`
-- `backend/REVAMP_NOTES.md`
-- `tasks/todo.md`
+cd ../frontend
+npm install
+npm run dev
+```
 
-Use `tasks/lessons.md` only after a user correction identifies a repeatable
-mistake pattern.
+## What Not To Do
+
+- Do not resurrect deleted modules or model aliases for convenience.
+- Do not add PDF/html fallback ingestion to the implemented review path.
+- Do not use `time.sleep()` in async code.
+- Do not import agents from models or APIs from agents/core.
+- Do not make real OpenAI calls in offline tests; mock clients there.
+- Do not commit `.env` or generated caches.
