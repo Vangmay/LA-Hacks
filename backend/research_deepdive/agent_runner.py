@@ -421,18 +421,20 @@ class LiveAgentRunner:
             try:
                 result = await self.tools.execute(tool_name, arguments, plan.workspace_path)
             except Exception as exc:
-                self._write_trace(
-                    trace_path,
-                    {
-                        "type": "tool_error",
-                        "tool_name": tool_name,
-                        "arguments": arguments,
-                        "error": str(exc),
-                        "research_tool_calls_used": research_tool_calls_used,
-                        "workspace_tool_calls_used": workspace_tool_calls_used,
-                    },
+                self._handle_tool_execution_error(
+                    trace_path=trace_path,
+                    raw_trace_path=raw_trace_path,
+                    messages=messages,
+                    action=action,
+                    tool_name=tool_name,
+                    arguments=arguments,
+                    exc=exc,
+                    is_workspace_tool=is_workspace_tool,
+                    llm_steps=llm_steps,
+                    research_tool_calls_used=research_tool_calls_used,
+                    workspace_tool_calls_used=workspace_tool_calls_used,
                 )
-                raise
+                continue
             if is_workspace_tool:
                 workspace_tool_calls_used += 1
             else:
@@ -745,7 +747,23 @@ class LiveAgentRunner:
                 continue
             if workspace_tool_calls_used >= self.max_workspace_tool_calls:
                 break
-            result = await self.tools.execute(tool_name, arguments, plan.workspace_path)
+            try:
+                result = await self.tools.execute(tool_name, arguments, plan.workspace_path)
+            except Exception as exc:
+                self._handle_tool_execution_error(
+                    trace_path=trace_path,
+                    raw_trace_path=raw_trace_path,
+                    messages=messages,
+                    action=action,
+                    tool_name=tool_name,
+                    arguments=arguments,
+                    exc=exc,
+                    is_workspace_tool=True,
+                    llm_steps=llm_steps,
+                    research_tool_calls_used=research_tool_calls_used,
+                    workspace_tool_calls_used=workspace_tool_calls_used,
+                )
+                continue
             workspace_tool_calls_used += 1
             self._write_trace(
                 trace_path,
@@ -895,6 +913,77 @@ class LiveAgentRunner:
             }
         )
 
+    def _handle_tool_execution_error(
+        self,
+        *,
+        trace_path: Path,
+        raw_trace_path: Path,
+        messages: list[dict[str, str]],
+        action: dict[str, Any],
+        tool_name: str,
+        arguments: dict[str, Any],
+        exc: Exception,
+        is_workspace_tool: bool,
+        llm_steps: int,
+        research_tool_calls_used: int,
+        workspace_tool_calls_used: int,
+    ) -> None:
+        error_result = {
+            "error": True,
+            "error_type": type(exc).__name__,
+            "message": str(exc),
+            "tool_name": tool_name,
+            "arguments": arguments,
+        }
+        self._write_trace(
+            trace_path,
+            {
+                "type": "tool_error",
+                "step": llm_steps,
+                "tool_name": tool_name,
+                "arguments": arguments,
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+                "research_tool_calls_used": research_tool_calls_used,
+                "workspace_tool_calls_used": workspace_tool_calls_used,
+            },
+        )
+        if not is_workspace_tool:
+            self._write_raw_tool_result(
+                raw_trace_path,
+                tool_name=tool_name,
+                arguments=arguments,
+                result=error_result,
+                research_tool_calls_used=research_tool_calls_used,
+                workspace_tool_calls_used=workspace_tool_calls_used,
+            )
+            self._append_auto_query_entry(
+                trace_path.parent,
+                tool_name=tool_name,
+                arguments=arguments,
+                result=error_result,
+                query_index=llm_steps,
+            )
+
+        messages.append({"role": "assistant", "content": json.dumps(action)})
+        messages.append(
+            {
+                "role": "user",
+                "content": (
+                    "Tool execution failed, but the run is continuing and no tool budget "
+                    "was spent by this failed action.\n\n"
+                    f"- Tool: `{tool_name}`\n"
+                    f"- Error type: `{type(exc).__name__}`\n"
+                    f"- Error: {str(exc)[:2000]}\n\n"
+                    "Return exactly one JSON object that recovers: use a fallback tool, "
+                    "retry with corrected arguments, search by title/query instead of a "
+                    "bad paper id, or update workspace notes with the failure before "
+                    "continuing. Do not repeat the exact same failing call unless you "
+                    "changed the arguments."
+                ),
+            }
+        )
+
     def _write_raw_tool_result(
         self,
         path: Path,
@@ -928,7 +1017,10 @@ class LiveAgentRunner:
         query_index: int,
     ) -> None:
         paper_ids = _extract_paper_ids(result)[:12]
-        result_count = _result_count(result)
+        if isinstance(result, dict) and result.get("error"):
+            result_count = f"failed ({result.get('error_type', 'tool error')})"
+        else:
+            result_count = str(_result_count(result))
         query_text = arguments.get("query") or arguments.get("paper_id") or arguments.get("arxiv_url") or tool_name
         content = (
             f"- Tool: `{tool_name}`\n"

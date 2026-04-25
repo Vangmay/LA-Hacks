@@ -94,6 +94,11 @@
   Malformed model JSON should become a rejected action and repair prompt; an
   unrecoverable subagent/tool failure should write an explicit error handoff and
   let sibling subagents, investigators, critique, and finalization continue.
+- Individual live tool execution failures should usually be recoverable inside
+  the action loop. Log the failed call in `tool_calls.jsonl` and
+  `raw_tool_results.jsonl`, add a structured failed-query entry when it was a
+  research/API tool, then prompt the agent to retry with corrected arguments or
+  use a fallback tool instead of crashing the subagent.
 - Provider-level JSON parsing should not impose one schema on every caller.
   Dynamic roster planning may legitimately return a top-level JSON array, while
   subagent action loops require a JSON object and should reject non-object JSON

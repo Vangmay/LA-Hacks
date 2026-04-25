@@ -117,6 +117,8 @@ class FakeToolRuntime:
             )
             return {"path": path.name}
         if tool_name == "paper_bulk_search":
+            if arguments.get("query") == "transient tool failure":
+                raise RuntimeError("synthetic transient paper lookup failure")
             return {
                 "papers": [
                     {"paperId": "TEST1", "title": "Test Paper One", "year": 2020},
@@ -178,6 +180,7 @@ async def _exercise_live_runner_budget_contract(root: Path) -> None:
     fake_tools = FakeToolRuntime(workspace)
     actions = [
         {"action": "read_workspace_markdown", "arguments": {"path": "memory.md"}},
+        {"action": "paper_bulk_search", "arguments": {"query": "transient tool failure", "limit": 1}},
         {"action": "paper_bulk_search", "query": "attention ablation", "limit": 20},
         {"action": "append_workspace_markdown", "arguments": {"heading": "No path", "content": "missing path"}},
         {"action": "paper_bulk_search", "arguments": {"query": "attention ablation", "limit": 1}},
@@ -290,10 +293,11 @@ async def _exercise_live_runner_budget_contract(root: Path) -> None:
 
     _assert(result.research_tool_calls_used == 1, "only valid search should spend research budget")
     _assert(result.workspace_tool_calls_used == 5, "valid workspace tools should spend only workspace budget")
-    _assert(result.llm_steps_used == 12, "rejected actions should consume LLM steps, not tool budgets")
+    _assert(result.llm_steps_used == 13, "rejected actions and tool errors should consume LLM steps, not tool budgets")
     executed = [name for name, _ in fake_tools.calls]
     _assert(executed == [
         "read_workspace_markdown",
+        "paper_bulk_search",
         "paper_bulk_search",
         "append_workspace_markdown",
         "append_workspace_markdown",
@@ -318,15 +322,23 @@ async def _exercise_live_runner_budget_contract(root: Path) -> None:
     for entry in rejections:
         _assert(entry["research_tool_calls_used"] <= 1, "rejection trace has invalid research counter")
         _assert(entry["workspace_tool_calls_used"] <= 1, "invalid actions should not spend workspace budget")
+    tool_errors = [entry for entry in trace_lines if entry.get("type") == "tool_error"]
+    _assert(len(tool_errors) == 1, f"expected one recoverable tool error, saw {len(tool_errors)}")
+    _assert(
+        tool_errors[0]["error_type"] == "RuntimeError",
+        "tool error trace should preserve exception type",
+    )
 
     raw_lines = [
         json.loads(line)
         for line in (subagent_path / "raw_tool_results.jsonl").read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
-    _assert(len(raw_lines) == 1, "raw research tool result should be logged automatically")
-    _assert(raw_lines[0]["paper_ids"][:3] == ["TEST1", "TEST2", "TEST3"], "raw log should extract paper IDs")
+    _assert(len(raw_lines) == 2, "raw research tool results and errors should be logged automatically")
+    _assert(raw_lines[0]["result"]["error"], "raw log should capture failed research tool calls")
+    _assert(raw_lines[1]["paper_ids"][:3] == ["TEST1", "TEST2", "TEST3"], "raw log should extract paper IDs")
     queries_text = (subagent_path / "queries.md").read_text(encoding="utf-8")
+    _assert("failed (RuntimeError)" in queries_text, "auto query entry should record tool failures")
     _assert("## Query: paper_bulk_search 1" in queries_text, "runtime should auto-append structured query entry")
     _assert("- Arguments:" in queries_text and "- Top result IDs:" in queries_text, "auto query entry missing fields")
     papers_text = (subagent_path / "papers.md").read_text(encoding="utf-8")

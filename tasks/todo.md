@@ -36,6 +36,9 @@
 - [x] Make the live CLI honor an explicit 3x3 dynamic roster request exactly.
 - [x] Add live-demo fault isolation so one malformed Gemma action or broken
   subagent does not crash the whole E2E.
+- [x] Treat individual tool execution failures as recoverable action-loop
+  feedback and log them into traces/query artifacts instead of crashing a
+  subagent.
 - [ ] In progress: run the monitored live Gemma novelty E2E: arXiv `1706.03762`, objective
   `novelty_ideation`, 3 investigators, 3 subagents each.
 - [ ] Commit the latest fix chunk and leave generated live artifacts untracked.
@@ -45,6 +48,11 @@
 - Started from an already dirty worktree on 2026-04-25. Existing local edits
   included Gemma defaults, partial artifact-status feedback, partial split
   budget accounting, generated deep-dive outputs, and task/lesson edits.
+- Live run `live_gemma_mvp_20260425_codex_r7` reached all 9 subagent handoffs,
+  all 3 investigator syntheses, and shared cross-investigator synthesis. It
+  exposed a Semantic Scholar 404 lookup that old live code isolated as an error
+  handoff; the runtime now treats future tool execution errors as recoverable
+  feedback.
 
 ## Goal
 
