@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .llm import DeepDiveLLMProvider
+from .llm import LLMJSONParseError
 from .llm import normalize_model_content
 from .models import AgentExitReason, AgentModelRole, AgentRunResult, ResearchStage, SubagentPlan
 from .tool_runtime import ToolRuntime
@@ -291,7 +292,18 @@ class LiveAgentRunner:
 
         for _ in range(self.max_steps):
             llm_steps += 1
-            action = await self.llm.chat_json(role=plan.model_role, messages=messages)
+            try:
+                action = await self.llm.chat_json(role=plan.model_role, messages=messages)
+            except LLMJSONParseError as exc:
+                self._handle_malformed_json_action(
+                    trace_path,
+                    messages,
+                    exc,
+                    llm_steps=llm_steps,
+                    research_tool_calls_used=research_tool_calls_used,
+                    workspace_tool_calls_used=workspace_tool_calls_used,
+                )
+                continue
             self._write_trace(trace_path, {"type": "llm_action", "step": llm_steps, "action": action})
 
             action_type = action.get("action")
@@ -605,7 +617,18 @@ class LiveAgentRunner:
         )
         for _ in range(repair_steps):
             llm_steps += 1
-            action = await self.llm.chat_json(role=plan.model_role, messages=messages)
+            try:
+                action = await self.llm.chat_json(role=plan.model_role, messages=messages)
+            except LLMJSONParseError as exc:
+                self._handle_malformed_json_action(
+                    trace_path,
+                    messages,
+                    exc,
+                    llm_steps=llm_steps,
+                    research_tool_calls_used=research_tool_calls_used,
+                    workspace_tool_calls_used=workspace_tool_calls_used,
+                )
+                continue
             self._write_trace(trace_path, {"type": "llm_action", "step": llm_steps, "action": action})
             action_type = action.get("action")
             if action_type == "final":
@@ -786,6 +809,38 @@ class LiveAgentRunner:
                 "research_tool_calls_used": research_tool_calls_used,
                 "workspace_tool_calls_used": workspace_tool_calls_used,
             },
+        )
+
+    def _handle_malformed_json_action(
+        self,
+        trace_path: Path,
+        messages: list[dict[str, str]],
+        exc: LLMJSONParseError,
+        *,
+        llm_steps: int,
+        research_tool_calls_used: int,
+        workspace_tool_calls_used: int,
+    ) -> None:
+        raw = exc.content.strip()
+        self._write_rejected_action_trace(
+            trace_path,
+            action={"raw_content": raw[:4000]},
+            reason="model response was not parseable as one JSON object",
+            llm_steps=llm_steps,
+            research_tool_calls_used=research_tool_calls_used,
+            workspace_tool_calls_used=workspace_tool_calls_used,
+        )
+        messages.append({"role": "assistant", "content": raw[:4000]})
+        messages.append(
+            {
+                "role": "user",
+                "content": (
+                    "Rejected response without spending any tool budget: it was not parseable "
+                    "as exactly one JSON object. Return exactly one corrected JSON object now. "
+                    "Use JSON string escaping for markdown newlines and quotes; keep every tool "
+                    "parameter inside `arguments`."
+                ),
+            }
         )
 
     def _write_raw_tool_result(

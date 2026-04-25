@@ -18,6 +18,16 @@ from .config import DeepDiveConfig, ModelProfile
 from .models import AgentModelRole
 
 
+class LLMJSONParseError(RuntimeError):
+    """Raised when a model response cannot be parsed as a JSON object."""
+
+    def __init__(self, *, provider: str, model: str, content: str) -> None:
+        self.provider = provider
+        self.model = model
+        self.content = content
+        super().__init__(f"{provider}:{model} returned non-JSON content: {content[:500]}")
+
+
 THINKING_ROLES = {
     AgentModelRole.DIRECTOR,
     AgentModelRole.INVESTIGATOR,
@@ -104,10 +114,12 @@ class DeepDiveLLMProvider:
         response = await self._chat_completion(profile, kwargs)
         content = normalize_model_content(response.choices[0].message.content or "")
         try:
-            return json.loads(content)
+            return parse_model_json_object(content)
         except json.JSONDecodeError as exc:
-            raise RuntimeError(
-                f"{profile.provider}:{profile.model} returned non-JSON content: {content[:500]}"
+            raise LLMJSONParseError(
+                provider=profile.provider,
+                model=profile.model,
+                content=content,
             ) from exc
 
     async def chat_markdown(
@@ -193,6 +205,59 @@ def normalize_model_content(content: str) -> str:
     if fenced:
         return fenced.group(1).strip()
     return cleaned
+
+
+def parse_model_json_object(content: str) -> dict[str, Any]:
+    """Parse provider JSON while tolerating common action-protocol rough edges."""
+
+    normalized = normalize_model_content(content)
+    candidates = [normalized]
+    extracted = _extract_first_json_object(normalized)
+    if extracted and extracted != normalized:
+        candidates.append(extracted)
+
+    last_error: json.JSONDecodeError | None = None
+    for candidate in candidates:
+        for strict in (True, False):
+            try:
+                parsed = json.loads(candidate, strict=strict)
+            except json.JSONDecodeError as exc:
+                last_error = exc
+                continue
+            if not isinstance(parsed, dict):
+                raise json.JSONDecodeError("top-level JSON value is not an object", candidate, 0)
+            return parsed
+    if last_error is not None:
+        raise last_error
+    raise json.JSONDecodeError("no JSON object found", normalized, 0)
+
+
+def _extract_first_json_object(content: str) -> str:
+    start = content.find("{")
+    if start < 0:
+        return ""
+    depth = 0
+    in_string = False
+    escape = False
+    for index in range(start, len(content)):
+        char = content[index]
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return content[start : index + 1].strip()
+    return ""
 
 
 def _attach_reasoning_effort(kwargs: dict[str, Any], profile: ModelProfile) -> None:

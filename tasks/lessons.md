@@ -90,6 +90,10 @@
   contract for live E2E runs. Dynamic roster planning can choose the personas,
   but it should not silently expand the requested 3x3 topology into a larger
   run unless there is a separate explicit expansion flag.
+- Live demo E2E runs must isolate failures at the smallest useful boundary.
+  Malformed model JSON should become a rejected action and repair prompt; an
+  unrecoverable subagent/tool failure should write an explicit error handoff and
+  let sibling subagents, investigators, critique, and finalization continue.
 - Novelty mode needs its own artifact and prompt spine. Treat `proposal_seeds.md`
   as the raw idea layer, force proposal collision checks, reject vague future
   work, and have investigators/critics/finalizer transform evidence into

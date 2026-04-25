@@ -26,7 +26,7 @@ from research_deepdive import (  # noqa: E402
     validate_research_taste_roster,
 )
 from research_deepdive.agent_runner import LiveAgentRunner, action_instructions  # noqa: E402
-from research_deepdive.llm import normalize_model_content  # noqa: E402
+from research_deepdive.llm import LLMJSONParseError, normalize_model_content, parse_model_json_object  # noqa: E402
 from research_deepdive.models import (  # noqa: E402
     AgentExitReason,
     AgentRunResult,
@@ -45,7 +45,7 @@ def _assert(condition: bool, message: str) -> None:
 
 
 class FakeActionLLM:
-    def __init__(self, actions: list[dict]) -> None:
+    def __init__(self, actions: list[dict | Exception]) -> None:
         self.actions = list(actions)
         self.messages: list[list[dict[str, str]]] = []
 
@@ -53,7 +53,10 @@ class FakeActionLLM:
         self.messages.append(messages)
         if not self.actions:
             raise AssertionError("fake LLM action queue exhausted")
-        return self.actions.pop(0)
+        action = self.actions.pop(0)
+        if isinstance(action, Exception):
+            raise action
+        return action
 
     async def chat_markdown(self, *, role: AgentModelRole, messages: list[dict[str, str]]) -> str:
         self.messages.append(messages)
@@ -61,6 +64,12 @@ class FakeActionLLM:
 
     def profile_for(self, role: AgentModelRole) -> ModelProfile:
         return ModelProfile(provider="fake", model="fake-model", api_key_env="FAKE_API_KEY")
+
+
+class FakeMarkdownFailLLM(FakeActionLLM):
+    async def chat_markdown(self, *, role: AgentModelRole, messages: list[dict[str, str]]) -> str:
+        self.messages.append(messages)
+        raise RuntimeError("synthetic markdown failure")
 
 
 class FakeToolRuntime:
@@ -115,6 +124,27 @@ class FakeToolRuntime:
         raise AssertionError(f"unexpected fake tool call: {tool_name}")
 
 
+class FakeLiveRunnerWithOneFailure:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def run_subagent(self, plan: SubagentPlan, stage: ResearchStage) -> AgentRunResult:
+        self.calls += 1
+        if self.calls == 1:
+            raise RuntimeError("synthetic subagent failure")
+        artifact = plan.workspace_path / "handoff.md"
+        artifact.write_text("# Hand-Off\n\nSynthetic sibling success.\n", encoding="utf-8")
+        return AgentRunResult(
+            agent_id=plan.subagent_id,
+            stage=stage,
+            exit_reason=AgentExitReason.COMPLETED,
+            tool_calls_used=0,
+            workspace_path=plan.workspace_path,
+            artifacts=[artifact],
+            summary="synthetic sibling success",
+        )
+
+
 async def _exercise_live_runner_budget_contract(root: Path) -> None:
     workspace = WorkspaceManager(root)
     subagent_path = root / "run" / "investigators" / "investigator_01" / "subagents" / "subagent_01"
@@ -146,6 +176,14 @@ async def _exercise_live_runner_budget_contract(root: Path) -> None:
         {"action": "paper_bulk_search", "query": "attention ablation", "limit": 20},
         {"action": "append_workspace_markdown", "arguments": {"heading": "No path", "content": "missing path"}},
         {"action": "paper_bulk_search", "arguments": {"query": "attention ablation", "limit": 1}},
+        LLMJSONParseError(
+            provider="fake",
+            model="fake-model",
+            content=(
+                '{"action":"append_workspace_markdown","arguments":{"path":"proposal_seeds.md",'
+                '"content":"## Proposal Seed: malformed literal\n\n- Status: raw"}}'
+            ),
+        ),
         {"action": "paper_bulk_search", "arguments": {"query": "should not execute", "limit": 1}},
         {
             "action": "append_workspace_markdown",
@@ -166,7 +204,7 @@ async def _exercise_live_runner_budget_contract(root: Path) -> None:
             "action": "append_workspace_markdown",
             "arguments": {
                 "path": "papers.md",
-                "heading": "Paper: TEST1",
+                "heading": "## Paper: TEST1",
                 "content": (
                     "- Paper ID: TEST1\n"
                     "- Year: 2020\n"
@@ -246,7 +284,7 @@ async def _exercise_live_runner_budget_contract(root: Path) -> None:
 
     _assert(result.research_tool_calls_used == 1, "only valid search should spend research budget")
     _assert(result.workspace_tool_calls_used == 5, "valid workspace tools should spend only workspace budget")
-    _assert(result.llm_steps_used == 10, "rejected actions should consume LLM steps, not tool budgets")
+    _assert(result.llm_steps_used == 11, "rejected actions should consume LLM steps, not tool budgets")
     executed = [name for name, _ in fake_tools.calls]
     _assert(executed == [
         "read_workspace_markdown",
@@ -264,10 +302,11 @@ async def _exercise_live_runner_budget_contract(root: Path) -> None:
         if line.strip()
     ]
     rejections = [entry for entry in trace_lines if entry.get("type") == "rejected_action"]
-    _assert(len(rejections) == 3, f"expected three rejected actions, saw {len(rejections)}")
+    _assert(len(rejections) == 4, f"expected four rejected actions, saw {len(rejections)}")
     reasons = " ".join(entry["reason"] for entry in rejections)
     _assert("top level" in reasons, "top-level query rejection missing from trace")
     _assert("arguments.path" in reasons, "workspace missing path rejection missing from trace")
+    _assert("not parseable" in reasons, "malformed JSON rejection missing from trace")
     _assert("budget is exhausted" in reasons, "research budget rejection missing from trace")
     for entry in rejections:
         _assert(entry["research_tool_calls_used"] <= 1, "rejection trace has invalid research counter")
@@ -283,6 +322,9 @@ async def _exercise_live_runner_budget_contract(root: Path) -> None:
     queries_text = (subagent_path / "queries.md").read_text(encoding="utf-8")
     _assert("## Query: paper_bulk_search 1" in queries_text, "runtime should auto-append structured query entry")
     _assert("- Arguments:" in queries_text and "- Top result IDs:" in queries_text, "auto query entry missing fields")
+    papers_text = (subagent_path / "papers.md").read_text(encoding="utf-8")
+    _assert("## Paper: TEST1" in papers_text, "append helper should normalize markdown headings")
+    _assert("## ## Paper:" not in papers_text, "append helper should not duplicate heading markers")
 
 
 async def _exercise_artifact_bundle_contract(root: Path) -> None:
@@ -412,6 +454,108 @@ async def _exercise_artifact_bundle_contract(root: Path) -> None:
     _assert("PACKET-SEED" in final_prompt_text, "finalizer should receive subagent proposal seeds")
     _assert("Query: packet query" in final_prompt_text, "finalizer should receive subagent queries")
     _assert("CRITIQUE-FINDING" in final_prompt_text, "finalizer should receive critique artifacts")
+
+
+async def _exercise_subagent_failure_isolation(root: Path) -> None:
+    config = DeepDiveConfig(
+        workspace_root=root,
+        max_investigators=1,
+        subagents_per_investigator=2,
+        min_personas_per_investigator=2,
+        max_personas_per_investigator=2,
+        require_persona_diversity=False,
+        max_parallel_subagents=1,
+        thinking_profile=ModelProfile(provider="fake", model="thinking", api_key_env="FAKE"),
+        light_profile=ModelProfile(provider="fake", model="light", api_key_env="FAKE"),
+    )
+    orchestrator = DeepDiveOrchestrator(config=config, llm_provider=FakeActionLLM([]))
+    request = DeepDiveRunRequest(
+        run_id="failure isolation",
+        arxiv_url="https://arxiv.org/abs/1706.03762",
+        paper_id="ARXIV:1706.03762",
+        section_titles=["Method"],
+        research_brief="Failure isolation fixture.",
+        research_objective="novelty_ideation",
+        mode="live",
+    )
+    run_root = orchestrator.workspace.prepare_run(request.run_id)
+    investigators = orchestrator._plan_investigators(request, run_root)
+    orchestrator.live_runner = FakeLiveRunnerWithOneFailure()  # type: ignore[assignment]
+    results = await orchestrator._run_all_subagents(investigators, request)
+    _assert(len(results) == 2, "all subagent results should be returned despite one failure")
+    failed = [result for result in results if result.exit_reason == AgentExitReason.ERROR]
+    completed = [result for result in results if result.exit_reason == AgentExitReason.COMPLETED]
+    _assert(len(failed) == 1, "one subagent should be marked as an isolated error")
+    _assert(len(completed) == 1, "sibling subagent should still complete")
+    _assert(failed[0].error == "synthetic subagent failure", "isolated error should be recorded")
+    handoff = (failed[0].workspace_path / "handoff.md").read_text(encoding="utf-8")
+    _assert("# Error Handoff" in handoff, "failed subagent should get an explicit error handoff")
+    _assert("sibling agents and later synthesis stages can continue" in handoff, "handoff should explain continuation")
+
+
+async def _exercise_stage_failure_fallbacks(root: Path) -> None:
+    config = DeepDiveConfig(
+        workspace_root=root,
+        max_investigators=1,
+        subagents_per_investigator=1,
+        min_personas_per_investigator=1,
+        max_personas_per_investigator=1,
+        require_persona_diversity=False,
+        max_parallel_subagents=1,
+        thinking_profile=ModelProfile(provider="fake", model="thinking", api_key_env="FAKE"),
+        light_profile=ModelProfile(provider="fake", model="light", api_key_env="FAKE"),
+    )
+    orchestrator = DeepDiveOrchestrator(config=config, llm_provider=FakeMarkdownFailLLM([]))
+    request = DeepDiveRunRequest(
+        run_id="stage fallback",
+        arxiv_url="https://arxiv.org/abs/1706.03762",
+        paper_id="ARXIV:1706.03762",
+        section_titles=["Novelty"],
+        research_brief="Stage fallback fixture.",
+        research_objective="novelty_ideation",
+        mode="live",
+    )
+    run_root = orchestrator.workspace.prepare_run(request.run_id)
+    investigators = orchestrator._plan_investigators(request, run_root)
+    subagent = investigators[0].subagents[0]
+    orchestrator.workspace.write_markdown(subagent.workspace_path / "handoff.md", "# Hand-Off\n\nFixture evidence.")
+    subagent_results = [
+        AgentRunResult(
+            agent_id=subagent.subagent_id,
+            stage=ResearchStage.SUBAGENT_RESEARCH,
+            exit_reason=AgentExitReason.COMPLETED,
+            tool_calls_used=0,
+            workspace_path=subagent.workspace_path,
+            artifacts=[subagent.workspace_path / "handoff.md"],
+        )
+    ]
+
+    synthesis = await orchestrator._synthesize_investigator_live(investigators[0], subagent_results, request)
+    _assert(synthesis.exit_reason == AgentExitReason.ERROR, "failed synthesis should be isolated")
+    _assert("Investigator Synthesis Failed" in synthesis.artifacts[0].read_text(encoding="utf-8"), "synthesis fallback missing")
+
+    cross_paths = await orchestrator._run_cross_investigator_deep_dive_live(
+        run_root,
+        investigators,
+        [synthesis],
+        request,
+    )
+    _assert(len(cross_paths) == 4, "cross-investigator fallback should still write all artifacts")
+    _assert(
+        all("Failed" in path.read_text(encoding="utf-8").splitlines()[0] for path in cross_paths),
+        "cross-investigator fallback artifact missing failure header",
+    )
+
+    critiques = await orchestrator._run_critiques_live(run_root, [synthesis], request)
+    _assert(len(critiques) == 4, "critique fallback should still write all critique artifacts")
+    _assert(
+        all("failed" in critique.summary for critique in critiques),
+        "critique fallback summaries should report failures",
+    )
+
+    final_path = await orchestrator._finalize_live(run_root, request, investigators, [synthesis], critiques)
+    _assert(final_path.exists(), "finalization fallback should still write final report path")
+    _assert("Finalization Failed" in final_path.read_text(encoding="utf-8"), "finalization fallback missing")
 
 
 def _dynamic_taste(idx: int, roles: list[str], archetype: str) -> dict:
@@ -556,6 +700,10 @@ async def main_async() -> None:
 
     normalized = normalize_model_content('<thought>hidden</thought>```json\n{"action":"final"}\n```')
     _assert(normalized == '{"action":"final"}', "model content normalization should strip thoughts and JSON fences")
+    parsed = parse_model_json_object(
+        'prefix {"action":"append_workspace_markdown","arguments":{"path":"proposal_seeds.md","content":"line one\nline two"}} suffix'
+    )
+    _assert(parsed["arguments"]["content"] == "line one\nline two", "JSON parser should tolerate embedded action objects and literal newlines")
 
     instructions = action_instructions(1200)
     _assert("Invalid search" in instructions, "action prompt should show invalid top-level query example")
@@ -657,6 +805,8 @@ async def main_async() -> None:
         await _exercise_live_runner_budget_contract(Path(tmp) / "runner")
         await _exercise_artifact_bundle_contract(Path(tmp) / "bundles")
         await _exercise_dynamic_roster_contract(Path(tmp) / "dynamic")
+        await _exercise_subagent_failure_isolation(Path(tmp) / "failure-isolation")
+        await _exercise_stage_failure_fallbacks(Path(tmp) / "stage-fallbacks")
 
         orchestrator = DeepDiveOrchestrator(config=config)
         _assert(

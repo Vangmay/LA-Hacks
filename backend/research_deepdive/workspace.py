@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -92,7 +93,8 @@ class WorkspaceManager:
         if path.suffix not in {".md", ".txt"}:
             raise ValueError(f"append_workspace_markdown requires markdown/text: {relative_path}")
         path.parent.mkdir(parents=True, exist_ok=True)
-        prefix = f"\n\n## {heading}\n\n" if heading else "\n\n"
+        normalized_heading = re.sub(r"^#+\s*", "", heading.strip())
+        prefix = f"\n\n## {normalized_heading}\n\n" if normalized_heading else "\n\n"
         with path.open("a", encoding="utf-8") as handle:
             handle.write(prefix + content.rstrip() + "\n")
         return path

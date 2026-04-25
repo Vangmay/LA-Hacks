@@ -563,12 +563,70 @@ class DeepDiveOrchestrator:
 
         async def run_one(plan: SubagentPlan) -> AgentRunResult:
             async with semaphore:
-                if request.mode == "live":
-                    return await self.live_runner.run_subagent(plan, ResearchStage.SUBAGENT_RESEARCH)
-                return await self._run_subagent_budget(plan, request.mode)
+                try:
+                    if request.mode == "live":
+                        return await self.live_runner.run_subagent(plan, ResearchStage.SUBAGENT_RESEARCH)
+                    return await self._run_subagent_budget(plan, request.mode)
+                except Exception as exc:
+                    return self._subagent_error_result(plan, exc)
 
         tasks = [run_one(subagent) for inv in investigators for subagent in inv.subagents]
         return list(await asyncio.gather(*tasks))
+
+    def _subagent_error_result(self, plan: SubagentPlan, exc: Exception) -> AgentRunResult:
+        artifact = plan.workspace_path / "handoff.md"
+        trace_path = plan.workspace_path / "tool_calls.jsonl"
+        raw_trace_path = plan.workspace_path / "raw_tool_results.jsonl"
+        error_text = str(exc) or exc.__class__.__name__
+        body = (
+            "# Error Handoff\n\n"
+            f"- Agent: `{plan.subagent_id}`\n"
+            f"- Exit reason: `{AgentExitReason.ERROR.value}`\n"
+            f"- Error type: `{exc.__class__.__name__}`\n"
+            f"- Error: `{error_text}`\n\n"
+            "This subagent failed after the runtime's local recovery attempts. "
+            "The orchestrator isolated the failure so sibling agents and later "
+            "synthesis stages can continue. Treat this handoff as incomplete and "
+            "inspect any existing markdown/tool traces in this folder before using it as evidence.\n"
+        )
+        self.workspace.write_markdown(artifact, body)
+        if trace_path.exists():
+            with trace_path.open("a", encoding="utf-8") as handle:
+                handle.write(
+                    json.dumps(
+                        {
+                            "type": "agent_error",
+                            "error_type": exc.__class__.__name__,
+                            "error": error_text,
+                        },
+                        default=str,
+                    )
+                    + "\n"
+                )
+        return AgentRunResult(
+            agent_id=plan.subagent_id,
+            stage=ResearchStage.SUBAGENT_RESEARCH,
+            exit_reason=AgentExitReason.ERROR,
+            tool_calls_used=0,
+            workspace_path=plan.workspace_path,
+            artifacts=[
+                path
+                for path in (
+                    artifact,
+                    plan.workspace_path / "findings.md",
+                    plan.workspace_path / "proposal_seeds.md",
+                    plan.workspace_path / "papers.md",
+                    plan.workspace_path / "queries.md",
+                    plan.workspace_path / "memory.md",
+                    trace_path,
+                    raw_trace_path,
+                )
+                if path.exists()
+            ],
+            summary=f"{plan.subagent_id} failed but was isolated; error handoff written.",
+            error=error_text,
+            tool_trace_path=trace_path if trace_path.exists() else None,
+        )
 
     async def _run_subagent_budget(self, plan: SubagentPlan, mode: str) -> AgentRunResult:
         artifact = plan.workspace_path / "handoff.md"
@@ -650,23 +708,35 @@ class DeepDiveOrchestrator:
             + _objective_synthesis_instruction(request.research_objective)
             + " Return markdown only."
         )
-        content = await self.llm.chat_markdown(
-            role=AgentModelRole.INVESTIGATOR,
-            messages=[
-                {"role": "system", "content": plan.system_prompt},
-                {"role": "user", "content": prompt + "\n\n" + "\n\n---\n\n".join(context_packets)},
-            ],
-        )
+        error: str | None = None
+        try:
+            content = await self.llm.chat_markdown(
+                role=AgentModelRole.INVESTIGATOR,
+                messages=[
+                    {"role": "system", "content": plan.system_prompt},
+                    {"role": "user", "content": prompt + "\n\n" + "\n\n---\n\n".join(context_packets)},
+                ],
+            )
+            exit_reason = AgentExitReason.COMPLETED
+        except Exception as exc:
+            error = str(exc) or exc.__class__.__name__
+            content = _fallback_stage_markdown(
+                "Investigator Synthesis Failed",
+                error=error,
+                context="\n\n---\n\n".join(context_packets),
+            )
+            exit_reason = AgentExitReason.ERROR
         self.workspace.write_markdown(artifact, content)
         profile = self.llm.profile_for(AgentModelRole.INVESTIGATOR)
         return AgentRunResult(
             agent_id=plan.investigator_id,
             stage=ResearchStage.INVESTIGATOR_SYNTHESIS,
-            exit_reason=AgentExitReason.COMPLETED,
+            exit_reason=exit_reason,
             tool_calls_used=0,
             workspace_path=plan.workspace_path,
             artifacts=[artifact],
             summary=f"Live investigator synthesis over {len(own_results)} subagent hand-offs.",
+            error=error,
             model_provider=profile.provider,
             model_name=profile.model,
             llm_steps_used=1,
@@ -739,24 +809,31 @@ class DeepDiveOrchestrator:
         ]
         written: list[Path] = []
         for filename, title, instruction in deliverables:
-            content = await self.llm.chat_markdown(
-                role=AgentModelRole.REVISION,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Research objective: `{request.research_objective}`.\n"
-                            + _objective_synthesis_instruction(request.research_objective)
-                            + "\n\n"
-                            f"Write only the `{title}` artifact in detailed markdown. "
-                            f"{instruction}\n\n"
-                            "Use only this evidence bundle:\n\n"
-                            + context
-                        ),
-                    },
-                ],
-            )
+            try:
+                content = await self.llm.chat_markdown(
+                    role=AgentModelRole.REVISION,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {
+                            "role": "user",
+                            "content": (
+                                f"Research objective: `{request.research_objective}`.\n"
+                                + _objective_synthesis_instruction(request.research_objective)
+                                + "\n\n"
+                                f"Write only the `{title}` artifact in detailed markdown. "
+                                f"{instruction}\n\n"
+                                "Use only this evidence bundle:\n\n"
+                                + context
+                            ),
+                        },
+                    ],
+                )
+            except Exception as exc:
+                content = _fallback_stage_markdown(
+                    f"{title} Failed",
+                    error=str(exc) or exc.__class__.__name__,
+                    context=context,
+                )
             written.append(self.workspace.write_markdown(run_root / "shared" / filename, content))
         return written
 
@@ -836,21 +913,30 @@ class DeepDiveOrchestrator:
                 memory_spec=self.prompt_book.memory_spec,
             )
             self.workspace.write_markdown(path / "system_prompt.md", prompt)
-            content = await self.llm.chat_markdown(
-                role=AgentModelRole.CRITIQUE,
-                messages=[
-                    {"role": "system", "content": prompt},
-                    {
-                        "role": "user",
-                        "content": (
-                            "Critique these investigator syntheses. Return markdown using the required critique sections. "
-                            + _objective_critique_instruction(request.research_objective)
-                            + "\n\n"
-                            + synthesis_text
-                        ),
-                    },
-                ],
-            )
+            error: str | None = None
+            try:
+                content = await self.llm.chat_markdown(
+                    role=AgentModelRole.CRITIQUE,
+                    messages=[
+                        {"role": "system", "content": prompt},
+                        {
+                            "role": "user",
+                            "content": (
+                                "Critique these investigator syntheses. Return markdown using the required critique sections. "
+                                + _objective_critique_instruction(request.research_objective)
+                                + "\n\n"
+                                + synthesis_text
+                            ),
+                        },
+                    ],
+                )
+            except Exception as exc:
+                error = str(exc) or exc.__class__.__name__
+                content = _fallback_stage_markdown(
+                    f"{critic_id} Failed",
+                    error=error,
+                    context=synthesis_text,
+                )
             artifact = path / "critique.md"
             self.workspace.write_markdown(artifact, content)
             results.append(
@@ -859,7 +945,11 @@ class DeepDiveOrchestrator:
                     lens=lens,
                     workspace_path=path,
                     artifact_path=artifact,
-                    summary=f"Live critique completed for {lens}.",
+                    summary=(
+                        f"Live critique failed for {lens}; fallback artifact written."
+                        if error
+                        else f"Live critique completed for {lens}."
+                    ),
                 )
             )
         return results
@@ -924,22 +1014,29 @@ class DeepDiveOrchestrator:
         )
         self.workspace.write_markdown(run_root / "final" / "system_prompt.md", prompt)
         artifact_text = self._finalizer_artifact_bundle(run_root, investigators, syntheses, critiques)
-        content = await self.llm.chat_markdown(
-            role=AgentModelRole.FINALIZATION,
-            messages=[
-                {"role": "system", "content": prompt},
-                {
-                    "role": "user",
-                    "content": (
-                        f"Create the final research deep-dive report for {request.arxiv_url}. "
-                        f"There are {len(investigators)} investigators. "
-                        f"The research objective is `{request.research_objective}`. "
-                        "Use only the artifacts below.\n\n"
-                        + artifact_text
-                    ),
-                },
-            ],
-        )
+        try:
+            content = await self.llm.chat_markdown(
+                role=AgentModelRole.FINALIZATION,
+                messages=[
+                    {"role": "system", "content": prompt},
+                    {
+                        "role": "user",
+                        "content": (
+                            f"Create the final research deep-dive report for {request.arxiv_url}. "
+                            f"There are {len(investigators)} investigators. "
+                            f"The research objective is `{request.research_objective}`. "
+                            "Use only the artifacts below.\n\n"
+                            + artifact_text
+                        ),
+                    },
+                ],
+            )
+        except Exception as exc:
+            content = _fallback_stage_markdown(
+                "Finalization Failed",
+                error=str(exc) or exc.__class__.__name__,
+                context=artifact_text,
+            )
         return self.workspace.write_markdown(path, content)
 
     def _cross_investigator_context_bundle(
@@ -1061,6 +1158,22 @@ def build_subagent_context_packet(path: Path, file_char_limit: int = 12000) -> s
         summarize_tool_calls(path / "tool_calls.jsonl"),
     ]
     return "\n".join(sections).strip() + "\n"
+
+
+def _fallback_stage_markdown(title: str, *, error: str, context: str, limit: int = 12000) -> str:
+    excerpt = context[:limit]
+    omitted = len(context) - len(excerpt)
+    suffix = f"\n\n... omitted {omitted} characters from the evidence bundle.\n" if omitted > 0 else ""
+    return (
+        f"# {title}\n\n"
+        "The live model call for this stage failed after configured provider retries. "
+        "The orchestrator wrote this fallback artifact so the run can continue and "
+        "the available evidence remains inspectable.\n\n"
+        f"- Error: `{error}`\n\n"
+        "## Available Evidence Excerpt\n\n"
+        + excerpt
+        + suffix
+    )
 
 
 def summarize_tool_calls(path: Path, max_items: int = 40) -> str:
