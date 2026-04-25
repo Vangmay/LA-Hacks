@@ -6,8 +6,10 @@ tool contracts, per-agent workspaces, configurable budgets, and post-research
 critique/finalization stages.
 """
 
-from .config import DeepDiveConfig
+from .config import DeepDiveConfig, ModelProfile
+from .llm import DeepDiveLLMProvider
 from .models import (
+    AgentModelRole,
     CritiqueResult,
     DeepDiveRunRequest,
     DeepDiveRunResult,
@@ -24,10 +26,13 @@ from .tools import build_default_tool_registry
 __all__ = [
     "CritiqueResult",
     "DeepDiveConfig",
+    "DeepDiveLLMProvider",
     "DeepDiveOrchestrator",
     "DeepDiveRunRequest",
     "DeepDiveRunResult",
+    "AgentModelRole",
     "InvestigatorPlan",
+    "ModelProfile",
     "PromptBook",
     "ResearchTaste",
     "SubagentPlan",

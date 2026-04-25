@@ -5,7 +5,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ResearchStage(str, Enum):
@@ -15,6 +15,19 @@ class ResearchStage(str, Enum):
     INVESTIGATOR_SYNTHESIS = "investigator_synthesis"
     CROSS_INVESTIGATOR_DEEP_DIVE = "cross_investigator_deep_dive"
     CRITIQUE = "critique"
+    FINALIZATION = "finalization"
+
+
+class AgentModelRole(str, Enum):
+    DIRECTOR = "director"
+    INVESTIGATOR = "investigator"
+    SEARCH_SUBAGENT = "search_subagent"
+    EXTRACTION_HELPER = "extraction_helper"
+    FORMATTING_HELPER = "formatting_helper"
+    DEDUPE_HELPER = "dedupe_helper"
+    METADATA_CLASSIFIER = "metadata_classifier"
+    CRITIQUE = "critique"
+    REVISION = "revision"
     FINALIZATION = "finalization"
 
 
@@ -58,6 +71,8 @@ class ResearchTaste(BaseModel):
 
 
 class SubagentPlan(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     subagent_id: str
     investigator_id: str
     section_id: str
@@ -67,6 +82,7 @@ class SubagentPlan(BaseModel):
     system_prompt: str
     allowed_tools: list[str]
     max_tool_calls: int
+    model_role: AgentModelRole = AgentModelRole.SEARCH_SUBAGENT
 
 
 class InvestigatorPlan(BaseModel):
@@ -79,6 +95,8 @@ class InvestigatorPlan(BaseModel):
 
 
 class AgentRunResult(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     agent_id: str
     stage: ResearchStage
     exit_reason: AgentExitReason
@@ -87,6 +105,10 @@ class AgentRunResult(BaseModel):
     artifacts: list[Path] = Field(default_factory=list)
     summary: str = ""
     error: Optional[str] = None
+    model_provider: Optional[str] = None
+    model_name: Optional[str] = None
+    llm_steps_used: int = 0
+    tool_trace_path: Optional[Path] = None
 
 
 class CritiqueResult(BaseModel):
