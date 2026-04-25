@@ -41,9 +41,9 @@
   subagent.
 - [x] Add a final-report novelty quality gate and repair pass so a successful
   run cannot silently stop at too few detailed spinoff proposals.
-- [ ] In progress: run the monitored live Gemma novelty E2E: arXiv `1706.03762`, objective
+- [x] Run the monitored live Gemma novelty E2E: arXiv `1706.03762`, objective
   `novelty_ideation`, 3 investigators, 3 subagents each.
-- [ ] Commit the latest fix chunk and leave generated live artifacts untracked.
+- [x] Commit the latest fix chunks and leave generated live artifacts untracked.
 
 ## Active Review Notes
 
@@ -59,6 +59,11 @@
   only expanded 4 detailed `Spinoff Proposal` sections despite the requested
   minimum of 8. Added runtime final-report quality gates and a repair call for
   novelty mode before accepting the final artifact.
+- Final live audit passed after repair: dynamic planner accepted all 3
+  investigator rosters, all 9 subagents wrote handoffs and substantive
+  `queries.md`/`papers.md`/`findings.md`/`proposal_seeds.md`, all 4 critique
+  artifacts were written, and the current final report has 8 detailed spinoff
+  proposals with the required novelty sections and no quality-gate warning.
 
 ## Goal
 
