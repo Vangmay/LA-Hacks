@@ -35,6 +35,29 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--semantic-scholar-interval", type=float, default=1.2)
     parser.add_argument("--semantic-scholar-retries", type=int, default=4)
     parser.add_argument("--serpapi-max-requests", type=int, default=50)
+    parser.add_argument("--thinking-provider", default=settings.deepdive_thinking_provider)
+    parser.add_argument("--thinking-model", default=settings.deepdive_thinking_model)
+    parser.add_argument("--thinking-api-key-env", default=settings.deepdive_thinking_api_key_env)
+    parser.add_argument("--thinking-base-url", default=settings.deepdive_thinking_base_url)
+    parser.add_argument(
+        "--thinking-reasoning-effort",
+        default=settings.deepdive_thinking_reasoning_effort,
+    )
+    parser.add_argument(
+        "--thinking-min-interval",
+        type=float,
+        default=settings.deepdive_thinking_min_interval_seconds,
+    )
+    parser.add_argument("--light-provider", default=settings.deepdive_light_provider)
+    parser.add_argument("--light-model", default=settings.deepdive_light_model)
+    parser.add_argument("--light-api-key-env", default=settings.deepdive_light_api_key_env)
+    parser.add_argument("--light-base-url", default=settings.deepdive_light_base_url)
+    parser.add_argument("--light-reasoning-effort", default=settings.deepdive_light_reasoning_effort)
+    parser.add_argument(
+        "--light-min-interval",
+        type=float,
+        default=settings.deepdive_light_min_interval_seconds,
+    )
     parser.add_argument("--report-detail-level", default=settings.deepdive_report_detail_level)
     parser.add_argument(
         "--min-spinoff-proposals",
@@ -76,6 +99,27 @@ async def main_async() -> None:
 
     sections = args.sections or ["Core method", "Experiments", "Related work and novelty"]
     run_id = args.run_id or "live_" + datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    base_config = DeepDiveConfig()
+    thinking_profile = base_config.thinking_profile.model_copy(
+        update={
+            "provider": args.thinking_provider,
+            "model": args.thinking_model,
+            "api_key_env": args.thinking_api_key_env,
+            "base_url": args.thinking_base_url,
+            "reasoning_effort": args.thinking_reasoning_effort,
+            "min_interval_seconds": args.thinking_min_interval,
+        }
+    )
+    light_profile = base_config.light_profile.model_copy(
+        update={
+            "provider": args.light_provider,
+            "model": args.light_model,
+            "api_key_env": args.light_api_key_env,
+            "base_url": args.light_base_url,
+            "reasoning_effort": args.light_reasoning_effort,
+            "min_interval_seconds": args.light_min_interval,
+        }
+    )
     config = DeepDiveConfig(
         max_investigators=args.max_investigators,
         subagents_per_investigator=args.subagents_per_investigator,
@@ -93,6 +137,8 @@ async def main_async() -> None:
         final_report_min_evidence_items_per_proposal=args.min_evidence_items_per_proposal,
         final_report_min_open_questions=args.min_open_questions,
         critique_min_points_per_lens=args.critique_min_points,
+        thinking_profile=thinking_profile,
+        light_profile=light_profile,
     )
     require_key(config.thinking_profile.api_key_env)
     require_key(config.light_profile.api_key_env)

@@ -76,6 +76,24 @@ async def main_async() -> None:
     normalized = normalize_model_content('<thought>hidden</thought>```json\n{"action":"final"}\n```')
     _assert(normalized == '{"action":"final"}', "model content normalization should strip thoughts and JSON fences")
 
+    default_config = DeepDiveConfig()
+    _assert(
+        default_config.thinking_profile.model == "gemini-3.1-pro-preview",
+        "thinking profile should default to Gemini 3.1 Pro",
+    )
+    _assert(
+        default_config.thinking_profile.reasoning_effort == "high",
+        "thinking profile should use high reasoning by default",
+    )
+    _assert(
+        default_config.light_profile.model == "gemini-3.1-pro-preview",
+        "light profile should default to Gemini 3.1 Pro",
+    )
+    _assert(
+        default_config.light_profile.reasoning_effort == "medium",
+        "light profile should use medium reasoning by default",
+    )
+
     with tempfile.TemporaryDirectory() as tmp:
         config = DeepDiveConfig(
             workspace_root=Path(tmp),
@@ -98,8 +116,9 @@ async def main_async() -> None:
             light_profile=ModelProfile(
                 provider="gemini_openai",
                 model="light-test-model",
-                api_key_env="GEMMA_API_KEY",
+                api_key_env="GEMINI_API_KEY",
                 base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+                reasoning_effort="medium",
             ),
         )
         provider = DeepDiveLLMProvider(config)

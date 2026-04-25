@@ -1,53 +1,53 @@
-# Extensive Deep-Dive Report Prompt Refinement
+# Gemini 3.1 Pro Deep-Dive E2E
 
 ## Goal
 
-Ensure the research deep-dive final report and critique artifacts are extensive, organized, and synthesis-heavy rather than short summaries. The finalizer should combine all investigator, subagent, and critique ideas into a deep report, especially for `novelty_ideation` where spinoff proposals are the main product.
+Route the research deep-dive pipeline through `gemini-3.1-pro-preview` instead
+of Gemma, using high reasoning for director/investigator/critique/revision/
+finalization roles and medium reasoning for search/tool-heavy agents. Then run
+an actual novelty-ideation E2E on `Attention Is All You Need` and inspect that
+the final output contains substantive spinoff novelty proposals.
 
 ## Constraints
 
-- Keep depth controls configurable, not hidden magic constants.
-- Keep changes scoped to the deep-dive subsystem, runner, tests, and task notes.
+- Keep model names, reasoning effort, budgets, rate limits, and agent counts
+  configurable.
 - Do not disturb the v0.4 review pipeline.
-- Preserve uncertainty and evidence discipline; extensive does not mean padded or hallucinated.
-- Make critique artifacts substantial and useful, not one-line pass/fail summaries.
+- Do not commit `.env`, generated caches, or live output artifacts.
+- Respect Semantic Scholar's 1 request/second keyed limit.
+- Keep SerpAPI usage sparse; this test should primarily use Semantic Scholar.
+- Do not fake the run or substitute dry-run artifacts.
 
 ## Plan
 
-- [x] Inspect current finalizer and critique prompts for depth constraints or missing detail requirements.
-- [x] Add configurable report-depth settings for finalization and critique.
-- [x] Thread depth specs into finalizer and critique prompts.
-- [x] Update prompts to require extensive, structured synthesis, proposal details, critique integration, and evidence/risk matrices.
-- [x] Add runner flags for depth-related settings.
-- [x] Add smoke coverage that finalizer/critic prompts include extensiveness requirements.
-- [x] Run focused and review-regression verification.
-- [x] Document results and commit.
+- [x] Inspect current deep-dive model routing, config defaults, and CLI flags.
+- [x] Change defaults/config wiring so Gemini 3.1 Pro is the configured provider
+  for both thinking and search roles, with role-specific reasoning effort.
+- [x] Update tests/docs/examples that assert or document model routing.
+- [x] Run focused offline verification.
+- [ ] Run the live novelty-ideation E2E on `Attention Is All You Need` with 3
+  investigator zones and 9 total search personalities.
+- [ ] Inspect logs, tool traces, and final report for API/tool failures and
+  actual spinoff novelty proposals.
+- [x] Document verification results and commit code changes only.
 
 ## Review
 
 ### What changed
 
-- Added configurable depth settings:
-  - `DEEPDIVE_REPORT_DETAIL_LEVEL`
-  - `DEEPDIVE_FINAL_REPORT_MIN_SPINOFF_PROPOSALS`
-  - `DEEPDIVE_FINAL_REPORT_MIN_EVIDENCE_ITEMS_PER_PROPOSAL`
-  - `DEEPDIVE_FINAL_REPORT_MIN_OPEN_QUESTIONS`
-  - `DEEPDIVE_CRITIQUE_MIN_POINTS_PER_LENS`
-- Added matching live-runner flags:
-  - `--report-detail-level`
-  - `--min-spinoff-proposals`
-  - `--min-evidence-items-per-proposal`
-  - `--min-open-questions`
-  - `--critique-min-points`
-- Finalizer prompt now has an explicit `Report Depth Contract`.
-- Critique prompt now has an explicit `Critique Depth Contract`.
-- Novelty final reports now require extensive spinoff proposal structure:
-  title, novelty claim, mechanism, closest-prior/future collision risks,
-  evidence, validation path, falsification criteria, contribution type, and
-  confidence.
-- Literature-review reports are also forced to be extensive, but by expanding
-  evidence coverage, contradictions, bucket comparisons, and search plans
-  instead of inventing proposals.
+- Deep-dive defaults now route both thinking and light/search profiles through
+  Google's OpenAI-compatible Gemini endpoint using `GEMINI_API_KEY`.
+- Thinking roles default to `gemini-3.1-pro-preview` with
+  `reasoning_effort=high`.
+- Search/tool-heavy roles default to `gemini-3.1-pro-preview` with
+  `reasoning_effort=medium`.
+- The live runner now exposes explicit profile override flags for provider,
+  model, API-key env var, base URL, reasoning effort, and profile pacing.
+- Reasoning effort is sent through `extra_body` so the current installed
+  `openai` package can pass the field without requiring a newer typed SDK
+  signature.
+- Env examples and model-routing docs now describe Gemini 3.1 Pro as the
+  default deep-dive model path.
 
 ### Verification commands
 
@@ -63,4 +63,13 @@ Ensure the research deep-dive final report and critique artifacts are extensive,
 - `python backend/scripts/test_review_tex_flow.py`
 - `git diff --check`
 
-All listed checks passed.
+All listed offline checks passed.
+
+### Live E2E status
+
+The live Gemini preflight reached Google successfully but returned `429
+RESOURCE_EXHAUSTED` before any deep-dive run could start. The response reported
+free-tier request and input-token quota limits of `0` for `gemini-3.1-pro`.
+Because the requested E2E must not be faked or substituted with Gemma, the
+actual 9-personality novelty-ideation run is blocked until the configured
+Google project/key has quota for `gemini-3.1-pro-preview`.

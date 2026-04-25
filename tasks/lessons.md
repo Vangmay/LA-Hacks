@@ -36,3 +36,7 @@
   contracts. Section names alone invite short summaries; prompts must require
   extensive synthesis, proposal-level fields, evidence counts, critique
   integration, and clear evidence bottlenecks when depth is not possible.
+- Before launching expensive live model-orchestration runs, make a tiny
+  provider preflight with the exact configured model, base URL, API-key env var,
+  and reasoning-effort setting. This catches SDK-signature problems and provider
+  quota blocks before a long multi-agent run begins.

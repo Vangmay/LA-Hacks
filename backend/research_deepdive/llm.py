@@ -99,8 +99,7 @@ class DeepDiveLLMProvider:
         }
         if require_json:
             kwargs["response_format"] = {"type": "json_object"}
-        if profile.reasoning_effort:
-            kwargs["reasoning_effort"] = profile.reasoning_effort
+        _attach_reasoning_effort(kwargs, profile)
 
         response = await self._chat_completion(profile, kwargs)
         content = normalize_model_content(response.choices[0].message.content or "")
@@ -125,8 +124,7 @@ class DeepDiveLLMProvider:
             "messages": messages,
             "max_tokens": profile.max_output_tokens,
         }
-        if profile.reasoning_effort:
-            kwargs["reasoning_effort"] = profile.reasoning_effort
+        _attach_reasoning_effort(kwargs, profile)
         response = await self._chat_completion(profile, kwargs)
         return strip_provider_thoughts(response.choices[0].message.content or "")
 
@@ -195,3 +193,12 @@ def normalize_model_content(content: str) -> str:
     if fenced:
         return fenced.group(1).strip()
     return cleaned
+
+
+def _attach_reasoning_effort(kwargs: dict[str, Any], profile: ModelProfile) -> None:
+    """Attach reasoning effort without depending on the local SDK signature."""
+
+    if not profile.reasoning_effort:
+        return
+    extra_body = kwargs.setdefault("extra_body", {})
+    extra_body["reasoning_effort"] = profile.reasoning_effort
