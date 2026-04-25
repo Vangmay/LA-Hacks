@@ -11,3 +11,10 @@
 - Tool prompts are part of the product surface. Agent-visible tool specs need
   exact purpose, inputs, outputs, endpoint behavior, examples, and fallback
   guidance, not just tool names.
+- Deep-dive orchestration must separate reasoning roles from search/helper
+  roles in config. Thinking models should own Director, Investigator, Critique,
+  Revision, and Finalization; lightweight models should own tool-heavy search,
+  extraction, dedupe, formatting, and metadata classification.
+- Live pipeline tests should expose provider/tool/schema problems directly.
+  Do not hide those issues behind silent fallback models, skipped stages, or
+  best-effort placeholder artifacts.

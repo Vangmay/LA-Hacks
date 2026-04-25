@@ -11,14 +11,18 @@ BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 
 from research_deepdive import (  # noqa: E402
+    AgentModelRole,
     DeepDiveConfig,
+    DeepDiveLLMProvider,
     DeepDiveOrchestrator,
     DeepDiveRunRequest,
+    ModelProfile,
     PromptBook,
     build_default_tool_registry,
     generate_research_tastes,
 )
 from research_deepdive.models import ResearchStage  # noqa: E402
+from research_deepdive.llm import normalize_model_content  # noqa: E402
 
 
 def _assert(condition: bool, message: str) -> None:
@@ -69,6 +73,9 @@ async def main_async() -> None:
     for role in ("constructive", "skeptical", "prior_work", "recent_or_future_work"):
         _assert(role in roles, f"missing persona diversity role: {role}")
 
+    normalized = normalize_model_content('<thought>hidden</thought>```json\n{"action":"final"}\n```')
+    _assert(normalized == '{"action":"final"}', "model content normalization should strip thoughts and JSON fences")
+
     with tempfile.TemporaryDirectory() as tmp:
         config = DeepDiveConfig(
             workspace_root=Path(tmp),
@@ -78,6 +85,26 @@ async def main_async() -> None:
             max_personas_per_investigator=7,
             subagent_max_tool_calls=7,
             max_parallel_subagents=2,
+            thinking_profile=ModelProfile(
+                provider="openai",
+                model="thinking-test-model",
+                api_key_env="OPENAI_API_KEY",
+            ),
+            light_profile=ModelProfile(
+                provider="gemini_openai",
+                model="light-test-model",
+                api_key_env="GEMMA_API_KEY",
+                base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+            ),
+        )
+        provider = DeepDiveLLMProvider(config)
+        _assert(
+            provider.profile_for(AgentModelRole.INVESTIGATOR).model == "thinking-test-model",
+            "investigator should use thinking model profile",
+        )
+        _assert(
+            provider.profile_for(AgentModelRole.SEARCH_SUBAGENT).model == "light-test-model",
+            "search subagent should use light model profile",
         )
         orchestrator = DeepDiveOrchestrator(config=config)
         result = await orchestrator.run(
@@ -106,7 +133,12 @@ async def main_async() -> None:
             for subagent in investigator.subagents:
                 _assert(subagent.max_tool_calls == 7, "tool-call budget should come from config")
                 _assert((subagent.workspace_path / "memory.md").exists(), "subagent memory missing")
+                _assert((subagent.workspace_path / "queries.md").exists(), "subagent queries memory missing")
+                _assert((subagent.workspace_path / "papers.md").exists(), "subagent papers memory missing")
+                _assert((subagent.workspace_path / "findings.md").exists(), "subagent findings memory missing")
+                _assert((subagent.workspace_path / "tool_calls.jsonl").exists(), "subagent tool trace missing")
                 _assert((subagent.workspace_path / "handoff.md").exists(), "subagent handoff missing")
+                _assert(subagent.model_role == AgentModelRole.SEARCH_SUBAGENT, "subagent should use light model role")
                 prompt = (subagent.workspace_path / "system_prompt.md").read_text(encoding="utf-8")
                 _assert("Shared Tool Surface" in prompt, "subagent prompt missing tool spec")
                 _assert("Concrete Tool Registry" in prompt, "subagent prompt missing concrete tool registry")
