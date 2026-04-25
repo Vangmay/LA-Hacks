@@ -1,6 +1,7 @@
-"""Mocked backend flow test for arXiv TeX review submission and orchestration.
+"""Offline flow test for arXiv TeX review submission and orchestration.
 
-This test makes no network calls and no OpenAI calls.
+This test makes no network calls and no OpenAI calls. It patches only the
+external/LLM boundaries of the v0.4 ResearchAtom pipeline.
 """
 from __future__ import annotations
 
@@ -22,7 +23,23 @@ from agents.base import AgentResult  # noqa: E402
 from core.event_bus import event_bus  # noqa: E402
 from core.job_store import job_store  # noqa: E402
 from core.orchestrators.review import ReviewOrchestrator  # noqa: E402
-from models import ClaimUnit  # noqa: E402
+from models import (  # noqa: E402
+    AtomImportance,
+    Challenge,
+    ChallengeType,
+    CheckKind,
+    CheckResult,
+    CheckStatus,
+    Rebuttal,
+    RebuttalType,
+    ResearchAtom,
+    ResearchAtomType,
+    ResearchGraph,
+    ResearchGraphEdge,
+    ResearchGraphEdgeType,
+    Severity,
+    SourceSpan,
+)
 
 
 SAMPLE_TEX = r"""
@@ -44,134 +61,147 @@ def _assert(condition: bool, message: str) -> None:
         raise AssertionError(message)
 
 
-class FakeClaimExtractorAgent:
+def _atom(atom_id: str, atom_type: ResearchAtomType, text: str, section: str) -> ResearchAtom:
+    return ResearchAtom(
+        atom_id=atom_id,
+        paper_id="1706.03762",
+        atom_type=atom_type,
+        text=text,
+        section_id=f"sec_{section.lower()}",
+        section_heading=section,
+        source_span=SourceSpan(
+            paper_id="1706.03762",
+            section_id=f"sec_{section.lower()}",
+            raw_excerpt=text,
+            match_confidence=1.0,
+        ),
+        extraction_confidence=0.95,
+        importance=AtomImportance.HIGH,
+    )
+
+
+class FakeAtomExtractorAgent:
     async def run(self, _context):
-        claims = [
-            ClaimUnit(
-                claim_id="claim_001",
-                text="For every $x \\in \\mathbb{R}$, $x^2 \\ge 0$.",
-                claim_type="theorem",
-                section="Foundations",
-                equations=["x^2 \\ge 0"],
-                citations=[],
-                dependencies=[],
-            ).model_dump(),
-            ClaimUnit(
-                claim_id="claim_002",
-                text="The minimum value is attained at $x=0$.",
-                claim_type="proposition",
-                section="Consequence",
-                equations=[],
-                citations=[],
-                dependencies=[],
-            ).model_dump(),
+        atoms = [
+            _atom(
+                "atom_001",
+                ResearchAtomType.THEOREM,
+                "For every $x \\in \\mathbb{R}$, $x^2 \\ge 0$.",
+                "Foundations",
+            ),
+            _atom(
+                "atom_002",
+                ResearchAtomType.PROPOSITION,
+                "The minimum value is attained at $x=0$.",
+                "Consequence",
+            ),
         ]
         return AgentResult(
-            agent_id="claim_extractor",
-            claim_id=None,
+            agent_id="atom_extractor",
             status="success",
-            output={"claims": claims},
+            output={"paper_id": "1706.03762", "atoms": [a.model_dump() for a in atoms], "warnings": []},
+            confidence=0.95,
+        )
+
+
+class FakeGraphBuilderAgent:
+    async def run(self, context):
+        atoms = context.extra["atoms"]
+        graph = ResearchGraph(
+            paper_id="1706.03762",
+            atom_ids=[a.atom_id for a in atoms],
+            edges=[
+                ResearchGraphEdge(
+                    edge_id="edge_001",
+                    source_id="atom_002",
+                    target_id="atom_001",
+                    edge_type=ResearchGraphEdgeType.DEPENDS_ON,
+                    rationale="minimum statement depends on nonnegativity theorem",
+                    confidence=0.9,
+                )
+            ],
+            roots=["atom_001"],
+            topological_order=["atom_001", "atom_002"],
+        )
+        return AgentResult(
+            agent_id="graph_builder",
+            status="success",
+            output={"graph": graph.model_dump()},
             confidence=0.9,
         )
 
 
-class FakeDAGBuilderAgent:
+def fake_algebraic(atom, _paper):
+    return CheckResult(
+        check_id=f"check_alg_{atom.atom_id}",
+        atom_id=atom.atom_id,
+        kind=CheckKind.ALGEBRAIC_SANITY,
+        status=CheckStatus.PASSED,
+        summary="mock algebraic pass",
+        confidence=0.9,
+    )
+
+
+def fake_citation(atom):
+    return CheckResult(
+        check_id=f"check_cite_{atom.atom_id}",
+        atom_id=atom.atom_id,
+        kind=CheckKind.CITATION_CONTEXT,
+        status=CheckStatus.NOT_APPLICABLE,
+        summary="no citations",
+        confidence=0.8,
+    )
+
+
+async def fake_numeric(atom):
+    return CheckResult(
+        check_id=f"check_num_{atom.atom_id}",
+        atom_id=atom.atom_id,
+        kind=CheckKind.NUMERIC_COUNTEREXAMPLE_PROBE,
+        status=CheckStatus.NO_COUNTEREXAMPLE_FOUND,
+        summary="mock numeric pass",
+        confidence=0.7,
+    )
+
+
+class FakeChallengeAgent:
     async def run(self, context):
-        claims = context.extra["claims"]
-        claims[1]["dependencies"] = ["claim_001"]
-        return AgentResult(
-            agent_id="dag_builder",
-            claim_id=None,
-            status="success",
-            output={
-                "edges": [{"from": "claim_002", "to": "claim_001"}],
-                "adjacency": {"claim_001": [], "claim_002": ["claim_001"]},
-                "roots": ["claim_001"],
-                "topological_order": ["claim_001", "claim_002"],
-            },
-            confidence=0.9,
+        challenge = Challenge(
+            challenge_id=f"ch_{context.atom.atom_id}_001",
+            atom_id=context.atom.atom_id,
+            attacker_agent="fake_challenge",
+            challenge_type=ChallengeType.PROOF_GAP,
+            severity=Severity.LOW,
+            challenge_text="mock low severity challenge",
+            confidence=0.5,
         )
-
-
-class FakeSymbolicVerifierAgent:
-    agent_id = "symbolic_verifier"
-
-    async def run(self, context):
         return AgentResult(
-            agent_id=self.agent_id,
-            claim_id=context.claim.claim_id,
+            agent_id="challenge_agent",
             status="success",
-            output={
-                "tier": "symbolic",
-                "status": "passed",
-                "evidence": "mock symbolic pass",
-                "confidence": 0.9,
-            },
-            confidence=0.9,
-        )
-
-
-class FakeNumericAdversaryAgent:
-    agent_id = "numeric_adversary"
-
-    async def run(self, context):
-        return AgentResult(
-            agent_id=self.agent_id,
-            claim_id=context.claim.claim_id,
-            status="inconclusive",
-            output={
-                "tier": "numeric",
-                "status": "inconclusive",
-                "evidence": "mock numeric skip",
-                "confidence": 0.3,
-            },
-            confidence=0.3,
-        )
-
-
-class FakeAttackerAgent:
-    agent_id = "attacker"
-
-    async def run(self, context):
-        claim_id = context.claim.claim_id
-        return AgentResult(
-            agent_id=self.agent_id,
-            claim_id=claim_id,
-            status="success",
-            output={
-                "challenges": [
-                    {
-                        "challenge_id": f"ch_{claim_id}_001",
-                        "claim_id": claim_id,
-                        "attacker_agent": "attacker",
-                        "challenge_text": "mock challenge",
-                        "supporting_evidence": ["mock evidence"],
-                    }
-                ]
-            },
+            output={"challenges": [challenge.model_dump()]},
             confidence=0.8,
         )
 
 
-class FakeDefenderAgent:
-    agent_id = "defender"
-
+class FakeDefenseAgent:
     async def run(self, context):
+        rebuttals = [
+            Rebuttal(
+                rebuttal_id=f"rb_{challenge.challenge_id}",
+                challenge_id=challenge.challenge_id,
+                atom_id=context.atom.atom_id,
+                defender_agent="fake_defense",
+                response_type=RebuttalType.RESOLVES,
+                rebuttal_text="mock rebuttal resolves the challenge",
+                confidence=0.8,
+            ).model_dump()
+            for challenge in context.challenges
+        ]
         return AgentResult(
-            agent_id=self.agent_id,
-            claim_id=context.claim.claim_id,
+            agent_id="defense_agent",
             status="success",
-            output={
-                "rebuttals": [
-                    {
-                        "challenge_id": challenge["challenge_id"],
-                        "rebuttal_text": "mock rebuttal",
-                        "supporting_evidence": ["mock support"],
-                    }
-                    for challenge in context.extra["challenges"]
-                ]
-            },
-            confidence=0.7,
+            output={"rebuttals": rebuttals},
+            confidence=0.8,
         )
 
 
@@ -242,21 +272,23 @@ async def test_report_routes_require_completed_job() -> None:
     )
 
 
-async def test_orchestrator_mocked_prompt_2_4() -> None:
+async def test_orchestrator_mocked_atom_pipeline() -> None:
     originals = {
-        "ClaimExtractorAgent": review_orchestrator_module.ClaimExtractorAgent,
-        "DAGBuilderAgent": review_orchestrator_module.DAGBuilderAgent,
-        "SymbolicVerifierAgent": review_orchestrator_module.SymbolicVerifierAgent,
-        "NumericAdversaryAgent": review_orchestrator_module.NumericAdversaryAgent,
-        "AttackerAgent": review_orchestrator_module.AttackerAgent,
-        "DefenderAgent": review_orchestrator_module.DefenderAgent,
+        "AtomExtractorAgent": review_orchestrator_module.AtomExtractorAgent,
+        "GraphBuilderAgent": review_orchestrator_module.GraphBuilderAgent,
+        "run_algebraic_sanity": review_orchestrator_module.run_algebraic_sanity,
+        "run_citation_probe": review_orchestrator_module.run_citation_probe,
+        "run_numeric_probe": review_orchestrator_module.run_numeric_probe,
+        "ChallengeAgent": review_orchestrator_module.ChallengeAgent,
+        "DefenseAgent": review_orchestrator_module.DefenseAgent,
     }
-    review_orchestrator_module.ClaimExtractorAgent = FakeClaimExtractorAgent
-    review_orchestrator_module.DAGBuilderAgent = FakeDAGBuilderAgent
-    review_orchestrator_module.SymbolicVerifierAgent = FakeSymbolicVerifierAgent
-    review_orchestrator_module.NumericAdversaryAgent = FakeNumericAdversaryAgent
-    review_orchestrator_module.AttackerAgent = FakeAttackerAgent
-    review_orchestrator_module.DefenderAgent = FakeDefenderAgent
+    review_orchestrator_module.AtomExtractorAgent = FakeAtomExtractorAgent
+    review_orchestrator_module.GraphBuilderAgent = FakeGraphBuilderAgent
+    review_orchestrator_module.run_algebraic_sanity = fake_algebraic
+    review_orchestrator_module.run_citation_probe = fake_citation
+    review_orchestrator_module.run_numeric_probe = fake_numeric
+    review_orchestrator_module.ChallengeAgent = FakeChallengeAgent
+    review_orchestrator_module.DefenseAgent = FakeDefenseAgent
 
     with tempfile.TemporaryDirectory() as tmp:
         tex_path = Path(tmp) / "assembled.tex"
@@ -276,30 +308,38 @@ async def test_orchestrator_mocked_prompt_2_4() -> None:
 
     job = job_store.get(job_id)
     _assert(job["status"] == "complete", f"job did not complete: {job}")
-    _assert(job["parser_output"]["title"] == "Mock Source Paper", "parser output missing")
-    _assert(job["total_claims"] == 2, "wrong claim count")
-    _assert(job["dag"]["roots"] == ["claim_001"], "wrong roots")
-    _assert(job["dag_snapshot"]["edges"] == [{"from": "claim_002", "to": "claim_001"}], "bad dag")
-    _assert(len(job["review_results"]["claim_001"]["verification_results"]) == 2, "verifiers missing")
-    _assert(job["review_results"]["claim_001"]["challenges"], "challenge missing")
-    _assert(job["review_results"]["claim_001"]["rebuttals"], "rebuttal missing")
+    _assert(job["parsed_paper"]["title"] == "Mock Source Paper", "parsed paper missing")
+    _assert(job["total_atoms"] == 2, "wrong atom count")
+    _assert(job["graph"]["roots"] == ["atom_001"], "wrong graph roots")
+    _assert(len(job["graph_snapshot"]["edges"]) == 1, "bad graph snapshot")
+    _assert(len(job["verdicts"]) == 2, "verdicts missing")
+    _assert(job["report"]["summary"]["total_atoms"] == 2, "report summary wrong")
+    status = await review_api.get_status(job_id)
+    _assert(status["completed_atoms"] == 2, "status completed_atoms wrong")
+    atom_detail = await review_api.get_atom(job_id, "atom_001")
+    _assert(atom_detail["atom"]["atom_id"] == "atom_001", "atom detail wrong")
+
     event_types = [event.event_type.value for event in event_bus._history[job_id]]
-    _assert("node_created" in event_types, "node event missing")
-    _assert("tier_complete" in event_types, "tier event missing")
-    _assert("challenge_issued" in event_types, "challenge event missing")
-    _assert("rebuttal_issued" in event_types, "rebuttal event missing")
-    _assert("review_complete" in event_types, "complete event missing")
+    for expected in (
+        "atom_created",
+        "check_complete",
+        "challenge_issued",
+        "rebuttal_issued",
+        "verdict_emitted",
+        "job_complete",
+    ):
+        _assert(expected in event_types, f"{expected} event missing")
 
 
 async def main_async() -> None:
     await test_review_route_source_storage()
     await test_report_routes_require_completed_job()
-    await test_orchestrator_mocked_prompt_2_4()
+    await test_orchestrator_mocked_atom_pipeline()
 
 
 def main() -> int:
     asyncio.run(main_async())
-    print("mocked review TeX flow tests OK")
+    print("mocked ResearchAtom review flow tests OK")
     return 0
 
 

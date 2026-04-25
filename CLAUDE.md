@@ -1,350 +1,154 @@
 # CLAUDE.md — PaperCourt
 
-This file tells Claude Code how to work in this repository.
-Read it fully before touching any file.
+Read this before changing code in this repository.
 
----
+## Current Implemented Design
 
-## What This Project Is
+PaperCourt v0.4 review mode is a TeX-first, source-grounded pipeline:
 
-PaperCourt is a multi-agent system for engaging with research papers across four modes:
+`arXiv URL/id -> e-print source bundle -> assembled TeX -> ParsedPaper -> ResearchAtom -> ResearchGraph -> CheckResult -> Challenge/Rebuttal -> AtomVerdict -> ReviewReport`
 
-- **Review Mode** — adversarial attacker/defender agents verify each claim in a paper, cascade failures through a dependency DAG, produce a verdict report
-- **Reader Mode** — per-claim explanations, prerequisite mapping, exercises, Socratic tutor
-- **PoC Mode** — filters empirically testable claims, generates runnable implementation scaffolds, ingests experiment results, produces a reproducibility report
-- **Research Mode** — autonomous literature retrieval, knowledge graph construction, gap detection, hypothesis generation, self-review loop
-
-All four modes share one backend pipeline: arXiv URL/id → e-print source bundle → TexParserAgent → ClaimExtractorAgent → DAGBuilderAgent → mode-specific agents.
-
-The live DAG is the primary UI — nodes update in real time via SSE as agents run.
-
----
+The old `ClaimUnit`, `ClaimExtractorAgent`, `DAGBuilderAgent`,
+`TexParserAgent`, verifier-agent stack, and `utils.arxiv` path are removed.
+Do not reintroduce compatibility fallbacks for those names.
 
 ## Stack
 
-| Layer                 | Technology                                                 |
-| --------------------- | ---------------------------------------------------------- |
-| Backend               | Python 3.11, FastAPI, Pydantic v2, uvicorn                 |
-| Async                 | asyncio, asyncio.gather, sse-starlette                     |
-| LLM                   | OpenAI API (gpt-4o) via `openai.AsyncOpenAI`               |
-| TeX ingestion         | arXiv e-print source download + safe TeX assembly          |
-| Symbolic verification | SymPy                                                      |
-| Numeric verification  | SciPy, NumPy                                               |
-| Embeddings            | sentence-transformers (all-MiniLM-L6-v2)                   |
-| Vector store          | ChromaDB                                                   |
-| Graph                 | NetworkX                                                   |
-| Frontend              | React 18 + Vite, Tailwind CSS, React Flow, React Router v6 |
-| SSE client            | Native browser EventSource API                             |
+| Layer | Technology |
+| --- | --- |
+| Backend | Python 3.11, FastAPI, Pydantic v2, uvicorn |
+| Async | asyncio, sse-starlette |
+| LLM | OpenAI API via `openai.AsyncOpenAI` and `settings.openai_model` |
+| TeX ingestion | arXiv e-print source download + safe TeX assembly |
+| Parser | `backend/ingestion/tex_parser.py` |
+| Symbolic check | SymPy service in `backend/checks/algebraic_sanity.py` |
+| Numeric check | SciPy/NumPy service in `backend/checks/numeric_probe.py` |
+| Frontend | React 18 + Vite, Tailwind CSS, React Flow |
 
----
+## Backend Layout
 
-## Directory Structure and Ownership
-
-```
-papercourt/
-├── backend/
-│   ├── main.py              # FastAPI app, mounts all routers — do not restructure
-│   ├── config.py            # Settings via pydantic-settings, loads .env
-│   ├── models/              # Pydantic models — Person A owns, everyone imports
-│   ├── agents/
-│   │   ├── base.py          # BaseAgent, AgentContext, AgentResult — do not modify without coordinating
-│   │   ├── tex_parser.py    # Person A
-│   │   ├── claim_extractor.py  # Person A
-│   │   ├── dag_builder.py   # Person A
-│   │   ├── symbolic_verifier.py  # Person B
-│   │   ├── numeric_adversary.py  # Person B
-│   │   ├── rag_retrieval.py      # Person B
-│   │   ├── attacker.py           # Person B
-│   │   ├── counterexample_search.py  # Person B
-│   │   ├── citation_gap.py       # Person B
-│   │   ├── defender.py           # Person B
-│   │   ├── verdict_aggregator.py # Person B
-│   │   ├── cascade.py            # Person B
-│   │   ├── report_agent.py       # Person B
-│   │   ├── claim_filter.py       # Person D
-│   │   ├── metric_extractor.py   # Person D
-│   │   ├── scaffold_generator.py # Person D
-│   │   ├── results_analyzer.py   # Person D
-│   │   └── reproducibility_report.py  # Person D
-│   ├── core/
-│   │   ├── dag.py           # Person A — used by everyone, do not break its interface
-│   │   ├── event_bus.py     # Person A — singleton, import as `from core.event_bus import event_bus`
-│   │   ├── job_store.py     # Person A — singleton, import as `from core.job_store import job_store`
-│   │   └── orchestrators/
-│   │       ├── review.py    # Person B
-│   │       ├── poc.py       # Person D
-│   │       ├── reader.py    # stub
-│   │       └── research.py  # stub
-│   └── api/
-│       ├── review.py        # Person B
-│       ├── poc.py           # Person D
-│       ├── reader.py        # stub
-│       └── research.py      # stub
-└── frontend/                # Person C owns everything here
-    └── src/
-        └── api/
-            └── client.js    # single source of truth for all API calls
+```text
+backend/
+  ingestion/
+    arxiv.py          # parse/fetch arXiv e-print source and assemble TeX
+    tex_parser.py     # deterministic TeX -> ParsedPaper
+  models/
+    source.py         # PaperSource, ParsedPaper, SourceSpan, sections/equations/cites
+    atoms.py          # ResearchAtom and atom taxonomy
+    graph.py          # ResearchGraph and typed edge taxonomy
+    checks.py         # CheckResult and check statuses
+    adversarial.py    # Challenge and Rebuttal
+    verdict.py        # AtomVerdict
+    report.py         # ReviewReport
+    events.py         # DAGEvent emitted over SSE
+    jobs.py           # Review job metadata
+  agents/
+    atom_extractor.py
+    graph_builder.py
+    challenge_agent.py
+    defense_agent.py
+    verdict_aggregator.py
+    cascade.py
+    report_agent.py
+  checks/
+    algebraic_sanity.py
+    numeric_probe.py
+    citation_probe.py
+  core/
+    span_resolver.py
+    equation_linker.py
+    citation_linker.py
+    event_bus.py
+    job_store.py
+    orchestrators/review.py
+  api/review.py
 ```
 
----
+Reader, PoC, and Research mode files are still mostly stubs. Keep their imports
+healthy, but do not expand those modes unless the task explicitly asks for it.
 
 ## Core Conventions
 
-### Agents
+- Import public models from `models`, not from individual model modules, unless
+  there is a clear local reason.
+- `AgentContext` uses `parsed_paper`, `atom`, `graph`, `checks`, `challenges`,
+  and `rebuttals`. There is no `context.claim`.
+- Deterministic services such as ingestion, parsing, linkers, and checks should
+  stay as functions/services, not fake agents.
+- Every review artifact should carry source grounding when possible:
+  `SourceSpan`, `EquationBlock`, `CitationEntry`, or typed `Evidence`.
+- Use `settings.openai_model`; do not hardcode model names in agents.
+- LLM calls must use `AsyncOpenAI`, JSON mode when expecting structured output,
+  and explicit parse/error handling.
+- Keep the pipeline centralized. Do not add old-path fallback code that silently
+  bypasses the v0.4 atom pipeline.
 
-Every agent inherits from `BaseAgent` and implements one method:
+## Edge Direction
 
-```python
-async def run(self, context: AgentContext) -> AgentResult:
-```
+`ResearchGraph` follows the existing DAG convention:
 
-- `context.job_id` — always present
-- `context.claim` — the `ClaimUnit` being processed (None for orchestrator-level agents)
-- `context.extra` — dict for mode-specific data (tier results, challenges, etc.)
+`source_id -> target_id` means the source atom depends on the target atom.
 
-`AgentResult` fields: `agent_id`, `claim_id`, `status`, `output`, `confidence`, `error`.
+Process roots first. If a target atom is refuted or likely flawed, dependent
+source atoms are at cascade risk.
 
-**Rules:**
+## Review API
 
-- Never raise exceptions inside `run()`. Catch all errors, return `status="error"` with the error message.
-- Never return `status="error"` AND raise. Pick one.
-- `output` must always be a dict that matches the agent's documented output shape, even on error (use empty/default values).
-- `confidence` is always a float in [0, 1].
-- Stubs must return `self._mock_result(...)` with a valid output shape — never `NotImplementedError`.
+- `POST /review/arxiv` with JSON `{ "arxiv_url": "https://arxiv.org/abs/..." }`
+- `POST /review` with form field `arxiv_url`
+- `GET /review/{job_id}/status`
+- `GET /review/{job_id}/dag`
+- `GET /review/{job_id}/atoms/{atom_id}`
+- `GET /review/{job_id}/stream`
+- `GET /review/{job_id}/report`
+- `GET /review/{job_id}/report/markdown`
 
-### Models
+`/status` reports `completed_atoms` and `total_atoms`.
 
-- Import from `models` directly: `from models import ClaimUnit, AgentResult`
-- Never import from a sub-module like `from models.claim import ClaimUnit` in agent files — use the re-exported `__init__.py`
-- All models are Pydantic v2. Use `model_validate()` not `parse_obj()`. Use `model_dump()` not `dict()`.
-- No bare `dict` or `Any` in model fields except `extra: dict` in `AgentContext` and `payload: dict` in `DAGEvent`.
+## Verification
 
-### OpenAI Calls
-
-Always use the async client. Never use the sync client — it blocks the event loop.
-
-```python
-from openai import AsyncOpenAI
-from config import settings
-
-client = AsyncOpenAI(api_key=settings.openai_api_key)
-```
-
-Standard call pattern:
-
-```python
-response = await client.chat.completions.create(
-    model="gpt-4o",
-    messages=[
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_prompt},
-    ],
-    response_format={"type": "json_object"},  # always request JSON
-    max_tokens=1000,
-)
-raw = response.choices[0].message.content
-```
-
-Always wrap in try/except. Always parse JSON with a fallback:
-
-```python
-try:
-    data = json.loads(raw)
-except json.JSONDecodeError:
-    # retry once with stricter prompt, then return inconclusive
-```
-
-Never hardcode `gpt-4o` as a string — use `settings.openai_model` (add it to config if not present).
-
-### Parallelism
-
-Use `asyncio.gather` for parallel agent execution. Never use `threading`. Never call `asyncio.run()` inside an async function.
-
-```python
-# Correct pattern for parallel per-claim agents
-results = await asyncio.gather(
-    symbolic_verifier.run(ctx),
-    numeric_adversary.run(ctx),
-    rag_retrieval.run(ctx),
-    return_exceptions=True,  # always — don't let one failure kill the gather
-)
-# Filter out exceptions and handle them
-```
-
-# Use PydanticAI for structured outputs inside agent run() methods
-
-from pydantic_ai import Agent as PydanticAgent
-
-# Define at class level, not inside run() — avoid re-instantiating on every call
-
-class AttackerAgent(BaseAgent):
-agent_id = "attacker"
-\_llm = PydanticAgent(
-'openai:gpt-4o',
-result_type=list[Challenge],
-system_prompt="You are a hostile peer reviewer..."
-)
-
-    async def run(self, context: AgentContext) -> AgentResult:
-        result = await self._llm.run(context.claim.text)
-        return AgentResult(
-            agent_id=self.agent_id,
-            claim_id=context.claim.claim_id,
-            status="success",
-            output={"challenges": [c.model_dump() for c in result.data]},
-            confidence=0.8,
-        )
-
-### SSE Events
-
-Emit a `DAGEvent` via the event bus at every meaningful state transition. Do not batch events — emit immediately.
-
-```python
-from core.event_bus import event_bus
-from models import DAGEvent, DAGEventType
-import uuid
-from datetime import datetime
-
-await event_bus.publish(job_id, DAGEvent(
-    event_id=str(uuid.uuid4()),
-    job_id=job_id,
-    event_type=DAGEventType.VERDICT_EMITTED,
-    claim_id=claim.claim_id,
-    payload={"verdict": verdict.verdict, "confidence": verdict.confidence},
-    timestamp=datetime.utcnow(),
-))
-```
-
-### API Routes
-
-- All routes use the FastAPI `APIRouter`, never the app directly.
-- All routes return Pydantic models or dicts — never raw strings except for markdown endpoints.
-- Background tasks use `asyncio.create_task()`, not FastAPI's `BackgroundTasks`.
-- SSE endpoints use `sse_starlette.sse.EventSourceResponse`.
-- All routes have explicit error handling: 404 for not found, 202 for in-progress, 500 only for unexpected errors.
-
-```python
-from fastapi import APIRouter, HTTPException
-router = APIRouter()
-
-@router.get("/{job_id}/report")
-async def get_report(job_id: str):
-    if not job_store.exists(job_id):
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-    job = job_store.get(job_id)
-    if job["status"] != "complete":
-        raise HTTPException(status_code=202, detail="Review in progress")
-    return job["report"]
-```
-
-### Frontend API Calls
-
-**Never** hardcode API URLs in components. Always import from `src/api/client.js`:
-
-```js
-import { api } from "../api/client";
-
-const dag = await api.review.dag(jobId);
-const stream = api.review.stream(jobId); // returns EventSource
-```
-
----
-
-## What Not To Do
-
-- **Do not** use `time.sleep()` anywhere. Use `asyncio.sleep()`.
-- **Do not** import from `agents/` in `models/`. Models have zero dependencies on agents.
-- **Do not** import from `api/` in `agents/` or `core/`. Data flows one way: api → orchestrator → agents → core.
-- **Do not** store file paths or job state in module-level variables. Use `job_store`.
-- **Do not** use `print()` for logging. Use Python `logging` module: `logger = logging.getLogger(__name__)`.
-- **Do not** call `event_bus.create_channel()` more than once per job. Check `event_bus.channel_exists()` first.
-- **Do not** write tests that make real OpenAI API calls. Mock the client.
-- **Do not** commit `.env` files. Only `.env.example`.
-- **Do not** edit another person's owned files without a comment in the PR explaining why.
-- **Do not** add new dependencies to `requirements.txt` without checking if it conflicts with existing ones (`pip check` after installing).
-
----
-
-## DAG Conventions
-
-The `DAG` class in `core/dag.py` uses this edge direction convention:
-
-> An edge from `A → B` means **A depends on B** (B must be established before A).
-
-This means:
-
-- `dag.get_roots()` returns claims with **no dependencies** — process these first
-- `dag.topological_sort()` returns claims in the order they should be processed
-- `dag.get_descendants(node_id)` returns all claims that would be affected if `node_id` is refuted
-
-Do not invert this convention in any agent. The CascadeAgent walks `get_descendants()` to propagate failures.
-
----
-
-## Running Locally
+Run these before calling a review-pipeline change done:
 
 ```bash
-# Backend
+PYTHONPATH=backend python -c "import main; import api.review; from models import ResearchAtom, ParsedPaper, AtomVerdict, ReviewReport; print('imports ok')"
+python -m compileall -q -x 'backend/.venv|backend/outputs' backend
+python backend/scripts/test_tex_ingestion.py
+python backend/scripts/test_tex_parser.py
+python backend/scripts/test_numeric.py
+python backend/scripts/test_dag_builder.py
+python backend/scripts/test_defender.py
+python backend/scripts/test_prompt_2_agents.py
+python backend/scripts/test_review_tex_flow.py
+```
+
+Live E2E with OpenAI and arXiv:
+
+```bash
+python backend/scripts/test_pipeline.py --papers-file good_papers.txt
+```
+
+Inspect the generated JSON files under `backend/outputs/` and compare atom
+coverage against the paper text, especially atom types, sections, equations,
+citations, graph roots, and high-risk verdicts.
+
+## Local Run
+
+```bash
 cd backend
-cp .env.example .env        # fill in OPENAI_API_KEY
+cp .env.example .env
 pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 
-# Frontend
-cd frontend
+cd ../frontend
 npm install
-npm run dev                 # runs on port 5173
-
-# Verify everything works
-curl http://localhost:8000/health
+npm run dev
 ```
 
-Six checks that must all pass before starting feature work:
+## What Not To Do
 
-```bash
-curl http://localhost:8000/health                          # {"status": "ok"}
-curl http://localhost:8000/review/test-id/dag              # {"nodes": [], "edges": []}
-curl http://localhost:8000/poc/test-id/claims              # {"total": 1, ...}
-python -c "from models import ClaimUnit, PoCSpec, ReviewReport; print('models ok')"
-python -c "from agents.tex_parser import TexParserAgent; print(TexParserAgent().agent_id)"
-python -c "from core.dag import DAG; d = DAG(); d.add_node('a'); print('dag ok')"
-```
-
----
-
-## Branch Strategy
-
-- `main` is always runnable and demo-able. Never push broken code to main.
-- Work on personal branches: `person-a/pipeline`, `person-b/review-agents`, `person-c/frontend`, `person-d/poc-agents`
-- Merge to main only when your feature works end-to-end and all six checks above still pass.
-- If you need to change `base.py`, `dag.py`, `event_bus.py`, or `job_store.py` — these are shared infrastructure. Coordinate before changing, bump everyone's branch after merging.
-
----
-
-## Test Paper
-
-For consistent testing across all branches, everyone uses the same paper:
-
-**arXiv:1706.03762** — "Attention Is All You Need" (Vaswani et al., 2017)
-
-Use: `https://arxiv.org/abs/1706.03762`
-
-The backend extracts the article id and downloads `https://arxiv.org/e-print/1706.03762`. This paper has clearly labeled propositions, explicit performance numbers (BLEU scores), and complexity claims — it exercises all four modes well.
-
----
-
-## Hackathon Priorities (36 hours)
-
-Build in this order. Do not move to the next phase until the current one passes its checkpoint.
-
-| Phase                     | Owner    | Checkpoint                                                           |
-| ------------------------- | -------- | -------------------------------------------------------------------- |
-| 0 — Scaffold              | Person A | All 6 verify checks pass                                             |
-| 1 — Parser + DAG          | Person A | `python scripts/test_pipeline.py https://arxiv.org/abs/1706.03762 --max-claims 1` prints claims + DAG |
-| 2 — Review agents         | Person B | `POST /review` returns full ReviewReport JSON for test paper         |
-| 3 — Live DAG UI           | Person C | Enter arXiv URL, watch nodes turn green/red in browser in real time  |
-| 7 (partial) — PoC backend | Person D | `GET /poc/{id}/scaffold.zip` downloads a real runnable scaffold      |
-
-Phases 4 (Reader), 5 (Research), 6 (polish) are post-hackathon unless ahead of schedule.
-
-The demo arc: enter arXiv URL → live DAG updates as review runs → click a node to see attacker/defender exchange → switch to PoC mode → download scaffold zip → show the generated test_harness.py. That's the story.
+- Do not resurrect deleted modules or model aliases for convenience.
+- Do not add PDF/html fallback ingestion to the implemented review path.
+- Do not use `time.sleep()` in async code.
+- Do not import agents from models or APIs from agents/core.
+- Do not make real OpenAI calls in offline tests; mock clients there.
+- Do not commit `.env` or generated caches.

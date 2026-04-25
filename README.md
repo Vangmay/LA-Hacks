@@ -1,52 +1,86 @@
 # PaperCourt
 
-Multi-agent system for engaging with research papers across four modes:
-Review, Reader, PoC, and Research.
+PaperCourt is a multi-agent research-paper review system. The implemented
+review path is now source-grounded around `ResearchAtom`, not the older
+`ClaimUnit` pipeline.
+
+## Implemented Review Pipeline
+
+```text
+arXiv URL/id
+  -> arXiv e-print source bundle
+  -> assembled TeX
+  -> ParsedPaper
+  -> ResearchAtom extraction
+  -> ResearchGraph dependency graph
+  -> SymPy/SciPy/citation checks
+  -> challenge + defense agents
+  -> AtomVerdict cascade
+  -> ReviewReport JSON + markdown
+```
+
+Reader, PoC, and Research mode routes still exist mostly as stubs.
 
 ## Quick Start
 
-```
+```bash
 cp backend/.env.example backend/.env
-# Add your OPENAI_API_KEY to backend/.env
+# Add OPENAI_API_KEY to backend/.env for live review runs.
 
-# Terminal 1 — Backend
-cd backend && pip install -r requirements.txt && uvicorn main:app --reload --port 8000
+cd backend
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
 
-# Terminal 2 — Frontend
-cd frontend && npm install && npm run dev
-
-# Verify
-curl http://localhost:8000/health        # should return {"status": "ok"}
-open http://localhost:5173               # should show PaperCourt landing page
+cd ../frontend
+npm install
+npm run dev
 ```
 
-## Who owns what
+Health check:
 
-- **Person A**: `backend/models/`, `backend/core/`, and `backend/agents/{tex_parser,claim_extractor,dag_builder}.py`
-- **Person B**: `backend/agents/` (review agents), `backend/core/orchestrators/review.py`, `backend/api/review.py`
-- **Person C**: `frontend/` (all of it)
-- **Person D**: `backend/agents/` (poc agents), `backend/core/orchestrators/poc.py`, `backend/api/poc.py`
-
-## Branch strategy
-
-`main` is always runnable. Work on your own branch:
-
-```
-git checkout -b person-a/pipeline
+```bash
+curl http://localhost:8000/health
 ```
 
-Merge to main only when your feature works end-to-end. Never edit another
-person's owned files without coordinating first.
+Submit a review:
 
-## Verify scaffold
-
-After installing both stacks, all six checks below must pass:
-
+```bash
+curl -X POST http://localhost:8000/review/arxiv \
+  -H 'Content-Type: application/json' \
+  -d '{"arxiv_url":"https://arxiv.org/abs/1706.03762"}'
 ```
-cd backend && uvicorn main:app --reload                       # no import errors
-curl http://localhost:8000/health                              # {"status": "ok"}
-curl http://localhost:8000/review/test-id/dag                  # {"nodes": [], "edges": []}
-cd frontend && npm run dev                                     # page loads
-python -c "from models import ClaimUnit, PoCSpec, ReviewReport; print('models ok')"
-python -c "from agents.tex_parser import TexParserAgent; print(TexParserAgent().agent_id)"
+
+## Review API
+
+- `POST /review/arxiv` — JSON arXiv submission.
+- `POST /review` — form field `arxiv_url`.
+- `GET /review/{job_id}/status` — status plus atom progress.
+- `GET /review/{job_id}/dag` — frontend graph snapshot.
+- `GET /review/{job_id}/atoms/{atom_id}` — atom detail plus verdict.
+- `GET /review/{job_id}/stream` — SSE `DAGEvent` stream.
+- `GET /review/{job_id}/report` — completed `ReviewReport`.
+- `GET /review/{job_id}/report/markdown` — markdown report.
+
+## Verification
+
+Offline checks:
+
+```bash
+PYTHONPATH=backend python -c "import main; import api.review; from models import ResearchAtom, ParsedPaper, AtomVerdict, ReviewReport; print('imports ok')"
+python -m compileall -q -x 'backend/.venv|backend/outputs' backend
+python backend/scripts/test_tex_ingestion.py
+python backend/scripts/test_tex_parser.py
+python backend/scripts/test_numeric.py
+python backend/scripts/test_dag_builder.py
+python backend/scripts/test_defender.py
+python backend/scripts/test_prompt_2_agents.py
+python backend/scripts/test_review_tex_flow.py
 ```
+
+Live end-to-end checks using `good_papers.txt`:
+
+```bash
+python backend/scripts/test_pipeline.py --papers-file good_papers.txt
+```
+
+Outputs are written to `backend/outputs/`.
