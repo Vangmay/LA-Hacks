@@ -21,6 +21,14 @@ class Settings(BaseSettings):
     deepdive_min_personas_per_investigator: int = 4
     deepdive_max_personas_per_investigator: int = 7
     deepdive_require_persona_diversity: bool = True
+    deepdive_dynamic_roster_enabled: bool = False
+    deepdive_dynamic_roster_fallback_to_deterministic: bool = True
+    deepdive_dynamic_roster_model_role: str = "investigator"
+    deepdive_min_constructive_archetypes: int = 1
+    deepdive_min_skeptical_archetypes: int = 1
+    deepdive_min_prior_work_archetypes: int = 1
+    deepdive_min_recent_future_archetypes: int = 1
+    deepdive_max_duplicate_archetype_functions: int = 1
     deepdive_subagent_max_tool_calls: int = 24
     deepdive_investigator_max_rounds: int = 2
     deepdive_max_parallel_subagents: int = 8

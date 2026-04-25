@@ -18,10 +18,15 @@ from .models import (
     DeepDiveRunRequest,
     DeepDiveRunResult,
     InvestigatorPlan,
+    ResearchTaste,
     ResearchStage,
     SubagentPlan,
 )
-from .personas import generate_research_tastes
+from .personas import (
+    generate_research_tastes,
+    persona_library_summary,
+    validate_research_taste_roster,
+)
 from .prompts import PromptBook
 from .tool_runtime import ToolRuntime
 from .tools import build_default_tool_registry
@@ -73,7 +78,10 @@ class DeepDiveOrchestrator:
 
         try:
             stages.append(ResearchStage.BOOTSTRAP)
-            investigators = self._plan_investigators(request, run_root)
+            if request.mode == "live" and self.config.dynamic_roster_enabled:
+                investigators = await self._plan_investigators_live(request, run_root, warnings)
+            else:
+                investigators = self._plan_investigators(request, run_root)
             stages.append(ResearchStage.INVESTIGATOR_PLANNING)
 
             subagent_results = await self._run_all_subagents(investigators, request)
@@ -141,6 +149,8 @@ class DeepDiveOrchestrator:
         self,
         request: DeepDiveRunRequest,
         run_root: Path,
+        taste_rosters: dict[str, list[ResearchTaste]] | None = None,
+        planner_notes: dict[str, dict[str, Any]] | None = None,
     ) -> list[InvestigatorPlan]:
         section_titles = request.section_titles or ["whole paper"]
         selected = section_titles[: self.config.max_investigators]
@@ -157,13 +167,24 @@ class DeepDiveOrchestrator:
             section_id = f"section_{idx:02d}_{slugify(title)}"
             investigator_id = f"investigator_{idx:02d}_{slugify(title)}"
             investigator_path = self.workspace.investigator_path(request.run_id, investigator_id)
-            tastes = generate_research_tastes(
-                title,
-                self.config.subagents_per_investigator,
-                min_count=self.config.min_personas_per_investigator,
-                max_count=self.config.max_personas_per_investigator,
-                require_diversity=self.config.require_persona_diversity,
+            tastes = (
+                taste_rosters.get(investigator_id)
+                if taste_rosters and investigator_id in taste_rosters
+                else generate_research_tastes(
+                    title,
+                    self.config.subagents_per_investigator,
+                    min_count=self.config.min_personas_per_investigator,
+                    max_count=self.config.max_personas_per_investigator,
+                    require_diversity=self.config.require_persona_diversity,
+                )
             )
+            note = (planner_notes or {}).get(investigator_id)
+            if note:
+                self.workspace.write_json(investigator_path / "planner_roster.json", note)
+                self.workspace.write_markdown(
+                    investigator_path / "planner_rationale.md",
+                    str(note.get("rationale") or note.get("status") or "Planner roster recorded."),
+                )
 
             subagents: list[SubagentPlan] = []
             for sub_idx, taste in enumerate(tastes, start=1):
@@ -235,6 +256,293 @@ class DeepDiveOrchestrator:
             investigators.append(investigator)
 
         return investigators
+
+    async def _plan_investigators_live(
+        self,
+        request: DeepDiveRunRequest,
+        run_root: Path,
+        warnings: list[str],
+    ) -> list[InvestigatorPlan]:
+        section_titles = request.section_titles or ["whole paper"]
+        selected = section_titles[: self.config.max_investigators]
+        director_lines = [
+            "# Director Plan",
+            "",
+            f"- Research objective: `{request.research_objective}`",
+            f"- Dynamic roster enabled: `{self.config.dynamic_roster_enabled}`",
+            f"- Requested investigators: `{len(selected)}`",
+            f"- Subagents per investigator: `{self.config.subagents_per_investigator}`",
+            "",
+            "## Investigation Zones",
+            "",
+        ]
+        zones = []
+        for idx, title in enumerate(selected, start=1):
+            section_id = f"section_{idx:02d}_{slugify(title)}"
+            investigator_id = f"investigator_{idx:02d}_{slugify(title)}"
+            zones.append(
+                {
+                    "investigator_id": investigator_id,
+                    "section_id": section_id,
+                    "section_title": title,
+                    "requested_subagents": self.config.subagents_per_investigator,
+                }
+            )
+            director_lines.append(f"- `{investigator_id}`: {title}")
+        self.workspace.write_markdown(run_root / "shared" / "director_plan.md", "\n".join(director_lines) + "\n")
+        self.workspace.write_json(run_root / "shared" / "investigation_zones.json", {"zones": zones})
+
+        rosters: dict[str, list[ResearchTaste]] = {}
+        notes: dict[str, dict[str, Any]] = {}
+        trace_lines = ["# Planning Trace", ""]
+        for zone in zones:
+            title = str(zone["section_title"])
+            investigator_id = str(zone["investigator_id"])
+            roster, note = await self._plan_dynamic_roster_for_investigator(
+                request=request,
+                investigator_id=investigator_id,
+                section_title=title,
+            )
+            rosters[investigator_id] = roster
+            notes[investigator_id] = note
+            trace_lines.extend(
+                [
+                    f"## {investigator_id}",
+                    "",
+                    f"- Status: `{note.get('status', 'unknown')}`",
+                    f"- Roster source: `{note.get('source', 'unknown')}`",
+                    f"- Validation errors: {note.get('validation_errors', [])}",
+                    "",
+                ]
+            )
+            if note.get("fallback_reason"):
+                warnings.append(f"{investigator_id}: {note['fallback_reason']}")
+                trace_lines.append(f"- Fallback reason: {note['fallback_reason']}")
+                trace_lines.append("")
+        self.workspace.write_markdown(run_root / "shared" / "planning_trace.md", "\n".join(trace_lines))
+        return self._plan_investigators(request, run_root, taste_rosters=rosters, planner_notes=notes)
+
+    async def _plan_dynamic_roster_for_investigator(
+        self,
+        *,
+        request: DeepDiveRunRequest,
+        investigator_id: str,
+        section_title: str,
+    ) -> tuple[list[ResearchTaste], dict[str, Any]]:
+        fallback = generate_research_tastes(
+            section_title,
+            self.config.subagents_per_investigator,
+            min_count=self.config.min_personas_per_investigator,
+            max_count=self.config.max_personas_per_investigator,
+            require_diversity=self.config.require_persona_diversity,
+        )
+        role = self._dynamic_roster_model_role()
+        prompt = self._dynamic_roster_prompt(request, investigator_id, section_title)
+        try:
+            response = await self.llm.chat_json(
+                role=role,
+                messages=[
+                    {"role": "system", "content": "You are an investigator roster planner. Return strict JSON only."},
+                    {"role": "user", "content": prompt},
+                ],
+            )
+            roster, rationale = self._parse_dynamic_roster_response(response, investigator_id, section_title)
+            errors = self._validate_dynamic_roster(roster)
+            if errors:
+                repair_response = await self.llm.chat_json(
+                    role=role,
+                    messages=[
+                        {"role": "system", "content": "Repair the roster JSON. Return strict JSON only."},
+                        {
+                            "role": "user",
+                            "content": (
+                                prompt
+                                + "\n\nValidation errors from the previous roster:\n"
+                                + "\n".join(f"- {error}" for error in errors)
+                                + "\n\nReturn a corrected roster."
+                            ),
+                        },
+                    ],
+                )
+                roster, rationale = self._parse_dynamic_roster_response(
+                    repair_response,
+                    investigator_id,
+                    section_title,
+                )
+                errors = self._validate_dynamic_roster(roster)
+            if not errors:
+                return roster, {
+                    "status": "accepted",
+                    "source": "dynamic",
+                    "rationale": rationale,
+                    "validation_errors": [],
+                    "tastes": [taste.model_dump() for taste in roster],
+                }
+            if not self.config.dynamic_roster_fallback_to_deterministic:
+                raise RuntimeError(f"dynamic roster validation failed: {errors}")
+            return fallback, {
+                "status": "fallback",
+                "source": "deterministic",
+                "fallback_reason": "dynamic roster validation failed",
+                "rationale": rationale,
+                "validation_errors": errors,
+                "tastes": [taste.model_dump() for taste in fallback],
+            }
+        except Exception as exc:
+            if not self.config.dynamic_roster_fallback_to_deterministic:
+                raise
+            return fallback, {
+                "status": "fallback",
+                "source": "deterministic",
+                "fallback_reason": f"dynamic planner failed: {exc}",
+                "validation_errors": [str(exc)],
+                "tastes": [taste.model_dump() for taste in fallback],
+            }
+
+    def _dynamic_roster_prompt(
+        self,
+        request: DeepDiveRunRequest,
+        investigator_id: str,
+        section_title: str,
+    ) -> str:
+        return (
+            "Plan complementary research tastes for one investigator. Diversity comes from priors, "
+            "search instincts, skepticism/constructiveness, temporal orientation, evidence standards, "
+            "and failure modes, not from different tool access. Every subagent will receive the same "
+            "complete tool catalog.\n\n"
+            f"- Investigator ID: `{investigator_id}`\n"
+            f"- Section title: `{section_title}`\n"
+            f"- Research objective: `{request.research_objective}`\n"
+            f"- Research brief: {request.research_brief or '(none)'}\n"
+            f"- Required subagents: `{self.config.subagents_per_investigator}`\n"
+            f"- Min/max: `{self.config.min_personas_per_investigator}`/`{self.config.max_personas_per_investigator}`\n"
+            f"- Required diversity minimums: constructive={self.config.min_constructive_archetypes}, "
+            f"skeptical={self.config.min_skeptical_archetypes}, prior_work={self.config.min_prior_work_archetypes}, "
+            f"recent_or_future_work={self.config.min_recent_future_archetypes}\n\n"
+            "Return JSON with this shape:\n"
+            "{\n"
+            '  "rationale": "why these tastes are complementary",\n'
+            '  "tastes": [\n'
+            "    {\n"
+            '      "taste_id": "short_unique_id",\n'
+            '      "label": "Display Name",\n'
+            '      "archetype_label": "Persona function",\n'
+            '      "research_zone": "zone name",\n'
+            '      "diversity_roles": ["constructive", "skeptical", "prior_work", "recent_or_future_work"],\n'
+            '      "best_for": ["..."],\n'
+            '      "worldview": "detailed operating worldview",\n'
+            '      "search_biases": ["exact search instinct", "another search instinct"],\n'
+            '      "typical_queries": ["query template"],\n'
+            '      "evidence_preferences": ["references", "citations"],\n'
+            '      "proposal_style": "how this taste generates or rejects novelty ideas",\n'
+            '      "failure_modes_to_watch": ["blind spot"],\n'
+            '      "must_not_do": ["guardrail"],\n'
+            '      "required_counterbalance": "what sibling agents must counterbalance"\n'
+            "    }\n"
+            "  ]\n"
+            "}\n\n"
+            "Use this concise persona library as substrate and hints, not a cage:\n\n"
+            + persona_library_summary(section_title)
+        )
+
+    def _dynamic_roster_model_role(self) -> AgentModelRole:
+        try:
+            return AgentModelRole(self.config.dynamic_roster_model_role)
+        except ValueError:
+            return AgentModelRole.INVESTIGATOR
+
+    def _parse_dynamic_roster_response(
+        self,
+        response: dict[str, Any],
+        investigator_id: str,
+        section_title: str,
+    ) -> tuple[list[ResearchTaste], str]:
+        raw_items = response.get("tastes") or response.get("subagents") or []
+        if not isinstance(raw_items, list):
+            raise ValueError("dynamic roster response must contain a `tastes` or `subagents` list")
+        tastes = [
+            self._coerce_dynamic_taste(item, investigator_id, section_title, idx)
+            for idx, item in enumerate(raw_items, start=1)
+            if isinstance(item, dict)
+        ]
+        return tastes, str(response.get("rationale") or response.get("planner_rationale") or "")
+
+    def _coerce_dynamic_taste(
+        self,
+        item: dict[str, Any],
+        investigator_id: str,
+        section_title: str,
+        idx: int,
+    ) -> ResearchTaste:
+        if {"worldview", "search_biases", "evidence_preferences", "failure_modes_to_watch"}.issubset(item):
+            data = {
+                "taste_id": item.get("taste_id") or f"{investigator_id}_taste_{idx:02d}",
+                "label": item.get("label") or item.get("display_name") or f"Dynamic Taste {idx}",
+                "archetype_label": item.get("archetype_label") or item.get("archetype_id") or "",
+                "research_zone": item.get("research_zone") or section_title,
+                "diversity_roles": item.get("diversity_roles") or self._infer_dynamic_roles(item),
+                "best_for": item.get("best_for") or [],
+                "worldview": item["worldview"],
+                "search_biases": item["search_biases"],
+                "typical_queries": item.get("typical_queries") or item.get("required_search_threads") or [],
+                "evidence_preferences": item["evidence_preferences"],
+                "proposal_style": item.get("proposal_style") or "",
+                "failure_modes_to_watch": item["failure_modes_to_watch"],
+                "must_not_do": item.get("must_not_do") or [],
+                "required_counterbalance": item.get("required_counterbalance") or "Counterbalance this taste with a sibling that searches a different evidence bucket.",
+            }
+            return ResearchTaste.model_validate(data)
+        roles = self._infer_dynamic_roles(item)
+        display_name = str(item.get("display_name") or item.get("label") or f"Dynamic Taste {idx}")
+        research_taste = str(item.get("research_taste") or item.get("worldview") or display_name)
+        search_threads = item.get("required_search_threads") or item.get("search_biases") or []
+        evidence_preferences = item.get("primary_evidence_preferences") or item.get("evidence_preferences") or []
+        blind_spots = item.get("blind_spots_to_counteract") or item.get("failure_modes_to_watch") or []
+        return ResearchTaste(
+            taste_id=str(item.get("taste_id") or item.get("subagent_id") or f"{investigator_id}_taste_{idx:02d}"),
+            label=display_name,
+            archetype_label=str(item.get("archetype_id") or display_name),
+            research_zone=section_title,
+            diversity_roles=roles,
+            best_for=list(item.get("best_for") or search_threads),
+            worldview=research_taste,
+            search_biases=list(search_threads) or [research_taste],
+            typical_queries=list(item.get("typical_queries") or search_threads),
+            evidence_preferences=list(evidence_preferences) or ["papers with explicit relevance notes"],
+            proposal_style=str(item.get("proposal_style") or "Generate or reject proposal seeds according to this taste."),
+            failure_modes_to_watch=list(blind_spots) or ["overlapping another subagent's search pattern"],
+            must_not_do=list(item.get("must_not_do") or []),
+            required_counterbalance=str(
+                item.get("required_counterbalance")
+                or "Pair with a sibling taste that checks different literature buckets and assumptions."
+            ),
+        )
+
+    def _infer_dynamic_roles(self, item: dict[str, Any]) -> list[str]:
+        text = json.dumps(item, default=str).lower()
+        roles: list[str] = []
+        if any(term in text for term in ("constructive", "builder", "proposal", "spinoff", "mechanism")):
+            roles.append("constructive")
+        if any(term in text for term in ("skeptical", "skeptic", "critic", "risk", "blind spot", "failure")):
+            roles.append("skeptical")
+        if any(term in text for term in ("prior", "old", "reference", "ancestry", "historical")):
+            roles.append("prior_work")
+        if any(term in text for term in ("recent", "future", "citation", "descendant", "sota")):
+            roles.append("recent_or_future_work")
+        return roles or ["constructive"]
+
+    def _validate_dynamic_roster(self, roster: list[ResearchTaste]) -> list[str]:
+        return validate_research_taste_roster(
+            roster,
+            min_count=self.config.min_personas_per_investigator,
+            max_count=self.config.max_personas_per_investigator,
+            require_diversity=self.config.require_persona_diversity,
+            min_constructive=self.config.min_constructive_archetypes,
+            min_skeptical=self.config.min_skeptical_archetypes,
+            min_prior_work=self.config.min_prior_work_archetypes,
+            min_recent_or_future_work=self.config.min_recent_future_archetypes,
+            max_duplicate_archetype_functions=self.config.max_duplicate_archetype_functions,
+        )
 
     async def _run_all_subagents(
         self,

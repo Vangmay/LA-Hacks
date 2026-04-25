@@ -47,6 +47,30 @@ class DeepDiveConfig(BaseModel):
     require_persona_diversity: bool = Field(
         default_factory=lambda: settings.deepdive_require_persona_diversity
     )
+    dynamic_roster_enabled: bool = Field(
+        default_factory=lambda: settings.deepdive_dynamic_roster_enabled
+    )
+    dynamic_roster_fallback_to_deterministic: bool = Field(
+        default_factory=lambda: settings.deepdive_dynamic_roster_fallback_to_deterministic
+    )
+    dynamic_roster_model_role: str = Field(
+        default_factory=lambda: settings.deepdive_dynamic_roster_model_role
+    )
+    min_constructive_archetypes: int = Field(
+        default_factory=lambda: settings.deepdive_min_constructive_archetypes
+    )
+    min_skeptical_archetypes: int = Field(
+        default_factory=lambda: settings.deepdive_min_skeptical_archetypes
+    )
+    min_prior_work_archetypes: int = Field(
+        default_factory=lambda: settings.deepdive_min_prior_work_archetypes
+    )
+    min_recent_future_archetypes: int = Field(
+        default_factory=lambda: settings.deepdive_min_recent_future_archetypes
+    )
+    max_duplicate_archetype_functions: int = Field(
+        default_factory=lambda: settings.deepdive_max_duplicate_archetype_functions
+    )
     subagent_max_tool_calls: int = Field(
         default_factory=lambda: settings.deepdive_subagent_max_tool_calls
     )
@@ -143,6 +167,15 @@ class DeepDiveConfig(BaseModel):
                 "subagents_per_investigator": max(1, self.subagents_per_investigator),
                 "min_personas_per_investigator": min_personas,
                 "max_personas_per_investigator": max_personas,
+                "dynamic_roster_model_role": self.dynamic_roster_model_role.strip()
+                or "investigator",
+                "min_constructive_archetypes": max(0, self.min_constructive_archetypes),
+                "min_skeptical_archetypes": max(0, self.min_skeptical_archetypes),
+                "min_prior_work_archetypes": max(0, self.min_prior_work_archetypes),
+                "min_recent_future_archetypes": max(0, self.min_recent_future_archetypes),
+                "max_duplicate_archetype_functions": max(
+                    1, self.max_duplicate_archetype_functions
+                ),
                 "subagent_max_tool_calls": max(1, self.subagent_max_tool_calls),
                 "investigator_max_rounds": max(1, self.investigator_max_rounds),
                 "max_parallel_subagents": max(1, self.max_parallel_subagents),

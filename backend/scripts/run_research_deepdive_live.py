@@ -28,7 +28,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--run-id", default="")
     parser.add_argument("--max-investigators", type=int, default=3)
     parser.add_argument("--subagents-per-investigator", type=int, default=3)
+    parser.add_argument("--dynamic-roster", action="store_true", default=settings.deepdive_dynamic_roster_enabled)
+    parser.add_argument(
+        "--no-dynamic-roster-fallback",
+        action="store_true",
+        help="Fail instead of falling back to deterministic tastes when live roster validation fails.",
+    )
     parser.add_argument("--subagent-tool-calls", type=int, default=18)
+    parser.add_argument(
+        "--subagent-workspace-tool-calls",
+        type=int,
+        default=settings.deepdive_subagent_max_workspace_tool_calls,
+    )
     parser.add_argument("--subagent-steps", type=int, default=24)
     parser.add_argument("--parallel-subagents", type=int, default=3)
     parser.add_argument("--timeout-seconds", type=int, default=1800)
@@ -144,7 +155,10 @@ async def main_async() -> None:
         min_personas_per_investigator=args.subagents_per_investigator,
         max_personas_per_investigator=max(args.subagents_per_investigator, 7),
         subagent_max_tool_calls=args.subagent_tool_calls,
+        subagent_max_workspace_tool_calls=args.subagent_workspace_tool_calls,
         subagent_max_steps=args.subagent_steps,
+        dynamic_roster_enabled=args.dynamic_roster,
+        dynamic_roster_fallback_to_deterministic=not args.no_dynamic_roster_fallback,
         max_parallel_subagents=args.parallel_subagents,
         stage_timeout_seconds=args.timeout_seconds,
         semantic_scholar_min_interval_seconds=args.semantic_scholar_interval,

@@ -15,9 +15,9 @@
 - [x] Use context packets in investigator synthesis and finalizer bundles.
 - [x] Replace the live cross-investigator placeholder with a thinking-model
   synthesis stage that writes the four shared artifacts.
-- [ ] Add optional dynamic roster planning with explicit validation and
+- [x] Add optional dynamic roster planning with explicit validation and
   deterministic fallback metadata.
-- [ ] Update prompts, docs, and CLI flags so the runtime contract is clear.
+- [x] Update prompts, docs, and CLI flags so the runtime contract is clear.
 - [ ] Run offline verification commands.
 - [ ] Run the monitored live Gemma novelty E2E: arXiv `1706.03762`, objective
   `novelty_ideation`, 3 investigators, 3 subagents each.

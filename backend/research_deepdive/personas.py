@@ -2116,6 +2116,136 @@ def classify_research_zone(section_title: str) -> str:
     return "related_work_or_novelty"
 
 
+def normalize_persona_count(count: int, min_count: int = 1, max_count: int | None = None) -> int:
+    normalized = max(max(1, min_count), count)
+    if max_count is not None:
+        normalized = min(max(1, max_count), normalized)
+    return normalized
+
+
+def missing_diversity_roles(
+    tastes: list[ResearchTaste],
+    *,
+    min_constructive: int = 1,
+    min_skeptical: int = 1,
+    min_prior_work: int = 1,
+    min_recent_or_future_work: int = 1,
+) -> set[str]:
+    counts = {
+        role: sum(1 for taste in tastes if role in taste.diversity_roles)
+        for role in _DIVERSITY_ROLES
+    }
+    required = {
+        "constructive": min_constructive,
+        "skeptical": min_skeptical,
+        "prior_work": min_prior_work,
+        "recent_or_future_work": min_recent_or_future_work,
+    }
+    return {role for role, minimum in required.items() if counts.get(role, 0) < minimum}
+
+
+def validate_research_taste(taste: ResearchTaste) -> list[str]:
+    errors: list[str] = []
+    scalar_fields = {
+        "taste_id": taste.taste_id,
+        "label": taste.label,
+        "worldview": taste.worldview,
+        "required_counterbalance": taste.required_counterbalance,
+    }
+    for field, value in scalar_fields.items():
+        if not value.strip():
+            errors.append(f"{field} must be non-empty")
+    list_fields = {
+        "search_biases": taste.search_biases,
+        "evidence_preferences": taste.evidence_preferences,
+        "failure_modes_to_watch": taste.failure_modes_to_watch,
+    }
+    for field, values in list_fields.items():
+        if not any(str(value).strip() for value in values):
+            errors.append(f"{field} must contain at least one non-empty item")
+    invalid_roles = sorted(set(taste.diversity_roles) - set(_DIVERSITY_ROLES))
+    if invalid_roles:
+        errors.append(f"invalid diversity roles: {', '.join(invalid_roles)}")
+    return errors
+
+
+def validate_research_taste_roster(
+    tastes: list[ResearchTaste],
+    *,
+    min_count: int = 1,
+    max_count: int | None = None,
+    require_diversity: bool = True,
+    min_constructive: int = 1,
+    min_skeptical: int = 1,
+    min_prior_work: int = 1,
+    min_recent_or_future_work: int = 1,
+    max_duplicate_archetype_functions: int = 1,
+) -> list[str]:
+    errors: list[str] = []
+    expected_min = max(1, min_count)
+    if len(tastes) < expected_min:
+        errors.append(f"roster has {len(tastes)} tastes, below minimum {expected_min}")
+    if max_count is not None and len(tastes) > max_count:
+        errors.append(f"roster has {len(tastes)} tastes, above maximum {max_count}")
+    for field_name, values in (
+        ("taste_id", [taste.taste_id for taste in tastes]),
+        ("label", [taste.label for taste in tastes]),
+    ):
+        duplicates = sorted(value for value in set(values) if values.count(value) > 1)
+        if duplicates:
+            errors.append(f"duplicate {field_name}: {', '.join(duplicates)}")
+    archetype_counts = {
+        value: [taste.archetype_label for taste in tastes].count(value)
+        for value in {taste.archetype_label for taste in tastes if taste.archetype_label}
+    }
+    too_many = sorted(
+        archetype
+        for archetype, count in archetype_counts.items()
+        if count > max_duplicate_archetype_functions
+    )
+    if too_many:
+        errors.append(f"duplicate archetype functions: {', '.join(too_many)}")
+    for taste in tastes:
+        errors.extend(f"{taste.taste_id}: {error}" for error in validate_research_taste(taste))
+    if require_diversity:
+        missing = missing_diversity_roles(
+            tastes,
+            min_constructive=min_constructive,
+            min_skeptical=min_skeptical,
+            min_prior_work=min_prior_work,
+            min_recent_or_future_work=min_recent_or_future_work,
+        )
+        if missing:
+            errors.append(f"missing diversity roles: {', '.join(sorted(missing))}")
+    return errors
+
+
+def persona_library_summary(section_title: str = "", max_items: int = 48) -> str:
+    zone = classify_research_zone(section_title) if section_title else "related_work_or_novelty"
+    hinted = set(_ZONE_TO_ARCHETYPE_HINTS.get(zone, []))
+    lines = [
+        "# Persona Library Summary",
+        "",
+        f"- Inferred zone: `{zone}`",
+        f"- Zone hints: {', '.join(_ZONE_TO_ARCHETYPE_HINTS.get(zone, [])) or '(none)'}",
+        "",
+    ]
+    for archetype in _TASTE_ARCHETYPES[:max_items]:
+        label = str(archetype["label"])
+        lines.extend(
+            [
+                f"## {label}",
+                f"- Zone hint match: `{label in hinted}`",
+                f"- Diversity roles: {', '.join(_roles_for_archetype(archetype)) or '(none inferred)'}",
+                f"- Best for: {'; '.join(str(item) for item in archetype.get('best_for', []))}",
+                f"- Evidence preferences: {'; '.join(str(item) for item in archetype.get('evidence_preferences', []))}",
+                f"- Failure mode: {'; '.join(str(item) for item in archetype.get('failure_modes_to_watch', [])[:2])}",
+                "",
+            ]
+        )
+    return "\n".join(lines)
+
+
 def _roles_for_archetype(archetype: dict[str, object]) -> list[str]:
     label = str(archetype["label"]).lower()
     text = " ".join(
@@ -2231,9 +2361,7 @@ def _select_archetypes(
     require_diversity: bool,
 ) -> tuple[str, list[dict[str, object]]]:
     zone = classify_research_zone(section_title)
-    normalized_count = max(max(1, min_count), count)
-    if max_count is not None:
-        normalized_count = min(max(1, max_count), normalized_count)
+    normalized_count = normalize_persona_count(count, min_count, max_count)
 
     hinted_labels = {
         label

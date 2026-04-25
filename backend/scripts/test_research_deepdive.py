@@ -21,6 +21,9 @@ from research_deepdive import (  # noqa: E402
     PromptBook,
     build_default_tool_registry,
     generate_research_tastes,
+    missing_diversity_roles,
+    persona_library_summary,
+    validate_research_taste_roster,
 )
 from research_deepdive.agent_runner import LiveAgentRunner, action_instructions  # noqa: E402
 from research_deepdive.llm import normalize_model_content  # noqa: E402
@@ -323,6 +326,93 @@ async def _exercise_artifact_bundle_contract(root: Path) -> None:
     _assert("CRITIQUE-FINDING" in final_prompt_text, "finalizer should receive critique artifacts")
 
 
+def _dynamic_taste(idx: int, roles: list[str], archetype: str) -> dict:
+    return {
+        "taste_id": f"dynamic_taste_{idx}",
+        "label": f"Dynamic Taste {idx}",
+        "archetype_label": archetype,
+        "research_zone": "novelty",
+        "diversity_roles": roles,
+        "best_for": [f"bucket {idx}"],
+        "worldview": f"Dynamic worldview {idx}",
+        "search_biases": [f"search thread {idx}"],
+        "typical_queries": [f"query template {idx}"],
+        "evidence_preferences": [f"evidence bucket {idx}"],
+        "proposal_style": f"proposal style {idx}",
+        "failure_modes_to_watch": [f"failure mode {idx}"],
+        "must_not_do": [f"do not duplicate taste {idx}"],
+        "required_counterbalance": f"counterbalance {idx}",
+    }
+
+
+async def _exercise_dynamic_roster_contract(root: Path) -> None:
+    valid_response = {
+        "rationale": "Use complementary live-planned tastes.",
+        "tastes": [
+            _dynamic_taste(1, ["constructive", "recent_or_future_work"], "Builder"),
+            _dynamic_taste(2, ["skeptical"], "Skeptic"),
+            _dynamic_taste(3, ["prior_work"], "Prior Work Mapper"),
+        ],
+    }
+    fake_llm = FakeActionLLM([valid_response])
+    config = DeepDiveConfig(
+        workspace_root=root / "accepted",
+        max_investigators=1,
+        subagents_per_investigator=3,
+        min_personas_per_investigator=3,
+        max_personas_per_investigator=3,
+        require_persona_diversity=True,
+        dynamic_roster_enabled=True,
+        max_parallel_subagents=1,
+        thinking_profile=ModelProfile(provider="fake", model="thinking", api_key_env="FAKE"),
+        light_profile=ModelProfile(provider="fake", model="light", api_key_env="FAKE"),
+    )
+    orchestrator = DeepDiveOrchestrator(config=config, llm_provider=fake_llm)
+    request = DeepDiveRunRequest(
+        run_id="dynamic accepted",
+        arxiv_url="https://arxiv.org/abs/1706.03762",
+        paper_id="ARXIV:1706.03762",
+        section_titles=["Related work and novelty"],
+        research_objective="novelty_ideation",
+        mode="live",
+    )
+    run_root = orchestrator.workspace.prepare_run(request.run_id)
+    warnings: list[str] = []
+    investigators = await orchestrator._plan_investigators_live(request, run_root, warnings)
+    _assert(not warnings, f"valid dynamic roster should not warn: {warnings}")
+    labels = [subagent.taste.label for subagent in investigators[0].subagents]
+    _assert(labels == ["Dynamic Taste 1", "Dynamic Taste 2", "Dynamic Taste 3"], "dynamic roster was not accepted")
+    tool_sets = {tuple(subagent.allowed_tools) for subagent in investigators[0].subagents}
+    _assert(len(tool_sets) == 1, "dynamic subagents should share the same tool surface")
+    planner_roster = json.loads(
+        (investigators[0].workspace_path / "planner_roster.json").read_text(encoding="utf-8")
+    )
+    _assert(planner_roster["status"] == "accepted", "accepted roster status not recorded")
+    prompt = (investigators[0].subagents[0].workspace_path / "system_prompt.md").read_text(encoding="utf-8")
+    _assert("Dynamic worldview 1" in prompt, "subagent prompt should reflect dynamic taste")
+    _assert((run_root / "shared" / "planning_trace.md").exists(), "planning trace should be written")
+
+    invalid = {
+        "rationale": "Bad duplicate roster.",
+        "tastes": [
+            _dynamic_taste(1, ["constructive"], "Duplicate"),
+            _dynamic_taste(1, ["constructive"], "Duplicate"),
+            _dynamic_taste(1, ["constructive"], "Duplicate"),
+        ],
+    }
+    fallback_llm = FakeActionLLM([invalid, invalid])
+    fallback_config = config.model_copy(update={"workspace_root": root / "fallback"})
+    fallback_orchestrator = DeepDiveOrchestrator(config=fallback_config, llm_provider=fallback_llm)
+    fallback_roster, note = await fallback_orchestrator._plan_dynamic_roster_for_investigator(
+        request=request,
+        investigator_id="investigator_01_related_work_and_novelty",
+        section_title="Related work and novelty",
+    )
+    _assert(note["status"] == "fallback", "invalid dynamic roster should fall back explicitly")
+    _assert(note["validation_errors"], "fallback should record validation errors")
+    _assert(len({taste.label for taste in fallback_roster}) == 3, "fallback roster should be deterministic and unique")
+
+
 async def main_async() -> None:
     prompt_book = PromptBook()
     _assert("Shared Tool Specification" in prompt_book.shared_tool_spec, "shared tool spec loads")
@@ -365,6 +455,15 @@ async def main_async() -> None:
     roles = {role for taste in tastes for role in taste.diversity_roles}
     for role in ("constructive", "skeptical", "prior_work", "recent_or_future_work"):
         _assert(role in roles, f"missing persona diversity role: {role}")
+    _assert(not validate_research_taste_roster(tastes, min_count=5, max_count=5), "deterministic roster should validate")
+    _assert("Persona Library Summary" in persona_library_summary("Novelty"), "persona library summary should render")
+    duplicate_roster = [tastes[0], tastes[0].model_copy(update={"label": tastes[1].label})]
+    _assert(validate_research_taste_roster(duplicate_roster, require_diversity=False), "duplicate roster should be rejected")
+    underdiverse = [tastes[0].model_copy(update={"diversity_roles": ["constructive"]})]
+    _assert(
+        "skeptical" in missing_diversity_roles(underdiverse),
+        "missing diversity helper should report absent roles",
+    )
 
     normalized = normalize_model_content('<thought>hidden</thought>```json\n{"action":"final"}\n```')
     _assert(normalized == '{"action":"final"}', "model content normalization should strip thoughts and JSON fences")
@@ -439,6 +538,7 @@ async def main_async() -> None:
 
         await _exercise_live_runner_budget_contract(Path(tmp) / "runner")
         await _exercise_artifact_bundle_contract(Path(tmp) / "bundles")
+        await _exercise_dynamic_roster_contract(Path(tmp) / "dynamic")
 
         orchestrator = DeepDiveOrchestrator(config=config)
         result = await orchestrator.run(
