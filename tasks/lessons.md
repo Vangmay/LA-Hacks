@@ -28,3 +28,7 @@
 - Model-role routing must be swappable at runtime. If the lightweight model
   repeatedly emits malformed action JSON, route search subagents through the
   thinking profile and pace requests rather than accepting low-quality traces.
+- Final research reports must distinguish passive `research_gaps` from active
+  `spinoff novelty proposals`. If the user wants novelty generation, prompts
+  need an explicit section requiring concrete new project ideas, novelty
+  mechanism, supporting evidence, falsification risks, and next experiments.

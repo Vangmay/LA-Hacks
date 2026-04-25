@@ -5,6 +5,19 @@
 Resolve the arXiv URL, prepare the run workspace, write run metadata, and make
 the shared tool/memory specs available.
 
+The request has two separate mode axes:
+
+- execution mode: `dry_run` or `live`;
+- research objective: `literature_review` or `novelty_ideation`.
+
+`literature_review` means the final product is deep evidence synthesis:
+coverage, buckets, closest prior work, critiques, and next searches.
+
+`novelty_ideation` means the literature review is the evidence base for actual
+spinoff proposal generation. The final report must include concrete proposal
+ideas, their mechanism or hypothesis, closest-prior-work risk, validation
+experiment, falsification risk, and supporting papers.
+
 ## Stage 2: Investigator Planning
 
 Create one investigator per selected section or claim cluster. Each investigator
@@ -37,12 +50,14 @@ spawn sibling subagents
 
 The investigator reads all child subagent folders and writes `synthesis.md`.
 It should reconcile taste-driven perspectives into one section-level literature
-view.
+view. In `novelty_ideation`, it should also convert supported gaps into
+proposal candidates; in `literature_review`, it should avoid inventing projects.
 
 ## Stage 5: Cross-Investigator Deep Dive
 
 Compare investigator syntheses for overlap, contradictions, missing buckets,
-shared candidate papers, and cross-section research gaps.
+shared candidate papers, and cross-section research gaps. In
+`novelty_ideation`, also identify cross-section proposal families.
 
 ## Stage 6: Critique
 
@@ -60,4 +75,7 @@ Recommended static critique lenses:
 ## Stage 7: Finalization
 
 The finalizer reads all prior artifacts and produces the final deep-dive report.
-It must preserve uncertainty and critique objections.
+It must preserve uncertainty and critique objections. In `literature_review`,
+it stops at deep evidence synthesis and recommended next searches. In
+`novelty_ideation`, it must include a spinoff novelty proposal section and a
+proposal triage matrix.

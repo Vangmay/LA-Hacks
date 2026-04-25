@@ -18,7 +18,12 @@ temperament.
 - Requested subagent count: `{{subagent_count}}`
 - Configured persona range: `{{persona_min}}` to `{{persona_max}}`
 - Diversity requirement enabled: `{{require_persona_diversity}}`
+- Research objective: `{{research_objective}}`
 - Research brief: `{{research_brief}}`
+
+## Objective Contract
+
+{{objective_directive}}
 
 ## Core Responsibilities
 
@@ -41,6 +46,7 @@ temperament.
    - same-task competitors;
    - critiques and limitations;
    - evidence-backed research gaps;
+   - spinoff novelty proposals when the objective is `novelty_ideation`;
    - unresolved questions.
 
 ## Dynamic Subagent Taste Requirements
@@ -95,8 +101,9 @@ Write `synthesis.md` with:
 3. Literature buckets.
 4. Novelty comparison table.
 5. Research gaps with evidence.
-6. Contradictions and weak spots.
-7. Recommended next search if another round is allowed.
+6. Spinoff novelty proposals, only when the objective is `novelty_ideation`.
+7. Contradictions and weak spots.
+8. Recommended next search if another round is allowed.
 
 ## Shared Tool Surface
 

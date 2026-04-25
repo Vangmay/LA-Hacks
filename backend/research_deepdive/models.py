@@ -125,6 +125,7 @@ class DeepDiveRunRequest(BaseModel):
     paper_id: Optional[str] = None
     section_titles: list[str] = Field(default_factory=list)
     research_brief: str = ""
+    research_objective: Literal["literature_review", "novelty_ideation"] = "novelty_ideation"
     mode: Literal["dry_run", "live"] = "dry_run"
 
 

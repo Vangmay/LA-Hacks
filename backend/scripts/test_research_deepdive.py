@@ -114,6 +114,7 @@ async def main_async() -> None:
                 paper_id="ARXIV:1706.03762",
                 section_titles=["Architecture", "Experiments"],
                 research_brief="Verify prompt/workspace orchestration only.",
+                research_objective="novelty_ideation",
             )
         )
 
@@ -146,6 +147,28 @@ async def main_async() -> None:
                 _assert("paper_bulk_search" in prompt, "subagent prompt missing Semantic Scholar search tool")
                 _assert("google_scholar_search" in prompt, "subagent prompt missing SerpApi tool")
                 _assert("Research Taste" in prompt, "subagent prompt missing taste")
+                _assert("Research objective: `novelty_ideation`" in prompt, "subagent prompt missing objective")
+                _assert("spinoff novelty proposals" in prompt, "subagent prompt missing novelty objective guidance")
+
+        assert result.final_report_path is not None
+        final_prompt = (result.final_report_path.parent / "system_prompt.md").read_text(encoding="utf-8")
+        _assert("Research objective: `novelty_ideation`" in final_prompt, "finalizer prompt missing objective")
+        _assert("Spinoff novelty proposals" in final_prompt, "finalizer prompt missing proposal section")
+        _assert("Proposal triage matrix" in final_prompt, "finalizer prompt missing proposal triage")
+
+        literature_prompt = prompt_book.finalizer_prompt(
+            arxiv_url="https://arxiv.org/abs/1706.03762",
+            paper_id="ARXIV:1706.03762",
+            workspace_path=Path(tmp) / "lit-final",
+            research_objective="literature_review",
+            objective_directive="Objective is `literature_review`: test directive.",
+            final_report_sections="10. Coverage gaps and recommended next searches.",
+            shared_tool_spec=prompt_book.shared_tool_spec,
+            memory_spec=prompt_book.memory_spec,
+        )
+        _assert("Research objective: `literature_review`" in literature_prompt, "literature prompt missing objective")
+        _assert("Coverage gaps and recommended next searches" in literature_prompt, "literature prompt missing review section")
+        _assert("do not invent proposals" in literature_prompt.lower(), "literature prompt should suppress proposals")
 
     print("research deep-dive smoke ok")
 

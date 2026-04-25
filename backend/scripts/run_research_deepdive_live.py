@@ -20,6 +20,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--arxiv-url", default="https://arxiv.org/abs/1706.03762")
     parser.add_argument("--section", action="append", dest="sections")
+    parser.add_argument(
+        "--objective",
+        choices=["novelty_ideation", "literature_review"],
+        default="novelty_ideation",
+    )
     parser.add_argument("--run-id", default="")
     parser.add_argument("--max-investigators", type=int, default=3)
     parser.add_argument("--subagents-per-investigator", type=int, default=3)
@@ -77,6 +82,7 @@ async def main_async() -> None:
                 "recent work, old/prior work, critiques, and novelty-relevant neighboring papers. "
                 "Write durable markdown memory before handoff."
             ),
+            research_objective=args.objective,
             mode="live",
         )
     )

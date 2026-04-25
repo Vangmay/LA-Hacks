@@ -1,81 +1,54 @@
-# Live 9-Personality Research Deep-Dive Test
+# Research Deep-Dive Objective Mode Refinement
 
 ## Goal
 
-Run an actual live end-to-end research deep-dive with 3 investigator zones and 9 total search subagents/personas, using the configured Semantic Scholar API key and a strict below-1-rps Semantic Scholar pace. SerpAPI is available but must be capped to at most 50 requests for the run and used sparingly.
+Make the deep-dive pipeline explicit about the difference between:
+
+- `literature_review`: exhaustive evidence collection, bucketed synthesis, critique, and next searches;
+- `novelty_ideation`: literature review plus concrete spinoff novelty proposals, where novelty generation is the final product and the literature review is the evidence base.
 
 ## Constraints
 
-- Do not fake agent execution or replace it with dry-run artifacts.
-- Keep Semantic Scholar under the approved cumulative rate limit: 1 request per second across endpoints.
-- Run the 9 subagents concurrently at the orchestration layer while preserving the shared Semantic Scholar request pace.
-- Enforce a hard SerpAPI cap in code before the live run.
-- Monitor generated workspaces, tool traces, markdown memory, handoffs, critiques, and final report.
-- If the run exposes a real bug, stop, fix the root cause, verify, then rerun.
+- Keep execution mode (`dry_run` vs `live`) separate from research objective.
+- Do not disturb the v0.4 review pipeline.
+- Keep changes scoped to `backend/research_deepdive`, the live runner CLI, task notes, and tests.
+- Avoid making weak speculative proposals look evidence-backed.
+- Preserve configurability and prompt clarity.
 
 ## Plan
 
-- [x] Add/configure a hard per-run SerpAPI request budget.
-- [x] Verify configured keys are visible without printing secrets.
-- [x] Run preflight smoke checks for imports and deep-dive test coverage.
-- [x] Launch the live run with 3 investigators, 3 subagents each, and 9-way subagent concurrency.
-- [x] Monitor live trace output and generated markdown memory while the run is executing.
-- [x] Inspect all 9 subagent workspaces for tool calls, handoffs, and non-empty memory.
-- [x] Inspect investigator synthesis, critique artifacts, and final report.
-- [x] Run post-run verification checks.
-- [x] Document results and commit any code/config/test changes from this run.
+- [x] Inspect current request models, orchestration, prompts, and tests for mode/objective ambiguity.
+- [x] Add a clean objective field to the deep-dive request model.
+- [x] Thread objective text through investigator, subagent, critique, cross-investigator, and finalizer prompts.
+- [x] Make finalizer output requirements differ clearly between literature-review and novelty-ideation objectives.
+- [x] Add CLI support for selecting objective.
+- [x] Add smoke coverage for objective propagation and prompt content.
+- [x] Run focused deep-dive tests and review-pipeline regression checks.
+- [x] Document the result and commit the prompt/code refinement.
 
 ## Review
 
-### Live run outcome
+### What changed
 
-- Successful run id: `live_9agents_20260425_r11_final`.
-- Command used thinking-profile routing for search subagents because the
-  non-thinking Gemma/OpenAI-compatible path repeatedly emitted malformed or
-  truncated JSON actions under large markdown writes.
-- Workspace:
-  `backend/outputs/research_deepdives/live_9agents_20260425_r11_final`.
-- Final report:
-  `backend/outputs/research_deepdives/live_9agents_20260425_r11_final/final/research_deep_dive_report.md`.
-
-### Artifact counts
-
-- Subagent traces: 9.
-- Subagent handoffs: 9.
-- Investigator syntheses: 3.
-- Critique files: 4.
-- Final report bytes: 5413.
-- Tool errors in successful run: 0.
-
-### Successful-run tool counts
-
-- `read_workspace_markdown`: 9.
-- `resolve_arxiv_paper`: 9.
-- `get_citations`: 6.
-- `get_references`: 6.
-- `batch_get_papers`: 3.
-- `append_workspace_markdown`: 12.
-- `google_scholar_search`: 0 in the successful run; prior monitored attempts
-  used at most 2, below the 50 request cap.
-
-### Iterations from real failures
-
-- Added hard SerpAPI per-run budget enforcement.
-- Added `SERP_API_KEY` alias support for the existing local env naming.
-- Simplified the live action protocol to use `action=<tool_name>` because the
-  previous `action=tool/tool_name=...` split caused repeated model errors.
-- Added provider-level pacing/retry handling for Gemma/OpenAI-compatible and
-  OpenAI 429s.
-- Moved Semantic Scholar bulk-search field selection into the runtime because
-  `tldr` is unsupported on `/paper/search/bulk`.
-- Normalized unsupported bulk `sort=relevance` to omitted sort because the API
-  only accepts `paperId`, `publicationDate`, or `citationCount`.
+- Added `DeepDiveRunRequest.research_objective` with values
+  `novelty_ideation` and `literature_review`.
+- Kept `mode` as execution mode only: `dry_run` or `live`.
+- Default objective is `novelty_ideation`, matching the intended PaperCourt
+  research pipeline.
+- Added `--objective novelty_ideation|literature_review` to the live runner.
+- Threaded objective directives into investigator, subagent, critique, shared
+  tool, cross-investigator, and finalizer stages.
+- Finalizer now has objective-specific report sections:
+  - `novelty_ideation`: includes `Spinoff novelty proposals` and
+    `Proposal triage matrix`.
+  - `literature_review`: suppresses proposal invention and emphasizes coverage,
+    evidence quality, and next searches.
 
 ### Verification commands
 
-- `PYTHONPATH=backend python -c "import main; import api.review; import api.research; import research_deepdive; from research_deepdive import DeepDiveOrchestrator, DeepDiveConfig, DeepDiveLLMProvider; print('imports ok')"`
 - `python backend/scripts/test_research_deepdive.py`
 - `PYTHONPATH=backend python -m compileall -q -x 'backend/.venv|backend/outputs' backend`
+- `PYTHONPATH=backend python -c "import main; import api.review; import api.research; import research_deepdive; from research_deepdive import DeepDiveOrchestrator, DeepDiveConfig, DeepDiveRunRequest; print('imports ok')"`
 - `python backend/scripts/test_tex_ingestion.py`
 - `python backend/scripts/test_tex_parser.py`
 - `python backend/scripts/test_numeric.py`

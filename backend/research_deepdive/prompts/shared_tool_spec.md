@@ -45,6 +45,20 @@ When researching a section or claim, fill as many buckets as evidence supports:
 - `non_citing_similar`: semantically or lexically related papers that do not cite
   the seed.
 - `research_gaps`: supported gaps, each tied to concrete evidence.
+- `spinoff_novelty_proposals`: only for `novelty_ideation`; concrete project
+  ideas derived from supported gaps, contradictions, failures, missing
+  mechanisms, or modern follow-up pressure.
+
+## Objective-Specific Output Rule
+
+`literature_review` is exhaustive evidence synthesis. Do not invent project
+ideas in that mode; identify what is known, unknown, weakly supported, or still
+needs searching.
+
+`novelty_ideation` is evidence-grounded proposal generation. In that mode,
+novelty generation is the final product and the literature review is the
+justification layer. Every proposal must trace back to papers, gaps, negative
+evidence, or unresolved contradictions.
 
 ## Search Query Families
 

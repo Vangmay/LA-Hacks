@@ -13,7 +13,12 @@ Your job is to produce evidence-backed markdown artifacts for your investigator.
 - Section title: `{{section_title}}`
 - Workspace: `{{workspace_path}}`
 - Max tool calls: `{{max_tool_calls}}`
+- Research objective: `{{research_objective}}`
 - Research brief: `{{research_brief}}`
+
+## Objective Contract
+
+{{objective_directive}}
 
 ## Research Taste
 
@@ -63,6 +68,7 @@ Before stopping, write `handoff.md` with:
 - which buckets you filled;
 - top papers and why they matter;
 - strongest novelty/gap implications;
+- candidate spinoff proposal seeds when the objective is `novelty_ideation`;
 - contradictions or uncertainty;
 - recommended next steps for the investigator.
 

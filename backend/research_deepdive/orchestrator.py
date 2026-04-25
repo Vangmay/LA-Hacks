@@ -76,20 +76,20 @@ class DeepDiveOrchestrator:
 
             if request.mode == "live":
                 syntheses = [
-                    await self._synthesize_investigator_live(plan, subagent_results)
+                    await self._synthesize_investigator_live(plan, subagent_results, request)
                     for plan in investigators
                 ]
             else:
                 syntheses = [self._synthesize_investigator(plan, subagent_results) for plan in investigators]
             stages.append(ResearchStage.INVESTIGATOR_SYNTHESIS)
 
-            self._write_cross_investigator_deep_dive(run_root, syntheses)
+            self._write_cross_investigator_deep_dive(run_root, syntheses, request)
             stages.append(ResearchStage.CROSS_INVESTIGATOR_DEEP_DIVE)
 
             if request.mode == "live":
-                critiques = await self._run_critiques_live(run_root, syntheses)
+                critiques = await self._run_critiques_live(run_root, syntheses, request)
             else:
-                critiques = self._run_critiques(run_root, syntheses)
+                critiques = self._run_critiques(run_root, syntheses, request)
             stages.append(ResearchStage.CRITIQUE)
 
             if request.mode == "live":
@@ -137,6 +137,7 @@ class DeepDiveOrchestrator:
             else self.tools.keys()
         )
         shared_tools = self._shared_tool_prompt(tool_names if request.mode == "live" else None)
+        objective_directive = _objective_directive(request.research_objective)
 
         investigators: list[InvestigatorPlan] = []
         for idx, title in enumerate(selected, start=1):
@@ -159,6 +160,8 @@ class DeepDiveOrchestrator:
                     arxiv_url=request.arxiv_url,
                     paper_id=request.paper_id or "unknown",
                     research_brief=request.research_brief or "(no extra brief)",
+                    research_objective=request.research_objective,
+                    objective_directive=objective_directive,
                     investigator_id=investigator_id,
                     subagent_id=subagent_id,
                     section_title=title,
@@ -187,6 +190,8 @@ class DeepDiveOrchestrator:
                 arxiv_url=request.arxiv_url,
                 paper_id=request.paper_id or "unknown",
                 research_brief=request.research_brief or "(no extra brief)",
+                research_objective=request.research_objective,
+                objective_directive=objective_directive,
                 investigator_id=investigator_id,
                 section_title=title,
                 subagent_count=len(subagents),
@@ -298,6 +303,7 @@ class DeepDiveOrchestrator:
         self,
         plan: InvestigatorPlan,
         subagent_results: list[AgentRunResult],
+        request: DeepDiveRunRequest,
     ) -> AgentRunResult:
         own_results = [result for result in subagent_results if result.agent_id.startswith(plan.investigator_id)]
         artifact = plan.workspace_path / "synthesis.md"
@@ -309,7 +315,9 @@ class DeepDiveOrchestrator:
         prompt = (
             "You are the thinking-model investigator. Synthesize only this section's subagent handoffs. "
             "Preserve evidence IDs, separate prior work from recent/future work, identify missing buckets, "
-            "and list concrete follow-up searches. Return markdown only."
+            "and list concrete follow-up searches. "
+            + _objective_synthesis_instruction(request.research_objective)
+            + " Return markdown only."
         )
         content = await self.llm.chat_markdown(
             role=AgentModelRole.INVESTIGATOR,
@@ -337,10 +345,15 @@ class DeepDiveOrchestrator:
         self,
         run_root: Path,
         syntheses: list[AgentRunResult],
+        request: DeepDiveRunRequest,
     ) -> Path:
         artifact = run_root / "shared" / "cross_investigator_deep_dive.md"
         body = ["# Cross-Investigator Deep Dive", ""]
+        body.append(f"- Research objective: `{request.research_objective}`")
+        body.append("")
         body.append("This stage compares investigator syntheses for duplicated claims, contradictory evidence, missing literature buckets, and unresolved novelty questions.")
+        if request.research_objective == "novelty_ideation":
+            body.append("It should also identify cross-section spinoff proposal families that deserve finalization.")
         body.append("")
         for synthesis in syntheses:
             body.append(f"- `{synthesis.agent_id}`: {synthesis.summary}")
@@ -350,6 +363,7 @@ class DeepDiveOrchestrator:
         self,
         run_root: Path,
         syntheses: list[AgentRunResult],
+        request: DeepDiveRunRequest,
     ) -> list[CritiqueResult]:
         lenses = [
             ("coverage_critic", "coverage and search recall"),
@@ -365,6 +379,8 @@ class DeepDiveOrchestrator:
                 critic_id=critic_id,
                 lens=lens,
                 workspace_path=path,
+                research_objective=request.research_objective,
+                objective_directive=_objective_directive(request.research_objective),
                 shared_tool_spec=self._shared_tool_prompt(),
                 memory_spec=self.prompt_book.memory_spec,
             )
@@ -387,6 +403,7 @@ class DeepDiveOrchestrator:
         self,
         run_root: Path,
         syntheses: list[AgentRunResult],
+        request: DeepDiveRunRequest,
     ) -> list[CritiqueResult]:
         lenses = [
             ("coverage_critic", "coverage and search recall"),
@@ -408,6 +425,8 @@ class DeepDiveOrchestrator:
                 critic_id=critic_id,
                 lens=lens,
                 workspace_path=path,
+                research_objective=request.research_objective,
+                objective_directive=_objective_directive(request.research_objective),
                 shared_tool_spec=self._shared_tool_prompt(sorted(self.tool_runtime.executable_tool_names())),
                 memory_spec=self.prompt_book.memory_spec,
             )
@@ -419,7 +438,9 @@ class DeepDiveOrchestrator:
                     {
                         "role": "user",
                         "content": (
-                            "Critique these investigator syntheses. Return markdown using the required critique sections.\n\n"
+                            "Critique these investigator syntheses. Return markdown using the required critique sections. "
+                            + _objective_critique_instruction(request.research_objective)
+                            + "\n\n"
                             + synthesis_text
                         ),
                     },
@@ -451,6 +472,9 @@ class DeepDiveOrchestrator:
             arxiv_url=request.arxiv_url,
             paper_id=request.paper_id or "unknown",
             workspace_path=run_root / "final",
+            research_objective=request.research_objective,
+            objective_directive=_objective_directive(request.research_objective),
+            final_report_sections=_final_report_sections(request.research_objective),
             shared_tool_spec=self._shared_tool_prompt(),
             memory_spec=self.prompt_book.memory_spec,
         )
@@ -460,11 +484,12 @@ class DeepDiveOrchestrator:
             "",
             f"- arXiv URL: `{request.arxiv_url}`",
             f"- Paper ID: `{request.paper_id or 'unknown'}`",
+            f"- Research objective: `{request.research_objective}`",
             f"- Investigators: `{len(investigators)}`",
             f"- Investigator syntheses: `{len(syntheses)}`",
             f"- Critiques: `{len(critiques)}`",
             "",
-            "Dry-run report. Live finalization should merge syntheses, critique findings, literature buckets, novelty comparisons, and unresolved questions.",
+            "Dry-run report. Live finalization should merge syntheses, critique findings, literature buckets, novelty comparisons, unresolved questions, and objective-specific deliverables.",
             "",
         ]
         return self.workspace.write_markdown(path, "\n".join(body))
@@ -482,6 +507,9 @@ class DeepDiveOrchestrator:
             arxiv_url=request.arxiv_url,
             paper_id=request.paper_id or "unknown",
             workspace_path=run_root / "final",
+            research_objective=request.research_objective,
+            objective_directive=_objective_directive(request.research_objective),
+            final_report_sections=_final_report_sections(request.research_objective),
             shared_tool_spec=self._shared_tool_prompt(sorted(self.tool_runtime.executable_tool_names())),
             memory_spec=self.prompt_book.memory_spec,
         )
@@ -503,7 +531,9 @@ class DeepDiveOrchestrator:
                     "role": "user",
                     "content": (
                         f"Create the final research deep-dive report for {request.arxiv_url}. "
-                        f"There are {len(investigators)} investigators. Use only the artifacts below.\n\n"
+                        f"There are {len(investigators)} investigators. "
+                        f"The research objective is `{request.research_objective}`. "
+                        "Use only the artifacts below.\n\n"
                         + artifact_text
                     ),
                 },
@@ -549,3 +579,72 @@ def _format_tool_specs(tools: dict[str, object]) -> str:
             lines.append(f"- Notes: {' '.join(spec.notes)}")
         lines.append("")
     return "\n".join(lines)
+
+
+def _objective_directive(objective: str) -> str:
+    if objective == "literature_review":
+        return (
+            "Objective is `literature_review`: perform an extremely deep, conservative literature review. "
+            "The final product is coverage, evidence quality, bucket completeness, closest-prior-work analysis, "
+            "and recommended next searches. Do not generate new research proposals except as clearly labeled "
+            "open questions or search directions."
+        )
+    if objective == "novelty_ideation":
+        return (
+            "Objective is `novelty_ideation`: use the literature review as the evidence base for generating "
+            "actual spinoff novelty proposals. Novelty generation does not mean free invention; it means "
+            "turning supported gaps, contradictions, failures, missing mechanisms, and modern follow-up pressure "
+            "into concrete research directions. Each proposal must name the new idea, why it may be novel relative "
+            "to closest prior/future work, the technical mechanism or hypothesis, minimum validation experiment, "
+            "falsification risk, and supporting paper evidence. Mark weak proposals as speculative."
+        )
+    raise ValueError(f"unknown research objective: {objective}")
+
+
+def _objective_synthesis_instruction(objective: str) -> str:
+    if objective == "literature_review":
+        return (
+            "Do not invent spinoff projects; instead deepen coverage and identify what evidence is still missing."
+        )
+    if objective == "novelty_ideation":
+        return (
+            "Convert evidence-backed gaps into concrete spinoff proposal candidates with mechanisms, closest-prior-work risk, and validation tests."
+        )
+    raise ValueError(f"unknown research objective: {objective}")
+
+
+def _objective_critique_instruction(objective: str) -> str:
+    if objective == "literature_review":
+        return "Pressure-test evidence coverage and avoid proposal invention."
+    if objective == "novelty_ideation":
+        return "Pressure-test whether each spinoff proposal is actually novel, feasible, and evidence-supported."
+    raise ValueError(f"unknown research objective: {objective}")
+
+
+def _final_report_sections(objective: str) -> str:
+    shared = [
+        "1. Executive summary.",
+        "2. Seed paper metadata.",
+        "3. Literature map by bucket.",
+        "4. Closest prior work.",
+        "5. Direct follow-ups and recent state of field.",
+        "6. Critiques, limitations, reproductions, and benchmark evidence.",
+        "7. Novelty comparison table.",
+        "8. Research-gap candidates.",
+    ]
+    if objective == "literature_review":
+        sections = shared + [
+            "9. Evidence quality assessment.",
+            "10. Coverage gaps and recommended next searches.",
+            "11. Open questions.",
+        ]
+    elif objective == "novelty_ideation":
+        sections = shared + [
+            "9. Spinoff novelty proposals.",
+            "10. Proposal triage matrix.",
+            "11. Evidence quality and novelty-risk assessment.",
+            "12. Open questions and recommended next searches.",
+        ]
+    else:
+        raise ValueError(f"unknown research objective: {objective}")
+    return "\n".join(sections)
