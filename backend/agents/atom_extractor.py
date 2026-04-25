@@ -65,6 +65,13 @@ _ENV_PATTERN = re.compile(
     r"\\begin\s*\{(?P<env>[A-Za-z*]+)\}(?:\s*\[(?P<title>[^\]]*)\])?(?P<body>.*?)\\end\s*\{(?P=env)\}",
     re.DOTALL,
 )
+_RESEARCH_ENV_PATTERN = re.compile(
+    r"\\begin\s*\{(?P<env>"
+    + "|".join(re.escape(env) for env in sorted(_ENV_TO_TYPE, key=len, reverse=True))
+    + r")(?P<star>\*?)\}(?:\s*\[(?P<title>[^\]]*)\])?"
+    + r"(?P<body>.*?)\\end\s*\{(?P=env)(?P=star)\}",
+    re.DOTALL,
+)
 _LATEX_LABEL_RE = re.compile(r"\\label\{([^{}]+)\}")
 _DEFAULT_IMPORTANCE = {
     ResearchAtomType.THEOREM: AtomImportance.HIGH,
@@ -196,7 +203,7 @@ class AtomExtractorAgent(BaseAgent):
             return atoms
 
         counter = 0
-        for match in _ENV_PATTERN.finditer(assembled):
+        for match in _iter_research_env_matches(assembled):
             raw_env = match.group("env").lower().rstrip("*")
             atom_type = _ENV_TO_TYPE.get(raw_env)
             if atom_type is None:
@@ -333,6 +340,16 @@ def _strip_tex(body: str) -> str:
     text = re.sub(r"\\label\{[^{}]+\}", "", body)
     text = re.sub(r"\s+", " ", text).strip()
     return text
+
+
+def _iter_research_env_matches(assembled: str) -> list[re.Match[str]]:
+    """Find atom-bearing environments without a broad document-level match.
+
+    A single regex over all TeX environments can consume `document` and hide
+    theorem-like environments nested inside it. This narrower pattern only
+    targets environments that map to `ResearchAtomType`.
+    """
+    return sorted(_RESEARCH_ENV_PATTERN.finditer(assembled), key=lambda m: m.start())
 
 
 def _section_batches(paper: ParsedPaper, max_chars: int) -> list[str]:

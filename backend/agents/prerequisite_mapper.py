@@ -15,6 +15,7 @@ from openai import AsyncOpenAI
 
 from config import settings
 from core.openai_client import make_async_openai
+from models import CitationEntry
 
 from .base import AgentContext, AgentResult, BaseAgent
 
@@ -40,6 +41,28 @@ async def _validate_url(client: httpx.AsyncClient, url: str, concept: str) -> st
     except Exception:
         return _WIKI_SEARCH.format(query=quote(concept))
     return url
+
+
+def _citation_links(citations: list[CitationEntry]) -> list[str]:
+    """Prefer source-paper references before general web resources."""
+    links: list[str] = []
+    seen: set[str] = set()
+
+    def add(url: str | None) -> None:
+        clean = (url or "").strip()
+        if not clean or clean in seen:
+            return
+        seen.add(clean)
+        links.append(clean)
+
+    for citation in citations:
+        add(citation.url)
+        if citation.doi:
+            doi = citation.doi.strip()
+            if doi:
+                add(doi if doi.startswith("http") else f"https://doi.org/{doi}")
+
+    return links
 
 
 class PrerequisiteMapperAgent(BaseAgent):
@@ -104,6 +127,8 @@ class PrerequisiteMapperAgent(BaseAgent):
         if not isinstance(prereqs, list):
             prereqs = []
 
+        source_links = _citation_links(atom.citations)
+
         async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as http:
             validated: list[dict] = []
             for p in prereqs:
@@ -119,12 +144,13 @@ class PrerequisiteMapperAgent(BaseAgent):
                 for link in raw_links:
                     if isinstance(link, str) and link.startswith("http"):
                         good_links.append(await _validate_url(http, link, concept))
+                ordered_links = list(dict.fromkeys(source_links + good_links))
 
                 validated.append(
                     {
                         "concept": concept,
                         "description": description,
-                        "resource_links": good_links,
+                        "resource_links": ordered_links,
                     }
                 )
 

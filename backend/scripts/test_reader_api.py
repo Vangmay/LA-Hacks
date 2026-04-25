@@ -310,6 +310,19 @@ def test_atom_annotation_cache_miss_then_hit() -> None:
         _assert(body["explanation"] == explainer_payload["explanation"], f"wrong explanation: {body}")
         _assert(body["glossary"] == {"x": "a real number"}, f"wrong glossary: {body}")
         _assert(body["atom_id"] == "atom_001", f"wrong atom_id: {body}")
+        _assert(len(body["exercises"]) == 1, f"expected generated exercise in annotation: {body}")
+        _assert(
+            body["exercises"][0]["exercise_id"] == "ex-generated",
+            f"wrong exercise id: {body['exercises']}",
+        )
+        _assert(
+            body["exercises"][0]["exercise_type"] == "computational",
+            f"wrong exercise type: {body['exercises']}",
+        )
+        _assert(
+            body["exercises"][0]["answer_key"] == "9",
+            f"wrong exercise answer key: {body['exercises']}",
+        )
 
         # Second call — cache hit, agents should NOT run again.
         resp2 = client.get(f"/read/{sid}/atom/atom_001")

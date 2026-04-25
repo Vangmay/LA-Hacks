@@ -17,6 +17,7 @@ BACKEND = HERE.parent
 sys.path.insert(0, str(BACKEND))
 
 from agents.base import AgentContext  # noqa: E402
+from agents.atom_extractor import AtomExtractorAgent  # noqa: E402
 from agents.challenge_agent import ChallengeAgent  # noqa: E402
 from agents.defense_agent import DefenseAgent  # noqa: E402
 from agents.verdict_aggregator import aggregate_verdict  # noqa: E402
@@ -106,6 +107,16 @@ def _atom() -> ResearchAtom:
 
 async def main_async() -> None:
     paper = _paper()
+    extraction = await AtomExtractorAgent(client=_FakeOpenAI({"atoms": [], "warnings": []})).run(
+        AgentContext(job_id="prompt-2-test", parsed_paper=paper)
+    )
+    extracted_atoms = extraction.output.get("atoms", [])
+    _assert(extracted_atoms, "deterministic atom extraction missed theorem inside document")
+    _assert(
+        any(a["atom_type"] == "theorem" for a in extracted_atoms),
+        f"expected theorem atom, got: {extracted_atoms}",
+    )
+
     atom = _atom().model_copy(update={"equations": paper.equations, "citations": paper.bibliography})
 
     algebraic = run_algebraic_sanity(atom, paper)

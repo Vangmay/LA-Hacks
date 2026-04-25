@@ -23,6 +23,7 @@ from agents.prerequisite_mapper import PrerequisiteMapperAgent  # noqa: E402
 from agents.socratic_tutor import SocraticTutorAgent  # noqa: E402
 from models import (  # noqa: E402
     AtomImportance,
+    CitationEntry,
     ResearchAtom,
     ResearchAtomType,
     SourceSpan,
@@ -172,6 +173,58 @@ async def test_prerequisite_mapper_404_fallback() -> None:
     _assert("Special:Search" in link, f"404 URL was not replaced with search URL: {link}")
 
 
+async def test_prerequisite_mapper_atom_references_first() -> None:
+    payload = {
+        "prerequisites": [
+            {
+                "concept": "Spectral radius",
+                "description": "The largest absolute eigenvalue of a matrix.",
+                "resource_links": ["https://en.wikipedia.org/wiki/Spectral_radius"],
+            }
+        ]
+    }
+
+    mock_response = SimpleNamespace(status_code=200)
+
+    async def _fake_head(url, **_kwargs):
+        return mock_response
+
+    fake_http = unittest.mock.AsyncMock()
+    fake_http.head = _fake_head
+    fake_http.__aenter__ = unittest.mock.AsyncMock(return_value=fake_http)
+    fake_http.__aexit__ = unittest.mock.AsyncMock(return_value=False)
+
+    atom = _atom().model_copy(
+        update={
+            "citations": [
+                CitationEntry(
+                    citation_id="cite_001",
+                    key="perron1907",
+                    title="Zur Theorie der Matrices",
+                    doi="10.1007/BF01449982",
+                ),
+                CitationEntry(
+                    citation_id="cite_002",
+                    key="matrixbook",
+                    title="Matrix Analysis",
+                    url="https://example.org/matrix-analysis",
+                ),
+            ]
+        }
+    )
+    ctx = AgentContext(job_id="reader-test", atom=atom)
+
+    with unittest.mock.patch("agents.prerequisite_mapper.httpx.AsyncClient", return_value=fake_http):
+        result = await PrerequisiteMapperAgent(client=_FakeOpenAI(payload)).run(ctx)
+
+    links = result.output["prerequisites"][0]["resource_links"]
+    _assert(
+        links[:2] == ["https://doi.org/10.1007/BF01449982", "https://example.org/matrix-analysis"],
+        f"atom reference links should come before wiki links: {links}",
+    )
+    _assert(links[2] == "https://en.wikipedia.org/wiki/Spectral_radius", f"wiki link should follow: {links}")
+
+
 # ---------------------------------------------------------------------------
 # GlossaryAgent
 
@@ -295,6 +348,9 @@ async def main_async() -> None:
 
     await test_prerequisite_mapper_404_fallback()
     print("  PrerequisiteMapperAgent (404 fallback) — OK")
+
+    await test_prerequisite_mapper_atom_references_first()
+    print("  PrerequisiteMapperAgent (atom references first) — OK")
 
     await test_glossary()
     print("  GlossaryAgent — OK")
