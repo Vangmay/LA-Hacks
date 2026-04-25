@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import Home from './pages/Home'
 import Review from './pages/Review'
+import PoCPage from './pages/PoCPage'
 
 export default function App() {
   return (
@@ -10,7 +11,7 @@ export default function App() {
         <Route path="/review" element={<Home />} />
         <Route path="/poc" element={<Home />} />
         <Route path="/review/:jobId" element={<Review />} />
-        <Route path="/poc/:sessionId" element={<div className="p-8">PoC page (Person C builds this)</div>} />
+        <Route path="/poc/:sessionId" element={<PoCPage />} />
       </Routes>
     </BrowserRouter>
   )

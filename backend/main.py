@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
 from api.review import router as review_router
-from api.poc import router as poc_router
+from poc.api import router as poc_router
 from api.reader import router as reader_router
 from api.research import router as research_router
 
