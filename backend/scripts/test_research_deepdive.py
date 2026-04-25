@@ -85,6 +85,11 @@ async def main_async() -> None:
             max_personas_per_investigator=7,
             subagent_max_tool_calls=7,
             max_parallel_subagents=2,
+            report_detail_level="extensive",
+            final_report_min_spinoff_proposals=8,
+            final_report_min_evidence_items_per_proposal=3,
+            final_report_min_open_questions=10,
+            critique_min_points_per_lens=6,
             thinking_profile=ModelProfile(
                 provider="openai",
                 model="thinking-test-model",
@@ -155,6 +160,14 @@ async def main_async() -> None:
         _assert("Research objective: `novelty_ideation`" in final_prompt, "finalizer prompt missing objective")
         _assert("Spinoff novelty proposals" in final_prompt, "finalizer prompt missing proposal section")
         _assert("Proposal triage matrix" in final_prompt, "finalizer prompt missing proposal triage")
+        _assert("Report Depth Contract" in final_prompt, "finalizer prompt missing depth contract")
+        _assert("at least 8 spinoff novelty proposals" in final_prompt, "finalizer prompt missing proposal count")
+        _assert("at least 3 supporting evidence items" in final_prompt, "finalizer prompt missing evidence depth")
+
+        for critique in result.critiques:
+            critique_prompt = (critique.workspace_path / "system_prompt.md").read_text(encoding="utf-8")
+            _assert("Critique Depth Contract" in critique_prompt, "critique prompt missing depth contract")
+            _assert("at least 6" in critique_prompt, "critique prompt missing point minimum")
 
         literature_prompt = prompt_book.finalizer_prompt(
             arxiv_url="https://arxiv.org/abs/1706.03762",
@@ -162,6 +175,7 @@ async def main_async() -> None:
             workspace_path=Path(tmp) / "lit-final",
             research_objective="literature_review",
             objective_directive="Objective is `literature_review`: test directive.",
+            final_report_depth_spec="Detail level: `extensive`. Do not replace literature-review depth with proposal ideation.",
             final_report_sections="10. Coverage gaps and recommended next searches.",
             shared_tool_spec=prompt_book.shared_tool_spec,
             memory_spec=prompt_book.memory_spec,

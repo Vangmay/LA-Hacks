@@ -35,6 +35,27 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--semantic-scholar-interval", type=float, default=1.2)
     parser.add_argument("--semantic-scholar-retries", type=int, default=4)
     parser.add_argument("--serpapi-max-requests", type=int, default=50)
+    parser.add_argument("--report-detail-level", default=settings.deepdive_report_detail_level)
+    parser.add_argument(
+        "--min-spinoff-proposals",
+        type=int,
+        default=settings.deepdive_final_report_min_spinoff_proposals,
+    )
+    parser.add_argument(
+        "--min-evidence-items-per-proposal",
+        type=int,
+        default=settings.deepdive_final_report_min_evidence_items_per_proposal,
+    )
+    parser.add_argument(
+        "--min-open-questions",
+        type=int,
+        default=settings.deepdive_final_report_min_open_questions,
+    )
+    parser.add_argument(
+        "--critique-min-points",
+        type=int,
+        default=settings.deepdive_critique_min_points_per_lens,
+    )
     return parser.parse_args()
 
 
@@ -67,6 +88,11 @@ async def main_async() -> None:
         semantic_scholar_min_interval_seconds=args.semantic_scholar_interval,
         semantic_scholar_max_retries=args.semantic_scholar_retries,
         serpapi_max_requests=args.serpapi_max_requests,
+        report_detail_level=args.report_detail_level,
+        final_report_min_spinoff_proposals=args.min_spinoff_proposals,
+        final_report_min_evidence_items_per_proposal=args.min_evidence_items_per_proposal,
+        final_report_min_open_questions=args.min_open_questions,
+        critique_min_points_per_lens=args.critique_min_points,
     )
     require_key(config.thinking_profile.api_key_env)
     require_key(config.light_profile.api_key_env)

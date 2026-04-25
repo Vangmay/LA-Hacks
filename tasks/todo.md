@@ -1,48 +1,53 @@
-# Research Deep-Dive Objective Mode Refinement
+# Extensive Deep-Dive Report Prompt Refinement
 
 ## Goal
 
-Make the deep-dive pipeline explicit about the difference between:
-
-- `literature_review`: exhaustive evidence collection, bucketed synthesis, critique, and next searches;
-- `novelty_ideation`: literature review plus concrete spinoff novelty proposals, where novelty generation is the final product and the literature review is the evidence base.
+Ensure the research deep-dive final report and critique artifacts are extensive, organized, and synthesis-heavy rather than short summaries. The finalizer should combine all investigator, subagent, and critique ideas into a deep report, especially for `novelty_ideation` where spinoff proposals are the main product.
 
 ## Constraints
 
-- Keep execution mode (`dry_run` vs `live`) separate from research objective.
+- Keep depth controls configurable, not hidden magic constants.
+- Keep changes scoped to the deep-dive subsystem, runner, tests, and task notes.
 - Do not disturb the v0.4 review pipeline.
-- Keep changes scoped to `backend/research_deepdive`, the live runner CLI, task notes, and tests.
-- Avoid making weak speculative proposals look evidence-backed.
-- Preserve configurability and prompt clarity.
+- Preserve uncertainty and evidence discipline; extensive does not mean padded or hallucinated.
+- Make critique artifacts substantial and useful, not one-line pass/fail summaries.
 
 ## Plan
 
-- [x] Inspect current request models, orchestration, prompts, and tests for mode/objective ambiguity.
-- [x] Add a clean objective field to the deep-dive request model.
-- [x] Thread objective text through investigator, subagent, critique, cross-investigator, and finalizer prompts.
-- [x] Make finalizer output requirements differ clearly between literature-review and novelty-ideation objectives.
-- [x] Add CLI support for selecting objective.
-- [x] Add smoke coverage for objective propagation and prompt content.
-- [x] Run focused deep-dive tests and review-pipeline regression checks.
-- [x] Document the result and commit the prompt/code refinement.
+- [x] Inspect current finalizer and critique prompts for depth constraints or missing detail requirements.
+- [x] Add configurable report-depth settings for finalization and critique.
+- [x] Thread depth specs into finalizer and critique prompts.
+- [x] Update prompts to require extensive, structured synthesis, proposal details, critique integration, and evidence/risk matrices.
+- [x] Add runner flags for depth-related settings.
+- [x] Add smoke coverage that finalizer/critic prompts include extensiveness requirements.
+- [x] Run focused and review-regression verification.
+- [x] Document results and commit.
 
 ## Review
 
 ### What changed
 
-- Added `DeepDiveRunRequest.research_objective` with values
-  `novelty_ideation` and `literature_review`.
-- Kept `mode` as execution mode only: `dry_run` or `live`.
-- Default objective is `novelty_ideation`, matching the intended PaperCourt
-  research pipeline.
-- Added `--objective novelty_ideation|literature_review` to the live runner.
-- Threaded objective directives into investigator, subagent, critique, shared
-  tool, cross-investigator, and finalizer stages.
-- Finalizer now has objective-specific report sections:
-  - `novelty_ideation`: includes `Spinoff novelty proposals` and
-    `Proposal triage matrix`.
-  - `literature_review`: suppresses proposal invention and emphasizes coverage,
-    evidence quality, and next searches.
+- Added configurable depth settings:
+  - `DEEPDIVE_REPORT_DETAIL_LEVEL`
+  - `DEEPDIVE_FINAL_REPORT_MIN_SPINOFF_PROPOSALS`
+  - `DEEPDIVE_FINAL_REPORT_MIN_EVIDENCE_ITEMS_PER_PROPOSAL`
+  - `DEEPDIVE_FINAL_REPORT_MIN_OPEN_QUESTIONS`
+  - `DEEPDIVE_CRITIQUE_MIN_POINTS_PER_LENS`
+- Added matching live-runner flags:
+  - `--report-detail-level`
+  - `--min-spinoff-proposals`
+  - `--min-evidence-items-per-proposal`
+  - `--min-open-questions`
+  - `--critique-min-points`
+- Finalizer prompt now has an explicit `Report Depth Contract`.
+- Critique prompt now has an explicit `Critique Depth Contract`.
+- Novelty final reports now require extensive spinoff proposal structure:
+  title, novelty claim, mechanism, closest-prior/future collision risks,
+  evidence, validation path, falsification criteria, contribution type, and
+  confidence.
+- Literature-review reports are also forced to be extensive, but by expanding
+  evidence coverage, contradictions, bucket comparisons, and search plans
+  instead of inventing proposals.
 
 ### Verification commands
 

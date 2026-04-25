@@ -62,6 +62,19 @@ class DeepDiveConfig(BaseModel):
     default_search_limit: int = Field(
         default_factory=lambda: settings.deepdive_default_search_limit
     )
+    report_detail_level: str = Field(default_factory=lambda: settings.deepdive_report_detail_level)
+    final_report_min_spinoff_proposals: int = Field(
+        default_factory=lambda: settings.deepdive_final_report_min_spinoff_proposals
+    )
+    final_report_min_evidence_items_per_proposal: int = Field(
+        default_factory=lambda: settings.deepdive_final_report_min_evidence_items_per_proposal
+    )
+    final_report_min_open_questions: int = Field(
+        default_factory=lambda: settings.deepdive_final_report_min_open_questions
+    )
+    critique_min_points_per_lens: int = Field(
+        default_factory=lambda: settings.deepdive_critique_min_points_per_lens
+    )
     http_timeout_seconds: float = Field(
         default_factory=lambda: settings.deepdive_http_timeout_seconds
     )
@@ -129,6 +142,13 @@ class DeepDiveConfig(BaseModel):
                 "max_parallel_subagents": max(1, self.max_parallel_subagents),
                 "stage_timeout_seconds": max(1, self.stage_timeout_seconds),
                 "default_search_limit": max(1, self.default_search_limit),
+                "report_detail_level": self.report_detail_level.strip() or "extensive",
+                "final_report_min_spinoff_proposals": max(1, self.final_report_min_spinoff_proposals),
+                "final_report_min_evidence_items_per_proposal": max(
+                    1, self.final_report_min_evidence_items_per_proposal
+                ),
+                "final_report_min_open_questions": max(1, self.final_report_min_open_questions),
+                "critique_min_points_per_lens": max(1, self.critique_min_points_per_lens),
                 "http_timeout_seconds": max(1.0, self.http_timeout_seconds),
                 "model_timeout_seconds": max(1.0, self.model_timeout_seconds),
                 "model_max_retries": max(1, self.model_max_retries),

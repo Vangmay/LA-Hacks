@@ -381,6 +381,7 @@ class DeepDiveOrchestrator:
                 workspace_path=path,
                 research_objective=request.research_objective,
                 objective_directive=_objective_directive(request.research_objective),
+                critique_depth_spec=self._critique_depth_spec(),
                 shared_tool_spec=self._shared_tool_prompt(),
                 memory_spec=self.prompt_book.memory_spec,
             )
@@ -427,6 +428,7 @@ class DeepDiveOrchestrator:
                 workspace_path=path,
                 research_objective=request.research_objective,
                 objective_directive=_objective_directive(request.research_objective),
+                critique_depth_spec=self._critique_depth_spec(),
                 shared_tool_spec=self._shared_tool_prompt(sorted(self.tool_runtime.executable_tool_names())),
                 memory_spec=self.prompt_book.memory_spec,
             )
@@ -475,6 +477,7 @@ class DeepDiveOrchestrator:
             research_objective=request.research_objective,
             objective_directive=_objective_directive(request.research_objective),
             final_report_sections=_final_report_sections(request.research_objective),
+            final_report_depth_spec=self._final_report_depth_spec(request.research_objective),
             shared_tool_spec=self._shared_tool_prompt(),
             memory_spec=self.prompt_book.memory_spec,
         )
@@ -510,6 +513,7 @@ class DeepDiveOrchestrator:
             research_objective=request.research_objective,
             objective_directive=_objective_directive(request.research_objective),
             final_report_sections=_final_report_sections(request.research_objective),
+            final_report_depth_spec=self._final_report_depth_spec(request.research_objective),
             shared_tool_spec=self._shared_tool_prompt(sorted(self.tool_runtime.executable_tool_names())),
             memory_spec=self.prompt_book.memory_spec,
         )
@@ -550,6 +554,34 @@ class DeepDiveOrchestrator:
             self.prompt_book.shared_tool_spec
             + "\n\n"
             + _format_tool_specs(specs)
+        )
+
+    def _critique_depth_spec(self) -> str:
+        return (
+            f"Detail level: `{self.config.report_detail_level}`. "
+            f"Each critique lens should produce at least {self.config.critique_min_points_per_lens} "
+            "substantive issue/findings across blocking, major, minor, targeted searches, and proposal pressure tests when applicable. "
+            "A substantive point must include: affected artifact or claim, failure mode, evidence weakness, and concrete repair action."
+        )
+
+    def _final_report_depth_spec(self, objective: str) -> str:
+        base = (
+            f"Detail level: `{self.config.report_detail_level}`. "
+            "Write an extensive integrated report that preserves the richness of the subagent handoffs, investigator syntheses, and critique objections. "
+            f"Include at least {self.config.final_report_min_open_questions} open questions or next-search items unless the artifacts contain fewer defensible ones. "
+            "Prefer dense tables and structured subsections over vague prose."
+        )
+        if objective == "novelty_ideation":
+            return (
+                base
+                + " "
+                f"Include at least {self.config.final_report_min_spinoff_proposals} spinoff novelty proposals when enough evidence exists. "
+                f"Each proposal should cite or name at least {self.config.final_report_min_evidence_items_per_proposal} supporting evidence items when available. "
+                "If fewer proposals or evidence items are defensible, explicitly explain the evidence bottleneck instead of padding."
+            )
+        return (
+            base
+            + " Do not replace literature-review depth with proposal ideation. Expand evidence coverage, bucket comparisons, contradictions, and missing-search plans."
         )
 
 

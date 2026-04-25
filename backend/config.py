@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     deepdive_max_parallel_subagents: int = 8
     deepdive_stage_timeout_seconds: int = 900
     deepdive_default_search_limit: int = 25
+    deepdive_report_detail_level: str = "extensive"
+    deepdive_final_report_min_spinoff_proposals: int = 8
+    deepdive_final_report_min_evidence_items_per_proposal: int = 3
+    deepdive_final_report_min_open_questions: int = 10
+    deepdive_critique_min_points_per_lens: int = 6
     deepdive_http_timeout_seconds: float = 60.0
     deepdive_model_timeout_seconds: float = 180.0
     deepdive_model_max_retries: int = 5

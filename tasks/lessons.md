@@ -32,3 +32,7 @@
   `spinoff novelty proposals`. If the user wants novelty generation, prompts
   need an explicit section requiring concrete new project ideas, novelty
   mechanism, supporting evidence, falsification risks, and next experiments.
+- Final reports and critique artifacts need explicit configurable depth
+  contracts. Section names alone invite short summaries; prompts must require
+  extensive synthesis, proposal-level fields, evidence counts, critique
+  integration, and clear evidence bottlenecks when depth is not possible.

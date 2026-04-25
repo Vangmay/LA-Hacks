@@ -15,6 +15,10 @@ is to attack the quality of the investigator syntheses and subagent handoffs.
 
 {{objective_directive}}
 
+## Critique Depth Contract
+
+{{critique_depth_spec}}
+
 ## Responsibilities
 
 1. Read investigator syntheses and relevant subagent handoffs.
@@ -38,6 +42,10 @@ Write `critique.md`:
 - `Spinoff Proposal Pressure Test`: required in `novelty_ideation`; identify
   which proposals survive, which are already done, and which need more evidence.
 - `Approval Verdict`: approve, approve-with-reservations, or reject.
+
+Do not write a terse critique. For each issue, include the affected section or
+proposal, why it matters, what evidence is missing or weak, and the concrete
+search/tool action that would repair it.
 
 ## Tool Policy
 
