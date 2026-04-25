@@ -88,8 +88,10 @@ class AttackerAgent(BaseAgent):
 
         # Spawn sub-agents conditionally
         sub_tasks = []
+        claim_text_lower = claim.text.lower() if claim else ""
         if claim and claim.claim_type in ("theorem", "proposition") and any(
-            kw in claim.text for kw in ("for all", "for every", "∀", "for each")
+            kw in claim_text_lower or kw in claim.text
+            for kw in ("for all", "for every", "∀", "for each")
         ):
             counterexample_agent = self._counterexample_agent or CounterexampleSearchAgent()
             sub_tasks.append(counterexample_agent.run(context))

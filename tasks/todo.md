@@ -12,10 +12,10 @@
 - [x] Commit chunk 2.
 - [x] Chunk 3: rewire review API and pipeline script to use arXiv URL/id -> TeX only.
 - [x] Verify chunk 3 with mocked end-to-end pipeline and backend route checks.
-- [ ] Commit chunk 3.
-- [ ] Chunk 4: strengthen Prompt 2.1-2.4 agent tests around the new TeX path.
-- [ ] Run full backend verification suite, including real arXiv URL smoke cases where network permits.
-- [ ] Commit chunk 4.
+- [x] Commit chunk 3.
+- [x] Chunk 4: strengthen Prompt 2.1-2.4 agent tests around the new TeX path.
+- [x] Run full backend verification suite, including real arXiv URL smoke cases where network permits.
+- [x] Commit chunk 4.
 
 ## Specification
 
@@ -34,3 +34,7 @@
 - Chunk 2 live parse verified with `python backend/scripts/test_tex_parser.py --live https://arxiv.org/pdf/1706.03762 https://arxiv.org/abs/2103.00020` and title fallback rechecked with `python backend/scripts/test_tex_parser.py --live https://arxiv.org/abs/2103.00020`.
 - Chunk 3 verified with `backend/.venv/bin/python backend/scripts/test_review_tex_flow.py`.
 - Chunk 3 syntax/import check verified with `backend/.venv/bin/python -m py_compile backend/api/review.py backend/core/orchestrators/review.py backend/scripts/test_pipeline.py backend/scripts/test_review_tex_flow.py backend/agents/dag_builder.py backend/agents/attacker.py backend/agents/counterexample_search.py backend/agents/citation_gap.py`.
+- Chunk 4 verified with `backend/.venv/bin/python backend/scripts/test_prompt_2_agents.py`, `backend/.venv/bin/python backend/scripts/test_numeric.py`, and `backend/.venv/bin/python backend/scripts/test_defender.py --mock`.
+- Added `antlr4-python3-runtime==4.11.*` for SymPy LaTeX parsing and verified dependency health with `backend/.venv/bin/pip check`.
+- Live URL pipeline smoke passed with `backend/.venv/bin/python backend/scripts/test_pipeline.py https://arxiv.org/pdf/1706.03762 --max-claims 1`.
+- Second live URL pipeline smoke passed with `backend/.venv/bin/python backend/scripts/test_pipeline.py https://arxiv.org/abs/2103.00020 --max-claims 1`.
