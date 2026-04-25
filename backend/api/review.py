@@ -4,7 +4,7 @@ import asyncio
 import logging
 import os
 
-from fastapi import APIRouter, Form, HTTPException
+from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
@@ -13,6 +13,10 @@ from core.event_bus import event_bus
 from core.job_store import job_store
 from core.orchestrators.review import ReviewOrchestrator
 from ingestion.arxiv import ArxivSourceError, fetch_arxiv_source, parse_arxiv_url
+from models import DAGEventType
+
+_TERMINAL_EVENT_TYPES = {DAGEventType.JOB_COMPLETE, DAGEventType.JOB_ERROR}
+_HEARTBEAT_INTERVAL_SECONDS = 15.0
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -92,6 +96,7 @@ async def get_status(job_id: str):
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
     job = job_store.get(job_id)
     return {
+        "job_id": job_id,
         "status": job.get("status", "unknown"),
         "completed_atoms": job.get("completed_atoms", 0),
         "total_atoms": job.get("total_atoms", 0),
@@ -102,11 +107,49 @@ async def get_status(job_id: str):
 
 
 @router.get("/{job_id}/stream")
-async def stream(job_id: str):
-    """Stream review DAG events for a job."""
+async def stream(request: Request, job_id: str):
+    """Stream review DAG events for a job with replay, heartbeats, and clean teardown."""
+    if not job_store.exists(job_id):
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    last_event_id = request.headers.get("last-event-id")
+
     async def event_gen():
-        async for event in event_bus.subscribe(job_id):
-            yield {"event": "dag_update", "data": event.model_dump_json()}
+        queue: asyncio.Queue = asyncio.Queue()
+
+        async def drain():
+            try:
+                async for event in event_bus.subscribe(job_id, last_event_id):
+                    await queue.put(event)
+                    if event.event_type in _TERMINAL_EVENT_TYPES:
+                        break
+            finally:
+                await queue.put(None)
+
+        drain_task = asyncio.create_task(drain())
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=_HEARTBEAT_INTERVAL_SECONDS)
+                    if event is None:
+                        break
+                    yield {
+                        "event": "dag_update",
+                        "id": event.event_id,
+                        "data": event.model_dump_json(),
+                    }
+                    if event.event_type in _TERMINAL_EVENT_TYPES:
+                        break
+                except asyncio.TimeoutError:
+                    yield {"comment": "heartbeat"}
+        finally:
+            drain_task.cancel()
+            try:
+                await drain_task
+            except asyncio.CancelledError:
+                pass
 
     return EventSourceResponse(event_gen())
 

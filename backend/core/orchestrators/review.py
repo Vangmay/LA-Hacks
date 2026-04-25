@@ -437,15 +437,20 @@ async def _publish(
     node_id: Optional[str] = None,
     payload: Optional[dict[str, Any]] = None,
 ) -> None:
-    await event_bus.publish(
-        job_id,
-        DAGEvent(
-            event_id=str(uuid.uuid4()),
-            job_id=job_id,
-            event_type=event_type,
-            atom_id=atom_id,
-            node_id=node_id,
-            payload=payload or {},
-            timestamp=datetime.utcnow(),
-        ),
-    )
+    # A single failed emit must not kill the orchestration: SSE telemetry is
+    # observability, not load-bearing state. Log and continue.
+    try:
+        await event_bus.publish(
+            job_id,
+            DAGEvent(
+                event_id=str(uuid.uuid4()),
+                job_id=job_id,
+                event_type=event_type,
+                atom_id=atom_id,
+                node_id=node_id,
+                payload=payload or {},
+                timestamp=datetime.utcnow(),
+            ),
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("review orchestrator: failed to emit %s: %s", event_type, exc)
