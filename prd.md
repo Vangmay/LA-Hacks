@@ -7,13 +7,79 @@
 
 ---
 
+## Active v0.4 Product Contract
+
+The current implemented backend uses a source-grounded `ResearchAtom` design.
+This is the active schema and implementation contract for Review Mode:
+
+`arXiv e-print source -> assembled TeX -> ParsedPaper -> ResearchAtom extraction -> ResearchGraph -> checks -> challenges/rebuttals -> AtomVerdict -> ReviewReport`.
+
+### Active schema
+
+- `PaperSource` records arXiv/manual TeX provenance.
+- `ParsedPaper` records title, sections, equations, bibliography, raw text, and
+  assembled TeX.
+- `ResearchAtom` replaces `ClaimUnit`; an atom can be a definition, assumption,
+  theorem, lemma, proposition, construction, algorithm, bound, limitation,
+  technique, related-work claim, or assertion.
+- Each `ResearchAtom` carries `SourceSpan` grounding plus linked
+  `EquationBlock` and `CitationEntry` objects when available.
+- `ResearchGraph` replaces the old claim DAG and uses typed edges. Edge
+  direction is `source_id -> target_id`, meaning source depends on target.
+- `CheckResult` replaces old verification-tier output.
+- `Challenge` and `Rebuttal` replace the old attacker/defender free-form
+  payloads.
+- `AtomVerdict` replaces `ClaimVerdict`.
+- `ReviewReport` is the final JSON + markdown audit bundle.
+
+### Active review agents/services
+
+- `ingestion/arxiv.py`
+- `ingestion/tex_parser.py`
+- `agents/atom_extractor.py`
+- `agents/graph_builder.py`
+- `checks/algebraic_sanity.py`
+- `checks/numeric_probe.py`
+- `checks/citation_probe.py`
+- `agents/challenge_agent.py`
+- `agents/defense_agent.py`
+- `agents/verdict_aggregator.py`
+- `agents/cascade.py`
+- `agents/report_agent.py`
+
+### Active API
+
+- `POST /review/arxiv`
+- `POST /review`
+- `GET /review/{job_id}/status`
+- `GET /review/{job_id}/dag`
+- `GET /review/{job_id}/atoms/{atom_id}`
+- `GET /review/{job_id}/stream`
+- `GET /review/{job_id}/report`
+- `GET /review/{job_id}/report/markdown`
+
+Reader, PoC, and Research Mode remain mostly stubbed and should be updated to
+the atom schema when those modes are implemented.
+
+---
+
+## Archive: Pre-Revamp Claim-Centric PRD
+
+The sections below are retained as product-history context only. They describe
+the old claim-centric design and may mention `ClaimUnit`, `ClaimExtractorAgent`,
+`DAGBuilderAgent`, `SymbolicVerifierAgent`, `NumericAdversaryAgent`,
+`AttackerAgent`, or `DefenderAgent`. Those names are archived and are not the
+active backend contract.
+
+---
+
 ## 1. Overview
 
 ### 1.1 Product Summary
 
 PaperCourt is a multi-agent system for engaging deeply with research papers across four modes. **Review Mode** deploys adversarial agent swarms to verify and attack claims in a submitted paper, producing a verdict report with confidence scores and cascade failure propagation. **Reader Mode** turns the same dependency graph into a personalized study map — generating layered explanations, prerequisite links, glossary entries, and interactive exercises for each claim. **PoC Mode** operationalizes the paper's empirically testable claims into a runnable proof-of-concept: generating success/failure metrics, an implementation scaffold, and a reproducibility report mapping your experiment results back to the original claims. **Research Mode** wraps all three into a fully autonomous research loop: given a question or topic, the system retrieves relevant literature, builds a cross-paper knowledge graph, detects open problems, generates and attempts to prove conjectures, and self-reviews its output using the adversarial core.
 
-All four modes share the same foundational infrastructure: arXiv source ingestion, TeX parsing, claim extraction, and a proof-theoretic dependency DAG rendered live in the browser via SSE.
+All four modes are intended to share the same foundational infrastructure. The implemented review path now uses arXiv source ingestion, deterministic TeX parsing, source-grounded research atom extraction, and a typed dependency graph rendered live in the browser via SSE.
 
 ### 1.2 Problem Statement
 
@@ -25,8 +91,8 @@ No existing tool spans all four: adversarial claim verification, dependency-awar
 
 PaperCourt addresses all four use cases on a shared backend:
 
-- **Shared core:** arXiv source ingestion → TeX parsing → claim extraction → proof-theoretic DAG → live DAG visualization via SSE
-- **Review Mode:** adversarial attacker/defender swarms + symbolic/numeric/semantic verification → per-claim verdicts with cascade propagation
+- **Shared core:** arXiv source ingestion → TeX parsing → research atom extraction → typed dependency graph → live graph visualization via SSE
+- **Review Mode:** check services + challenge/defense agents → per-atom verdicts with cascade propagation
 - **Reader Mode:** explanation generation at multiple levels + prerequisite mapping + glossary + interactive exercises + Socratic tutor per claim
 - **PoC Mode:** empirically testable claim filtering → success/failure metric extraction → implementation scaffold generation → experiment result ingestion → reproducibility report
 - **Research Mode:** literature retrieval → cross-paper knowledge graph → gap detection → hypothesis generation → proof attempts → self-review via the adversarial core → structured research note output

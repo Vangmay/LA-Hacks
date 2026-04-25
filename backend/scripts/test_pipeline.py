@@ -1,10 +1,12 @@
-"""End-to-end live pipeline test for arXiv source review.
+"""Live end-to-end test for the v0.4 ResearchAtom review pipeline.
 
-Usage (from repo root):
+Usage from repo root:
     python backend/scripts/test_pipeline.py https://arxiv.org/abs/1706.03762
+    python backend/scripts/test_pipeline.py --papers-file good_papers.txt
 
-This script makes real OpenAI calls. Use ``--max-claims`` while developing if
-you want to validate the full path without reviewing every extracted claim.
+This script makes real OpenAI calls. It intentionally exercises the same
+central pipeline as ReviewOrchestrator without resurrecting legacy ClaimUnit
+agents.
 """
 from __future__ import annotations
 
@@ -14,31 +16,51 @@ import hashlib
 import json
 import sys
 import tempfile
+import uuid
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Optional
 
 import dotenv
 
 HERE = Path(__file__).resolve().parent
 BACKEND = HERE.parent
+REPO = BACKEND.parent
 sys.path.insert(0, str(BACKEND))
 
 dotenv.load_dotenv(BACKEND / ".env")
 
-from agents.attacker import AttackerAgent  # noqa: E402
+from agents.atom_extractor import AtomExtractorAgent  # noqa: E402
 from agents.base import AgentContext  # noqa: E402
-from agents.claim_extractor import ClaimExtractorAgent  # noqa: E402
-from agents.dag_builder import DAGBuilderAgent  # noqa: E402
-from agents.defender import DefenderAgent  # noqa: E402
-from agents.numeric_adversary import NumericAdversaryAgent  # noqa: E402
-from agents.symbolic_verifier import SymbolicVerifierAgent  # noqa: E402
-from agents.tex_parser import TexParserAgent  # noqa: E402
+from agents.cascade import apply_cascade  # noqa: E402
+from agents.challenge_agent import ChallengeAgent  # noqa: E402
+from agents.defense_agent import DefenseAgent  # noqa: E402
+from agents.graph_builder import GraphBuilderAgent  # noqa: E402
+from agents.report_agent import build_review_report  # noqa: E402
+from agents.verdict_aggregator import aggregate_verdict  # noqa: E402
+from checks import run_algebraic_sanity, run_citation_probe, run_numeric_probe  # noqa: E402
 from config import settings  # noqa: E402
-from models import ClaimUnit  # noqa: E402
-from utils.arxiv import fetch_arxiv_source, parse_arxiv_url  # noqa: E402
+from core.citation_linker import link_citations_to_atoms  # noqa: E402
+from core.equation_linker import link_equations_to_atoms  # noqa: E402
+from ingestion.arxiv import fetch_arxiv_source, parse_arxiv_url  # noqa: E402
+from ingestion.tex_parser import parse_tex  # noqa: E402
+from models import (  # noqa: E402
+    AtomVerdict,
+    Challenge,
+    CheckKind,
+    CheckResult,
+    CheckStatus,
+    PaperSource,
+    ParsedPaper,
+    Rebuttal,
+    ResearchAtom,
+    ResearchGraph,
+    SourceKind,
+    is_reviewable,
+)
 
 
-async def run(arxiv_value: str, max_claims: int | None) -> int:
+async def run_one(arxiv_value: str, max_review_atoms: Optional[int]) -> int:
     if not settings.openai_api_key:
         print("OPENAI_API_KEY not set. Add it to backend/.env and re-run.")
         return 1
@@ -48,206 +70,263 @@ async def run(arxiv_value: str, max_claims: int | None) -> int:
         print(f"Could not parse arXiv URL/id: {arxiv_value!r}")
         return 1
 
-    pipeline_output: Dict[str, Any] = {
+    job_id = f"manual-{uuid.uuid4().hex[:8]}"
+    pipeline: dict[str, Any] = {
+        "job_id": job_id,
         "arxiv_id": ref.canonical,
         "source_url": ref.source_url,
     }
 
     with tempfile.TemporaryDirectory() as tmp:
-        print(f"=== Fetching TeX source for {ref.canonical} ===")
+        print(f"\n=== {ref.canonical}: fetch arXiv TeX source ===")
         source = await fetch_arxiv_source(ref, tmp)
-        tex_hash = hashlib.md5(source.tex_text.encode("utf-8")).hexdigest()[:12]
-        pipeline_output["paper_hash"] = tex_hash
-        pipeline_output["source"] = {
-            "archive_path": source.archive_path,
+        tex_hash = hashlib.md5(source.tex_text.encode("utf-8")).hexdigest()[:16]
+        assembled_path = Path(tmp) / f"{ref.canonical.replace('/', '_')}.assembled.tex"
+        assembled_path.write_text(source.tex_text, encoding="utf-8")
+        paper_source = PaperSource(
+            paper_id=ref.canonical,
+            source_kind=SourceKind.ARXIV,
+            arxiv_id=ref.canonical,
+            source_url=source.source_url,
+            abs_url=f"https://arxiv.org/abs/{ref.canonical}",
+            pdf_url=f"https://arxiv.org/pdf/{ref.canonical}",
+            source_archive_path=source.archive_path,
+            source_extract_dir=source.extract_dir,
+            main_tex_path=source.main_tex_path,
+            assembled_tex_path=str(assembled_path),
+            fetched_at=datetime.utcnow(),
+            content_hash=tex_hash,
+        )
+        pipeline["source"] = {
             "main_tex_path": source.main_tex_path,
             "tex_files": len(source.tex_paths),
             "chars": len(source.tex_text),
+            "content_hash": tex_hash,
         }
-        print(f"  main_tex:  {Path(source.main_tex_path).name}")
-        print(f"  tex_files: {len(source.tex_paths)}")
-        print(f"  chars:     {len(source.tex_text)}")
+        print(f"  main: {Path(source.main_tex_path).name}")
+        print(f"  tex files: {len(source.tex_paths)}")
+        print(f"  chars: {len(source.tex_text)}")
 
-        print("\n=== TexParserAgent ===")
-        parser_result = await TexParserAgent().run(
-            AgentContext(job_id="manual-test", extra={"tex_text": source.tex_text})
-        )
-        if parser_result.status != "success":
-            print(f"  parser status={parser_result.status} error={parser_result.error}")
-            return 1
-        parsed = parser_result.output
-        print(f"  title:        {parsed['title'][:100]!r}")
-        print(f"  sections:     {len(parsed['sections'])}")
-        print(f"  equations:    {len(parsed['equations'])}")
-        print(f"  bibliography: {len(parsed['bibliography'])}")
-        print(f"  raw_text:     {len(parsed['raw_text'])} chars")
-
-        pipeline_output["parser"] = {
-            "title": parsed["title"],
-            "sections": len(parsed["sections"]),
-            "equations": len(parsed["equations"]),
-            "bibliography": len(parsed["bibliography"]),
+        print("=== parse ===")
+        paper = parse_tex(source.tex_text, paper_source)
+        pipeline["parser"] = {
+            "title": paper.title,
+            "sections": len(paper.sections),
+            "equations": len(paper.equations),
+            "bibliography": len(paper.bibliography),
+            "warnings": paper.parser_warnings,
         }
+        print(f"  title: {paper.title[:100]!r}")
+        print(f"  sections={len(paper.sections)} equations={len(paper.equations)} bibliography={len(paper.bibliography)}")
 
-        print("\n=== ClaimExtractorAgent ===")
-        ext_result = await ClaimExtractorAgent().run(
-            AgentContext(job_id="manual-test", extra={"parser_output": parsed})
-        )
-        claims: List[dict] = ext_result.output.get("claims", [])
-        print(f"  status:     {ext_result.status}")
-        print(f"  confidence: {ext_result.confidence}")
-        print(f"  claims:     {len(claims)}")
-        if ext_result.error:
-            print(f"  warning:    {ext_result.error}")
-        if not claims:
-            pipeline_output["extractor"] = {
-                "status": ext_result.status,
-                "total_claims": 0,
-                "claims": [],
-            }
-            _save(pipeline_output, tex_hash)
-            return 1
+        print("=== extract atoms ===")
+        atoms = await _extract_atoms(job_id, paper)
+        atoms = link_equations_to_atoms(paper, atoms)
+        atoms = link_citations_to_atoms(paper, atoms)
+        pipeline["atoms"] = [a.model_dump() for a in atoms]
+        by_type: dict[str, int] = {}
+        for atom in atoms:
+            by_type[atom.atom_type.value] = by_type.get(atom.atom_type.value, 0) + 1
+        print(f"  atoms: {len(atoms)}")
+        for atom_type, count in sorted(by_type.items()):
+            print(f"    {atom_type}: {count}")
+        _print_atom_samples(atoms)
 
-        by_type: Dict[str, int] = {}
-        for claim in claims:
-            by_type[claim["claim_type"]] = by_type.get(claim["claim_type"], 0) + 1
-        for claim_type, count in sorted(by_type.items()):
-            print(f"    {claim_type}: {count}")
-        pipeline_output["extractor"] = {
-            "status": ext_result.status,
-            "total_claims": len(claims),
-            "by_type": by_type,
-            "claims": claims,
-        }
+        print("=== build graph ===")
+        graph = await _build_graph(job_id, atoms)
+        pipeline["graph"] = graph.model_dump()
+        print(f"  edges={len(graph.edges)} roots={len(graph.roots)} warnings={len(graph.warnings)}")
 
-        print("\n=== DAGBuilderAgent ===")
-        dag_result = await DAGBuilderAgent().run(
-            AgentContext(job_id="manual-test", extra={"claims": claims})
-        )
-        dag_out = dag_result.output
-        print(f"  status:     {dag_result.status}")
-        print(f"  confidence: {dag_result.confidence}")
-        print(f"  edges:      {len(dag_out.get('edges', []))}")
-        print(f"  roots:      {dag_out.get('roots', [])}")
-        print(f"  topo order: {dag_out.get('topological_order', [])}")
-        pipeline_output["dag"] = {
-            "status": dag_result.status,
-            "edges": dag_out.get("edges", []),
-            "adjacency": dag_out.get("adjacency", {}),
-            "roots": dag_out.get("roots", []),
-            "topological_order": dag_out.get("topological_order", []),
-        }
-
-        ordered_claims = _claims_in_order(claims, dag_out.get("topological_order", []))
-        if max_claims is not None:
-            ordered_claims = ordered_claims[:max_claims]
-            print(f"\n=== Prompt 2.1-2.4 on first {len(ordered_claims)} claim(s) ===")
+        review_atoms = [a for a in atoms if is_reviewable(a)]
+        if max_review_atoms is not None:
+            review_atoms = review_atoms[:max_review_atoms]
+            print(f"=== review first {len(review_atoms)} reviewable atom(s) ===")
         else:
-            print(f"\n=== Prompt 2.1-2.4 on all {len(ordered_claims)} claim(s) ===")
+            print(f"=== review all {len(review_atoms)} reviewable atom(s) ===")
 
-        review_results = await _run_prompt_2_1_to_2_4(ordered_claims)
-        pipeline_output["review_results"] = review_results
+        verdicts = await _review_atoms(job_id, paper, review_atoms, graph)
+        verdict_by_atom = {v.atom_id: v for v in verdicts}
+        for atom in atoms:
+            if atom.atom_id not in verdict_by_atom:
+                verdicts.append(aggregate_verdict(atom, [], [], []))
 
-    _save(pipeline_output, pipeline_output["paper_hash"])
+        verdicts = apply_cascade(verdicts, graph)
+        report = build_review_report(
+            job_id=job_id,
+            paper=paper,
+            atoms=atoms,
+            graph=graph,
+            verdicts=verdicts,
+            arxiv_id=ref.canonical,
+            tex_path=str(assembled_path),
+        )
+        pipeline["verdicts"] = [v.model_dump() for v in verdicts]
+        pipeline["report"] = report.model_dump()
+
+    out_path = _save(pipeline, ref.canonical, tex_hash)
+    summary = report.summary
+    print("=== summary ===")
+    print(
+        f"  reviewed={summary.total_reviewed_atoms} no_objection={summary.no_objection_found} "
+        f"contested={summary.contested} likely_flawed={summary.likely_flawed} "
+        f"refuted={summary.refuted} not_checkable={summary.not_checkable}"
+    )
+    print(f"  output: {out_path}")
     return 0
 
 
-async def _run_prompt_2_1_to_2_4(claims: List[dict]) -> Dict[str, dict]:
-    symbolic = SymbolicVerifierAgent()
-    numeric = NumericAdversaryAgent()
-    attacker = AttackerAgent()
-    defender = DefenderAgent()
-    output: Dict[str, dict] = {}
+async def _extract_atoms(job_id: str, paper: ParsedPaper) -> list[ResearchAtom]:
+    result = await AtomExtractorAgent().run(AgentContext(job_id=job_id, parsed_paper=paper))
+    if result.status == "error":
+        raise RuntimeError(f"atom extraction failed: {result.error}")
+    atoms = [ResearchAtom.model_validate(a) for a in result.output.get("atoms", [])]
+    if not atoms:
+        raise RuntimeError("atom extraction produced zero atoms")
+    return atoms
 
-    for claim_dict in claims:
-        claim = ClaimUnit.model_validate(claim_dict)
-        snippet = claim.text[:100].replace("\n", " ")
-        print(f"\n  {claim.claim_id} ({claim.claim_type}): {snippet}...")
 
-        verification_results = []
-        verifier_results = await asyncio.gather(
-            symbolic.run(AgentContext(job_id="manual-test", claim=claim)),
-            numeric.run(AgentContext(job_id="manual-test", claim=claim)),
-            return_exceptions=True,
-        )
-        for result in verifier_results:
-            if isinstance(result, Exception):
-                verification_results.append(
-                    {
-                        "tier": "unknown",
-                        "status": "inconclusive",
-                        "evidence": str(result),
-                        "confidence": 0.0,
-                    }
+async def _build_graph(job_id: str, atoms: list[ResearchAtom]) -> ResearchGraph:
+    result = await GraphBuilderAgent().run(AgentContext(job_id=job_id, extra={"atoms": atoms}))
+    graph = result.output.get("graph")
+    if graph is None:
+        raise RuntimeError(f"graph builder produced no graph: {result.error}")
+    return ResearchGraph.model_validate(graph)
+
+
+async def _review_atoms(
+    job_id: str,
+    paper: ParsedPaper,
+    atoms: list[ResearchAtom],
+    graph: ResearchGraph,
+) -> list[AtomVerdict]:
+    challenge_agent = ChallengeAgent()
+    defense_agent = DefenseAgent()
+    semaphore = asyncio.Semaphore(max(1, settings.max_parallel_claims))
+
+    async def review_one(atom: ResearchAtom) -> AtomVerdict:
+        async with semaphore:
+            checks: list[CheckResult] = []
+            alg = run_algebraic_sanity(atom, paper)
+            cite = run_citation_probe(atom)
+            try:
+                num = await run_numeric_probe(atom)
+            except Exception as exc:  # noqa: BLE001
+                num = CheckResult(
+                    check_id=f"check_num_{atom.atom_id}_err",
+                    atom_id=atom.atom_id,
+                    kind=CheckKind.NUMERIC_COUNTEREXAMPLE_PROBE,
+                    status=CheckStatus.INCONCLUSIVE,
+                    summary=f"numeric probe error: {exc}",
+                    confidence=0.0,
+                    error=str(exc),
                 )
-                continue
-            verification_results.append(result.output)
+            checks = [alg, num, cite]
+
+            ctx = AgentContext(
+                job_id=job_id,
+                parsed_paper=paper,
+                atom=atom,
+                graph=graph,
+                checks=checks,
+            )
+            ch_result = await challenge_agent.run(ctx)
+            challenges = [
+                Challenge.model_validate(c)
+                for c in ch_result.output.get("challenges", [])
+            ]
+
+            rebuttals: list[Rebuttal] = []
+            if challenges:
+                df_result = await defense_agent.run(
+                    AgentContext(
+                        job_id=job_id,
+                        parsed_paper=paper,
+                        atom=atom,
+                        graph=graph,
+                        checks=checks,
+                        challenges=challenges,
+                    )
+                )
+                rebuttals = [
+                    Rebuttal.model_validate(r)
+                    for r in df_result.output.get("rebuttals", [])
+                ]
+
+            verdict = aggregate_verdict(atom, checks, challenges, rebuttals)
             print(
-                f"    {result.output.get('tier')}: {result.output.get('status')} "
-                f"(conf={result.output.get('confidence')})"
+                f"  {atom.atom_id}: {atom.atom_type.value} -> {verdict.label.value} "
+                f"(checks={len(checks)} challenges={len(challenges)} rebuttals={len(rebuttals)})"
             )
+            return verdict
 
-        attacker_result = await attacker.run(
-            AgentContext(
-                job_id="manual-test",
-                claim=claim,
-                extra={"verification_results": verification_results},
-            )
+    results = await asyncio.gather(*(review_one(atom) for atom in atoms), return_exceptions=True)
+    verdicts: list[AtomVerdict] = []
+    for atom, result in zip(atoms, results):
+        if isinstance(result, Exception):
+            print(f"  {atom.atom_id}: review error: {result}")
+            verdicts.append(aggregate_verdict(atom, [], [], []))
+        else:
+            verdicts.append(result)
+    return verdicts
+
+
+def _print_atom_samples(atoms: list[ResearchAtom], limit: int = 12) -> None:
+    print("  sample atoms for manual extraction review:")
+    for atom in atoms[:limit]:
+        text = " ".join(atom.text.split())
+        print(
+            f"    {atom.atom_id} [{atom.atom_type.value}, {atom.section_heading or '?'}] "
+            f"{text[:170]}"
         )
-        challenges = attacker_result.output.get("challenges", [])
-        print(f"    challenges: {len(challenges)}")
-
-        defender_result = await defender.run(
-            AgentContext(
-                job_id="manual-test",
-                claim=claim,
-                extra={"challenges": challenges},
-            )
-        )
-        rebuttals = defender_result.output.get("rebuttals", [])
-        print(f"    rebuttals:  {len(rebuttals)}")
-
-        output[claim.claim_id] = {
-            "claim": claim.model_dump(),
-            "verification_results": verification_results,
-            "challenges": challenges,
-            "rebuttals": rebuttals,
-        }
-
-    return output
 
 
-def _claims_in_order(claims: List[dict], topological_order: List[str]) -> List[dict]:
-    claim_map = {claim["claim_id"]: claim for claim in claims}
-    ordered = [claim_map[cid] for cid in topological_order if cid in claim_map]
-    if len(ordered) == len(claims):
-        return ordered
-    seen = {claim["claim_id"] for claim in ordered}
-    ordered.extend(claim for claim in claims if claim["claim_id"] not in seen)
-    return ordered
-
-
-def _save(data: dict, paper_hash: str) -> None:
+def _save(data: dict[str, Any], arxiv_id: str, tex_hash: str) -> Path:
     out_dir = BACKEND / "outputs"
     out_dir.mkdir(exist_ok=True)
-    out_path = out_dir / f"{paper_hash}_pipeline.json"
+    safe_name = arxiv_id.replace("/", "_").replace(".", "_")
+    out_path = out_dir / f"{safe_name}_{tex_hash}_pipeline.json"
     safe = json.loads(json.dumps(data, default=str))
-    with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(safe, f, indent=2, ensure_ascii=False)
-    print(f"\nPipeline output saved to {out_path}")
+    out_path.write_text(json.dumps(safe, indent=2, ensure_ascii=False), encoding="utf-8")
+    return out_path
+
+
+def _papers_from_file(path: Path) -> list[str]:
+    return [
+        line.strip()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+
+
+async def main_async(args: argparse.Namespace) -> int:
+    papers = list(args.arxiv_url or [])
+    if args.papers_file:
+        papers.extend(_papers_from_file(Path(args.papers_file)))
+    if not papers:
+        print("Provide an arXiv URL/id or --papers-file.")
+        return 1
+
+    exit_code = 0
+    for paper in papers:
+        try:
+            exit_code = max(exit_code, await run_one(paper, args.max_review_atoms))
+        except Exception as exc:  # noqa: BLE001
+            print(f"\n{paper}: pipeline failed: {exc}")
+            exit_code = 1
+    return exit_code
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("arxiv_url", help="arXiv URL or bare arXiv id")
+    parser.add_argument("arxiv_url", nargs="*", help="arXiv URL(s) or bare arXiv id(s)")
+    parser.add_argument("--papers-file", help="File containing arXiv URLs/ids, one per line")
     parser.add_argument(
-        "--max-claims",
+        "--max-review-atoms",
         type=int,
         default=None,
-        help="Optional cap for Prompt 2.1-2.4 live agent work.",
+        help="Optional cap for the expensive check/challenge/defense stage.",
     )
-    args = parser.parse_args()
-    return asyncio.run(run(args.arxiv_url, args.max_claims))
+    return asyncio.run(main_async(parser.parse_args()))
 
 
 if __name__ == "__main__":

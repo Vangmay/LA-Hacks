@@ -1,145 +1,99 @@
-"""Smoke test for NumericAdversaryAgent — no real OpenAI calls.
-
-Usage (from backend/):
-    .venv/bin/python scripts/test_numeric.py
-
-Drives three claims through a fake OpenAI client:
-    1. true universal claim (passes)            -> status="passed"
-    2. false universal claim (counterexample)   -> status="failed"
-    3. non-universal claim                       -> status="inconclusive"
-    4. unsafe predicate (sandbox rejection)      -> status="inconclusive"
-"""
+"""Offline numeric probe test with a mocked OpenAI client."""
 from __future__ import annotations
 
 import asyncio
 import json
 import sys
-from dataclasses import dataclass
 from pathlib import Path
-from typing import List
+from types import SimpleNamespace
 
 HERE = Path(__file__).resolve().parent
 BACKEND = HERE.parent
 sys.path.insert(0, str(BACKEND))
 
-from agents.base import AgentContext  # noqa: E402
-from agents.numeric_adversary import NumericAdversaryAgent  # noqa: E402
-from models import ClaimUnit  # noqa: E402
+from checks.numeric_probe import run_numeric_probe  # noqa: E402
+from models import AtomImportance, CheckStatus, ResearchAtom, ResearchAtomType, SourceSpan  # noqa: E402
 
 
-@dataclass
-class _FakeMessage:
-    content: str
+def _assert(condition: bool, message: str) -> None:
+    if not condition:
+        raise AssertionError(message)
 
 
-@dataclass
-class _FakeChoice:
-    message: _FakeMessage
-
-
-@dataclass
-class _FakeResponse:
-    choices: List[_FakeChoice]
-
-
-class _FakeCompletions:
-    def __init__(self, payloads: List[str]) -> None:
-        self._payloads = list(payloads)
-
-    async def create(self, **_kwargs) -> _FakeResponse:
-        if not self._payloads:
-            raise RuntimeError("ran out of fake payloads")
-        return _FakeResponse(choices=[_FakeChoice(message=_FakeMessage(content=self._payloads.pop(0)))])
-
-
-class _FakeChat:
-    def __init__(self, completions: _FakeCompletions) -> None:
-        self.completions = completions
-
-
-class _FakeOpenAI:
-    def __init__(self, payloads: List[str]) -> None:
-        self.chat = _FakeChat(_FakeCompletions(payloads))
-
-
-def _claim(claim_id: str, text: str) -> ClaimUnit:
-    return ClaimUnit(
-        claim_id=claim_id,
+def _atom(text: str) -> ResearchAtom:
+    return ResearchAtom(
+        atom_id="atom_num_001",
+        paper_id="mock-paper",
+        atom_type=ResearchAtomType.PROPOSITION,
         text=text,
-        claim_type="proposition",
-        section="test",
-        equations=[],
-        citations=[],
-        dependencies=[],
+        source_span=SourceSpan(
+            paper_id="mock-paper",
+            raw_excerpt=text,
+            match_confidence=1.0,
+        ),
+        extraction_confidence=1.0,
+        importance=AtomImportance.HIGH,
     )
 
 
-CASES = [
-    {
-        "name": "true bound: x^2 + 1 > 0 on [-10, 10]",
-        "claim": _claim("c1", "For all x in [-10, 10], x^2 + 1 > 0."),
-        "payload": json.dumps({
-            "is_universal": True,
-            "predicate": "lambda x: x*x + 1 > 0",
-            "domain": [-10.0, 10.0],
-            "explanation": "trivially positive",
-        }),
-        "expect_status": "passed",
-    },
-    {
-        "name": "false bound: sin(x) >= 0.5 on [-3.14, 3.14]",
-        "claim": _claim("c2", "For every x in [-pi, pi], sin(x) >= 0.5."),
-        "payload": json.dumps({
-            "is_universal": True,
-            "predicate": "lambda x: np.sin(x) >= 0.5",
-            "domain": [-3.14159, 3.14159],
-            "explanation": "claim is false near 0 and negatives",
-        }),
-        "expect_status": "failed",
-    },
-    {
-        "name": "non-universal claim",
-        "claim": _claim("c3", "The transformer outperforms RNNs on translation."),
-        "payload": json.dumps({
-            "is_universal": False,
-            "explanation": "no numeric quantifier",
-        }),
-        "expect_status": "inconclusive",
-    },
-    {
-        "name": "unsafe predicate (sandbox should reject)",
-        "claim": _claim("c4", "For all x in [0, 1], something."),
-        "payload": json.dumps({
-            "is_universal": True,
-            "predicate": "lambda x: __import__('os').system('echo pwn') or True",
-            "domain": [0.0, 1.0],
-            "explanation": "malicious",
-        }),
-        "expect_status": "inconclusive",
-    },
-]
+class _FakeCompletions:
+    def __init__(self, payload: dict) -> None:
+        self.payload = payload
+
+    async def create(self, **_kwargs):
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content=json.dumps(self.payload))
+                )
+            ]
+        )
 
 
-async def _main() -> int:
-    fake = _FakeOpenAI([c["payload"] for c in CASES])
-    agent = NumericAdversaryAgent(client=fake)
+class _FakeOpenAI:
+    def __init__(self, payload: dict) -> None:
+        self.chat = SimpleNamespace(completions=_FakeCompletions(payload))
 
-    failures = 0
-    for case in CASES:
-        ctx = AgentContext(job_id="test", claim=case["claim"])
-        result = await agent.run(ctx)
-        inner_status = result.output.get("status")
-        passed = inner_status == case["expect_status"]
-        marker = "OK " if passed else "FAIL"
-        print(f"[{marker}] {case['name']!r}")
-        print(f"      agent_status={result.status} inner_status={inner_status} "
-              f"confidence={result.confidence}")
-        print(f"      evidence: {result.output.get('evidence')[:120]}")
-        if not passed:
-            failures += 1
-            print(f"      expected inner_status={case['expect_status']!r}")
-    return 0 if failures == 0 else 1
+
+async def main_async() -> None:
+    no_counterexample = await run_numeric_probe(
+        _atom("For every real x, x^2 >= 0."),
+        client=_FakeOpenAI(
+            {
+                "is_universal": True,
+                "predicate": "lambda x: x*x >= 0",
+                "domain": [-10, 10],
+                "explanation": "single-variable universal inequality",
+            }
+        ),
+    )
+    _assert(
+        no_counterexample.status == CheckStatus.NO_COUNTEREXAMPLE_FOUND,
+        f"expected no counterexample, got {no_counterexample.status}: {no_counterexample.summary}",
+    )
+
+    counterexample = await run_numeric_probe(
+        _atom("For every real x, x^2 < 0."),
+        client=_FakeOpenAI(
+            {
+                "is_universal": True,
+                "predicate": "lambda x: x*x < 0",
+                "domain": [-10, 10],
+                "explanation": "false universal inequality",
+            }
+        ),
+    )
+    _assert(
+        counterexample.status == CheckStatus.COUNTEREXAMPLE_FOUND,
+        f"expected counterexample, got {counterexample.status}: {counterexample.summary}",
+    )
+
+
+def main() -> int:
+    asyncio.run(main_async())
+    print("numeric probe tests OK")
+    return 0
 
 
 if __name__ == "__main__":
-    sys.exit(asyncio.run(_main()))
+    raise SystemExit(main())

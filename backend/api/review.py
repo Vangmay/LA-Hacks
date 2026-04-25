@@ -12,7 +12,7 @@ from sse_starlette.sse import EventSourceResponse
 from core.event_bus import event_bus
 from core.job_store import job_store
 from core.orchestrators.review import ReviewOrchestrator
-from utils.arxiv import ArxivSourceError, fetch_arxiv_source, parse_arxiv_url
+from ingestion.arxiv import ArxivSourceError, fetch_arxiv_source, parse_arxiv_url
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -93,8 +93,11 @@ async def get_status(job_id: str):
     job = job_store.get(job_id)
     return {
         "status": job.get("status", "unknown"),
-        "completed_claims": job.get("completed_claims", 0),
-        "total_claims": job.get("total_claims", 0),
+        "completed_atoms": job.get("completed_atoms", 0),
+        "total_atoms": job.get("total_atoms", 0),
+        "paper_id": job.get("paper_id"),
+        "paper_title": job.get("paper_title"),
+        "error": job.get("error"),
     }
 
 
@@ -131,6 +134,19 @@ async def get_dag(job_id: str):
     if job.get("dag_snapshot"):
         return job["dag_snapshot"]
     return {"nodes": [], "edges": []}
+
+
+@router.get("/{job_id}/atoms/{atom_id}")
+async def get_atom(job_id: str, atom_id: str):
+    """Return one source-grounded atom plus its verdict when available."""
+    if not job_store.exists(job_id):
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    job = job_store.get(job_id) or {}
+    atom = next((a for a in job.get("atoms", []) if a.get("atom_id") == atom_id), None)
+    if atom is None:
+        raise HTTPException(status_code=404, detail=f"Atom {atom_id} not found")
+    verdict = next((v for v in job.get("verdicts", []) if v.get("atom_id") == atom_id), None)
+    return {"atom": atom, "verdict": verdict}
 
 
 @router.get("/{job_id}/report/markdown", response_class=PlainTextResponse)

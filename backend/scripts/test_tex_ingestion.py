@@ -19,7 +19,7 @@ HERE = Path(__file__).resolve().parent
 BACKEND = HERE.parent
 sys.path.insert(0, str(BACKEND))
 
-from utils.arxiv import (  # noqa: E402
+from ingestion.arxiv import (  # noqa: E402
     ArxivSourceError,
     assemble_tex_document,
     fetch_arxiv_source,

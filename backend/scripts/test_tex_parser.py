@@ -1,4 +1,4 @@
-"""Test TexParserAgent without LLM calls.
+"""Test the deterministic v0.4 TeX parser without LLM calls.
 
 Usage:
     python backend/scripts/test_tex_parser.py
@@ -8,17 +8,19 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import sys
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 BACKEND = HERE.parent
 sys.path.insert(0, str(BACKEND))
 
-from agents.base import AgentContext  # noqa: E402
-from agents.tex_parser import TexParserAgent, parse_tex_text  # noqa: E402
-from utils.arxiv import fetch_arxiv_source, parse_arxiv_url  # noqa: E402
+from ingestion.arxiv import fetch_arxiv_source, parse_arxiv_url  # noqa: E402
+from ingestion.tex_parser import parse_tex  # noqa: E402
+from models import PaperSource, SourceKind  # noqa: E402
 
 
 SAMPLE_TEX = r"""
@@ -54,24 +56,24 @@ def _assert(condition: bool, message: str) -> None:
         raise AssertionError(message)
 
 
-def test_sample_parse_sync() -> None:
-    parsed = parse_tex_text(SAMPLE_TEX)
-    _assert(parsed["title"] == "A Tiny Theorem Paper", f"bad title: {parsed['title']!r}")
-    _assert("nonnegativity theorem" in parsed["abstract"], "abstract missing")
-    _assert(len(parsed["sections"]) >= 3, f"too few sections: {parsed['sections']}")
-    _assert(any(s["heading"] == "Main Result" for s in parsed["sections"]), "section missing")
-    _assert(any("x^2 \\ge 0" in eq["latex"] for eq in parsed["equations"]), "equation missing")
-    _assert(parsed["bibliography"][0]["ref_id"] == "hardy", "bibitem key missing")
-    _assert("For every $x \\in \\mathbb{R}$" in parsed["raw_text"], "claim text missing")
-
-
-async def test_sample_parse_agent() -> None:
-    result = await TexParserAgent().run(
-        AgentContext(job_id="tex-parser-test", extra={"tex_text": SAMPLE_TEX})
+def _source(paper_id: str, tex_text: str) -> PaperSource:
+    return PaperSource(
+        paper_id=paper_id,
+        source_kind=SourceKind.MANUAL_TEX,
+        fetched_at=datetime.utcnow(),
+        content_hash=hashlib.md5(tex_text.encode("utf-8")).hexdigest()[:16],
     )
-    _assert(result.status == "success", f"agent failed: {result.error}")
-    _assert(result.confidence >= 0.8, f"unexpected confidence: {result.confidence}")
-    _assert(result.output["equations"], "agent output has no equations")
+
+
+def test_sample_parse() -> None:
+    parsed = parse_tex(SAMPLE_TEX, _source("sample", SAMPLE_TEX))
+    _assert(parsed.title == "A Tiny Theorem Paper", f"bad title: {parsed.title!r}")
+    _assert("nonnegativity theorem" in parsed.abstract, "abstract missing")
+    _assert(len(parsed.sections) >= 3, f"too few sections: {parsed.sections}")
+    _assert(any(s.heading == "Main Result" for s in parsed.sections), "section missing")
+    _assert(any("x^2 \\ge 0" in eq.latex for eq in parsed.equations), "equation missing")
+    _assert(parsed.bibliography[0].key == "hardy", "bibitem key missing")
+    _assert("For every $x \\in \\mathbb{R}$" in parsed.raw_text, "claim text missing")
 
 
 async def test_live_parse(urls: list[str]) -> None:
@@ -80,18 +82,14 @@ async def test_live_parse(urls: list[str]) -> None:
         _assert(ref is not None, f"could not parse live URL {url!r}")
         with tempfile.TemporaryDirectory() as tmp:
             source = await fetch_arxiv_source(ref, tmp)
-            result = await TexParserAgent().run(
-                AgentContext(job_id="tex-parser-live", extra={"tex_text": source.tex_text})
-            )
-            _assert(result.status == "success", f"{url}: parser failed: {result.error}")
-            out = result.output
-            _assert(out["raw_text"], f"{url}: no raw_text")
-            _assert(out["sections"], f"{url}: no sections")
-            _assert(out["equations"], f"{url}: no equations")
+            parsed = parse_tex(source.tex_text, _source(ref.canonical, source.tex_text))
+            _assert(parsed.raw_text, f"{url}: no raw_text")
+            _assert(parsed.sections, f"{url}: no sections")
+            _assert(parsed.equations, f"{url}: no equations")
             print(
-                f"  live {url}: title={out['title'][:60]!r}, "
-                f"sections={len(out['sections'])}, equations={len(out['equations'])}, "
-                f"chars={len(out['raw_text'])}"
+                f"  live {url}: title={parsed.title[:60]!r}, "
+                f"sections={len(parsed.sections)}, equations={len(parsed.equations)}, "
+                f"chars={len(parsed.raw_text)}"
             )
 
 
@@ -105,8 +103,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    test_sample_parse_sync()
-    asyncio.run(test_sample_parse_agent())
+    test_sample_parse()
     print("offline TeX parser tests OK")
 
     if args.live is not None:
