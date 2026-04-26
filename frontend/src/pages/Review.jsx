@@ -437,6 +437,7 @@ export default function Review() {
   const { jobId } = useParams()
   const [state, dispatch] = useReducer(reducer, initialState)
   const [selectedId, setSelectedId] = useState(null)
+  const [statementExpanded, setStatementExpanded] = useState(false)
   const [error, setError] = useState('')
   
   const [isReportOpen, setIsReportOpen] = useState(false)
@@ -488,6 +489,10 @@ export default function Review() {
       if (eventSource) eventSource.close()
     }
   }, [jobId])
+
+  useEffect(() => {
+    setStatementExpanded(false)
+  }, [selectedId])
 
   const handleOpenReport = async () => {
     try {
@@ -557,6 +562,9 @@ export default function Review() {
   }, [nodes, edges, selectedId, state.atoms, state.rebuttals])
 
   const selected = selectedId ? state.atoms[selectedId] : null
+  const selectedStatement = selected ? (selected.text || selected.label || selected.id || '') : ''
+  const selectedStatementIsLong = selectedStatement.length > 360
+  const selectedStatementCollapsed = selectedStatementIsLong && !statementExpanded
   const completed = state.status?.completed_atoms ?? 0
   const total = state.status?.total_atoms ?? nodes.length
 
@@ -671,8 +679,26 @@ export default function Review() {
                 <span className="text-xs uppercase opacity-70">{selected.atom_type}</span>
                 <span className="ml-auto text-xs opacity-60">{selected.status}</span>
               </div>
-              <div className="text-sm font-sans font-medium">
-                <LatexText inline>{compactLabel(selected.label || selected.text || selected.id)}</LatexText>
+              <div className="rounded border border-white/10 bg-[#0D1017] p-3">
+                <div className="mb-2 font-sans text-[10px] uppercase tracking-wider opacity-50">Atom statement</div>
+                <div className="relative">
+                  <LatexText className={`text-sm font-sans font-medium leading-relaxed text-[#E4E7F0] break-words ${selectedStatementCollapsed ? 'max-h-32 overflow-hidden' : ''}`}>
+                    {selectedStatement}
+                  </LatexText>
+                  {selectedStatementCollapsed && (
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-[#0D1017] to-transparent" />
+                  )}
+                </div>
+                {selectedStatementIsLong && (
+                  <button
+                    type="button"
+                    onClick={() => setStatementExpanded(expanded => !expanded)}
+                    aria-expanded={statementExpanded}
+                    className="mt-2 text-xs font-medium text-[#8FA7FF] hover:text-white"
+                  >
+                    {statementExpanded ? 'Show less' : 'Show full statement'}
+                  </button>
+                )}
               </div>
               
               {selected.source_excerpt && (

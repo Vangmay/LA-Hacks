@@ -18,3 +18,4 @@ tenacity
 python-json-logger
 pydantic-ai
 axiom-axle
+json-repair

@@ -26,6 +26,16 @@
 
 ## Research Deep-Dive Agent Design
 
+- LLM-generated atom headers need a deterministic final grammar gate after all
+  model cleanup passes. Prompt rules and critic decisions are not enough:
+  headers ending in dangling conjunctions like `because`, unfinished clauses, or
+  TeX-derived symbol fragments such as `bphi`/`qPhi` must be repaired from the
+  grounded source excerpt or dropped before they reach the UI.
+- Atom display statements and graph labels are different surfaces. Never solve
+  graph compactness by truncating the stored atom statement; keep a complete
+  clean-English statement, use compact labels only in constrained graph/list UI,
+  and expose long statements through an expandable inspector.
+
 - Dynamic subagents should differ by research taste, not by tool access. Give
   them the same complete tool surface, then force diversity through complementary
   archetypes, evidence preferences, and failure modes.
