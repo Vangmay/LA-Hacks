@@ -13,12 +13,15 @@
     "@xyflow/react": "^12.10.2",
     "dagre": "^0.8.5",
     "daisyui": "^5.5.19",
+    "katex": "^0.16.45",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^6.26.0",
+    "rehype-katex": "^7.0.1",
     "remark-breaks": "^4.0.0",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
