@@ -1,6 +1,6 @@
 fastapi
 uvicorn[standard]
-pydantic[email]
+pydantic
 pydantic-settings
 python-dotenv
 python-multipart
@@ -10,12 +10,5 @@ sympy
 antlr4-python3-runtime==4.11.*
 scipy
 numpy
-sentence-transformers
-chromadb
-networkx
 httpx<0.28
-tenacity
-python-json-logger
-pydantic-ai
-axiom-axle
 json-repair

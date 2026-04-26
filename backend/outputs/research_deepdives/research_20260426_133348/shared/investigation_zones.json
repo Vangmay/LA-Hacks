@@ -1,0 +1,71 @@
+{
+  "source": "director",
+  "rationale": "To drive novelty ideation from the Transformer, we focus on breaking its most rigid constraints: the quadratic scaling bottleneck, the lack of intrinsic inductive bias for non-sequential data, and the static nature of its token processing. These directions target the current 'post-Transformer' frontier where State Space Models and dynamic architectures are emerging.",
+  "zones": [
+    {
+      "investigator_id": "investigator_01_sub_quadratic_scaling_and_linear_recurrence_convergence",
+      "section_id": "section_01_sub_quadratic_scaling_and_linear_recurrence_convergence",
+      "section_title": "Sub-Quadratic Scaling and Linear Recurrence Convergence",
+      "requested_subagents": 3
+    },
+    {
+      "investigator_id": "investigator_02_structural_inductive_biases_and_domain_specific_architectures",
+      "section_id": "section_02_structural_inductive_biases_and_domain_specific_architectures",
+      "section_title": "Structural Inductive Biases and Domain-Specific Architectures",
+      "requested_subagents": 3
+    },
+    {
+      "investigator_id": "investigator_03_dynamic_and_sparse_computation_mechanisms",
+      "section_id": "section_03_dynamic_and_sparse_computation_mechanisms",
+      "section_title": "Dynamic and Sparse Computation Mechanisms",
+      "requested_subagents": 3
+    }
+  ],
+  "raw_planner_output": [
+    {
+      "title": "Sub-Quadratic Scaling and Linear Recurrence Convergence",
+      "why_promising": "The $O(n^2)$ complexity identified in the seed paper is the primary barrier to long-context applications. Research into Linear Attention and State Space Models (SSMs) like Mamba represents the most significant attempt to reclaim RNN-like efficiency without losing Transformer-level performance.",
+      "seed_hooks": [
+        "Self-attention 'Computational Complexity' table comparing O(n^2*d) to RNNs",
+        "Path length O(1) benefit for long-range dependencies",
+        "Parallelizability vs. Sequentiality trade-off"
+      ],
+      "research_questions": [
+        "How do modern hardware-aware kernels (e.g., FlashAttention-3) alter the theoretical trade-offs proposed in 2017?",
+        "Where does the hybrid 'Attention-SSM' frontier currently stand in terms of memory-accuracy pareto fronts?",
+        "Can we achieve O(1) inference without the performance degradation seen in early linear attention variants?"
+      ],
+      "priority": 1
+    },
+    {
+      "title": "Structural Inductive Biases and Domain-Specific Architectures",
+      "why_promising": "The Transformer is 'all you need' because it lacks specific inductive biases, making it a universal function approximator. However, novelty often lies in re-introducing constraints for specific domains (Vision, Graphs, 3D) where global attention is suboptimal or inefficient.",
+      "seed_hooks": [
+        "Success in 'English constituency parsing' as a generalization test",
+        "Multi-Head Attention's ability to attend to different representation subspaces",
+        "Sinusoidal Positional Encodings"
+      ],
+      "research_questions": [
+        "What are the most successful 'biasing' techniques that have improved on the vanilla Transformer for non-textual modalities?",
+        "How has the transition from absolute to relative positional embeddings (RoPE, ALiBi) changed the model's ability to generalize to unseen sequence lengths?",
+        "Can graph-structured attention provide better hierarchical reasoning than the flat sequence approach original to the paper?"
+      ],
+      "priority": 2
+    },
+    {
+      "title": "Dynamic and Sparse Computation Mechanisms",
+      "why_promising": "The original model processes every token with the same amount of computation. Novelty ideation can focus on conditional computation (Mixture of Experts) or early-exit strategies that break the 'static depth' paradigm of the 2017 architecture.",
+      "seed_hooks": [
+        "Point-wise Feed-Forward Networks",
+        "Constant number of sequential operations",
+        "Identical layer stacking (N=6)"
+      ],
+      "research_questions": [
+        "What is the current state-of-the-art for 'token skipping' or sparse attention that maintains the 'All you Need' performance?",
+        "How do Mixture-of-Experts (MoE) scaling laws compare to the dense scaling laws established after the original paper?",
+        "Can we move toward 'Universal Transformers' that adapt depth based on input complexity rather than fixed N-layer stacks?"
+      ],
+      "priority": 3
+    }
+  ]
+}
