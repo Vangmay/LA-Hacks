@@ -4,6 +4,9 @@ import { ReactFlow, Background, Controls, Handle, Position } from '@xyflow/react
 import '@xyflow/react/dist/style.css'
 import ReactMarkdown from 'react-markdown'
 import remarkBreaks from 'remark-breaks'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
+import 'katex/dist/katex.min.css'
 import dagre from 'dagre'
 import { api } from '../api/client'
 
@@ -22,6 +25,77 @@ const STATUS_COLORS = {
 function statusColor(status) {
   if (!status) return STATUS_COLORS.pending
   return STATUS_COLORS[status.toLowerCase()] || STATUS_COLORS.pending
+}
+
+const LATEX_REMARK_PLUGINS = [remarkMath, remarkBreaks]
+const LATEX_REHYPE_PLUGINS = [rehypeKatex]
+const INLINE_LATEX_COMPONENTS = {
+  p: ({ children }) => <>{children}</>,
+}
+
+function normalizeLatexDelimiters(value = '') {
+  return String(value || '')
+    .replace(/\\\[/g, '$$')
+    .replace(/\\\]/g, '$$')
+    .replace(/\\\(/g, '$')
+    .replace(/\\\)/g, '$')
+}
+
+function LatexText({ children, className = '', inline = false }) {
+  const content = normalizeLatexDelimiters(children)
+  const body = (
+    <ReactMarkdown
+      remarkPlugins={LATEX_REMARK_PLUGINS}
+      rehypePlugins={LATEX_REHYPE_PLUGINS}
+      components={inline ? INLINE_LATEX_COMPONENTS : undefined}
+    >
+      {content}
+    </ReactMarkdown>
+  )
+  if (inline) return <span className={className}>{body}</span>
+  return <div className={className}>{body}</div>
+}
+
+function normalizedTextKey(value = '') {
+  return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
+function challengeKey(challenge = {}) {
+  return challenge.challenge_id || [
+    challenge.atom_id,
+    challenge.challenge_type,
+    challenge.severity,
+    normalizedTextKey(challenge.challenge_text),
+  ].join('|')
+}
+
+function rebuttalKey(rebuttal = {}) {
+  return rebuttal.rebuttal_id || [
+    rebuttal.challenge_id,
+    rebuttal.response_type,
+    normalizedTextKey(rebuttal.rebuttal_text),
+  ].join('|')
+}
+
+function upsertUnique(items = [], item, keyFn) {
+  const key = keyFn(item)
+  const index = items.findIndex(existing => keyFn(existing) === key)
+  if (index < 0) return [...items, item]
+  const next = [...items]
+  next[index] = { ...next[index], ...item }
+  return next
+}
+
+function uniqueBy(items = [], keyFn) {
+  const seen = new Set()
+  const out = []
+  for (const item of items) {
+    const key = keyFn(item)
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(item)
+  }
+  return out
 }
 
 const initialState = {
@@ -146,7 +220,7 @@ function reducer(state, action) {
       return {
         ...state,
         buildStage: 'Reviewing atoms',
-        challenges: { ...state.challenges, [atomId]: [...existing, payload] },
+        challenges: { ...state.challenges, [atomId]: upsertUnique(existing, payload, challengeKey) },
         ...(updatedAtom && {
           atoms: { ...state.atoms, [atomId]: updatedAtom },
           dag: { ...state.dag, nodes: state.dag.nodes.map(n => n.id === atomId ? updatedAtom : n) }
@@ -163,7 +237,7 @@ function reducer(state, action) {
       return {
         ...state,
         buildStage: 'Reviewing atoms',
-        rebuttals: { ...state.rebuttals, [atomId]: [...existing, payload] },
+        rebuttals: { ...state.rebuttals, [atomId]: upsertUnique(existing, payload, rebuttalKey) },
         ...(updatedAtom && {
           atoms: { ...state.atoms, [atomId]: updatedAtom },
           dag: { ...state.dag, nodes: state.dag.nodes.map(n => n.id === atomId ? updatedAtom : n) }
@@ -227,8 +301,10 @@ function AtomNode({ data }) {
         className="box-border flex h-[118px] w-[300px] flex-col overflow-hidden rounded-md border px-4 py-3 transition-all duration-200"
         style={{
           backgroundColor: '#131720',
-          borderColor: isSelected ? color : `${color}40`,
-          boxShadow: isSelected ? `0 0 0 2px ${color}33` : `0 2px 4px rgba(0,0,0,0.2)`
+          borderColor: data.hasImportantScopeClarification ? '#eab308' : isSelected ? color : `${color}40`,
+          boxShadow: data.hasImportantScopeClarification
+            ? '0 0 0 1px rgba(234, 179, 8, 0.45), 0 0 18px rgba(234, 179, 8, 0.14)'
+            : isSelected ? `0 0 0 2px ${color}33` : `0 2px 4px rgba(0,0,0,0.2)`
         }}
       >
         <div className="flex items-center gap-2 mb-1">
@@ -237,9 +313,14 @@ function AtomNode({ data }) {
             style={{ background: color, boxShadow: `0 0 4px ${color}80` }}
           />
           <span className="min-w-0 truncate text-[10px] uppercase font-mono opacity-70 text-[#E4E7F0]">{data.atom_type}</span>
+          {data.hasImportantScopeClarification && (
+            <span className="ml-auto shrink-0 rounded border border-yellow-400/30 bg-yellow-400/15 px-1.5 py-0.5 text-[9px] font-mono font-semibold uppercase tracking-wide text-yellow-200">
+              Important
+            </span>
+          )}
         </div>
         <div className="line-clamp-3 min-w-0 text-xs leading-snug font-sans text-[#E4E7F0] break-words">
-          {compactLabel(data.label || data.text || data.id)}
+          <LatexText inline>{compactLabel(data.label || data.text || data.id)}</LatexText>
         </div>
         {data.section && (
           <div className="mt-auto truncate pt-2 text-[10px] font-mono text-white/35">{data.section}</div>
@@ -253,7 +334,6 @@ const nodeTypes = { atom: AtomNode }
 
 function compactLabel(value = '') {
   const cleaned = String(value)
-    .replace(/[$\\{}[\]().,;:]/g, ' ')
     .split(/\s+/)
     .filter(Boolean)
     .join(' ')
@@ -264,30 +344,48 @@ function compactLabel(value = '') {
   while (words.length && dangling.has(words[words.length - 1].toLowerCase())) {
     words.pop()
   }
-  return words.join(' ') || cleaned.slice(0, 96)
+  const clipped = words.join(' ') || cleaned.slice(0, 96)
+  if ((clipped.match(/\$/g) || []).length % 2 === 1) {
+    return clipped.replace(/\$[^$]*$/, '').trim() || clipped.replace(/\$/g, '')
+  }
+  return clipped
 }
 
 function argumentStrengthLabel(value = 'HIGH') {
   return `ARGUMENT STRENGTH: ${String(value || 'HIGH').replace(/_/g, ' ').toUpperCase()}`
 }
 
+function responseTypeLabel(value = 'REBUTTAL') {
+  const normalized = String(value || 'REBUTTAL').replace(/_/g, ' ').toUpperCase()
+  if (normalized === 'CLARIFIES SCOPE') return 'IMPORTANT FEATURE: CLARIFIES SCOPE'
+  return normalized
+}
+
+function isScopeClarification(rebuttal = {}) {
+  return String(rebuttal.response_type || '').toLowerCase() === 'clarifies_scope'
+}
+
 function BuildProgress({ state, nodes, edges, completed, total }) {
   const extractionTotal = state.dag?.extraction_batches_total || 0
   const extractionDone = state.dag?.extraction_batches_completed || 0
   const inExtraction = extractionTotal > 0 && state.buildStage.toLowerCase().includes('extract')
-  const parsed = state.dag?.parsed_atoms || nodes.length
+  const parsed = state.dag?.parsed_atoms ?? nodes.length
   const knownTotal = inExtraction ? 0 : Math.max(total || 0, state.dag?.total_atoms || 0, nodes.length)
   const atomPct = knownTotal ? Math.round((completed / knownTotal) * 100) : 0
   const parsedPct = knownTotal ? Math.round((parsed / knownTotal) * 100) : 0
   const batchPct = extractionTotal ? 25 + Math.round((extractionDone / extractionTotal) * 35) : 0
-  const rawPct = state.status?.status === 'complete' || state.status?.status === 'completed'
+  const isComplete = state.status?.status === 'complete' || state.status?.status === 'completed'
+  const hasDiscoveredAtoms = nodes.length > 0 || parsed > 0
+  const rawPct = isComplete
     ? 100
+    : !hasDiscoveredAtoms
+      ? 0
     : Math.max(stageProgress(state.buildStage), atomPct, parsedPct > 0 ? Math.min(parsedPct, 65) : 0, batchPct)
   const [maxPct, setMaxPct] = useState(rawPct)
   useEffect(() => {
     setMaxPct(prev => Math.max(prev, rawPct))
   }, [rawPct])
-  const pct = maxPct
+  const pct = !isComplete && !hasDiscoveredAtoms ? 0 : maxPct
   const recent = state.recentAtoms?.length ? state.recentAtoms : nodes.slice(-5)
 
   return (
@@ -313,7 +411,7 @@ function BuildProgress({ state, nodes, edges, completed, total }) {
           <span className="uppercase tracking-wider text-white/40">Just parsed</span>
           {recent.slice(-3).map(atom => (
             <span key={atom.id || atom.atom_id} className="max-w-[260px] truncate rounded border border-white/10 bg-white/5 px-2 py-1">
-              {compactLabel(atom.label || atom.text || atom.id || atom.atom_id)}
+              <LatexText inline>{compactLabel(atom.label || atom.text || atom.id || atom.atom_id)}</LatexText>
             </span>
           ))}
         </div>
@@ -406,12 +504,16 @@ export default function Review() {
   const { rfNodes, rfEdges } = useMemo(() => {
     const dagreGraph = new dagre.graphlib.Graph()
     dagreGraph.setDefaultEdgeLabel(() => ({}))
-    dagreGraph.setGraph({ rankdir: 'LR', nodesep: 90, ranksep: 150, marginx: 30, marginy: 30 })
+    dagreGraph.setGraph({ rankdir: 'LR', nodesep: 90, ranksep: 150, marginx: 40, marginy: 40 })
 
     const mappedNodes = nodes.map((n) => ({
       id: n.id,
       type: 'atom',
-      data: { ...n, selectedId },
+      data: {
+        ...n,
+        selectedId,
+        hasImportantScopeClarification: uniqueBy(state.rebuttals[n.id] || [], rebuttalKey).some(isScopeClarification),
+      },
     }))
 
     const mappedEdges = edges.map((e, i) => {
@@ -451,7 +553,7 @@ export default function Review() {
     })
 
     return { rfNodes: layoutedNodes, rfEdges: mappedEdges }
-  }, [nodes, edges, selectedId, state.atoms])
+  }, [nodes, edges, selectedId, state.atoms, state.rebuttals])
 
   const selected = selectedId ? state.atoms[selectedId] : null
   const completed = state.status?.completed_atoms ?? 0
@@ -522,7 +624,9 @@ export default function Review() {
                       />
                       <span className="text-[10px] uppercase opacity-70">{n.atom_type}</span>
                     </div>
-                    <div className="text-sm mt-1 line-clamp-2 font-sans">{compactLabel(n.label || n.id)}</div>
+                    <div className="text-sm mt-1 line-clamp-2 font-sans">
+                      <LatexText inline>{compactLabel(n.label || n.text || n.id)}</LatexText>
+                    </div>
                     {n.section && (
                       <div className="text-[11px] opacity-50 mt-0.5 truncate">{n.section}</div>
                     )}
@@ -566,12 +670,16 @@ export default function Review() {
                 <span className="text-xs uppercase opacity-70">{selected.atom_type}</span>
                 <span className="ml-auto text-xs opacity-60">{selected.status}</span>
               </div>
-              <div className="text-sm font-sans font-medium">{compactLabel(selected.label || selected.id)}</div>
+              <div className="text-sm font-sans font-medium">
+                <LatexText inline>{compactLabel(selected.label || selected.text || selected.id)}</LatexText>
+              </div>
               
               {selected.source_excerpt && (
                 <div className="mt-2 bg-[#0D1017] border border-white/10 rounded p-3">
                   <div className="text-[10px] uppercase tracking-wider opacity-50 mb-2 font-sans">Source excerpt</div>
-                  <div className="text-[11px] font-mono whitespace-pre-wrap opacity-80">{selected.source_excerpt}</div>
+                  <LatexText className="text-[11px] font-mono whitespace-pre-wrap opacity-80">
+                    {selected.source_excerpt}
+                  </LatexText>
                 </div>
               )}
 
@@ -591,9 +699,18 @@ export default function Review() {
               {/* Threaded Chat UI for Challenges and Rebuttals */}
               {(state.challenges[selected.id] || []).length > 0 && (
                 <div className="mt-6 space-y-6">
-                  <div className="text-[10px] uppercase tracking-wider opacity-50 mb-4 font-sans border-b border-white/10 pb-2">Review Thread</div>
-                  {(state.challenges[selected.id] || []).map((c, i) => {
-                    const matchingRebuttals = (state.rebuttals[selected.id] || []).filter(r => r.challenge_id === c.challenge_id)
+                  <div className="mb-4 border-b border-white/10 pb-2">
+                    <div className="text-[10px] uppercase tracking-wider opacity-50 font-sans">Review Thread</div>
+                    <div className="mt-2 flex items-center gap-2 rounded border border-yellow-500/20 bg-yellow-500/10 px-2 py-1 text-[10px] uppercase tracking-wide text-yellow-200">
+                      <span className="h-2 w-2 rounded-full bg-yellow-300" />
+                      Yellow = important feature clarifies scope
+                    </div>
+                  </div>
+                  {uniqueBy(state.challenges[selected.id] || [], challengeKey).map((c, i) => {
+                    const matchingRebuttals = uniqueBy(
+                      (state.rebuttals[selected.id] || []).filter(r => r.challenge_id === c.challenge_id),
+                      rebuttalKey,
+                    )
                     return (
                       <div key={i} className="flex flex-col gap-3">
                         {/* Challenge Bubble */}
@@ -608,7 +725,7 @@ export default function Review() {
                             </span>
                           </div>
                           <div className="text-[13px] font-sans text-red-100/90 leading-relaxed relative z-10">
-                            {c.challenge_text || JSON.stringify(c)}
+                            <LatexText>{c.challenge_text || JSON.stringify(c)}</LatexText>
                           </div>
                         </div>
 
@@ -616,15 +733,36 @@ export default function Review() {
                         {matchingRebuttals.length > 0 && (
                           <div className="flex flex-col gap-3 pl-6 border-l-2 border-white/5 ml-3">
                             {matchingRebuttals.map((r, j) => (
-                              <div key={j} className="bg-[#121820] border border-blue-900/30 rounded-lg p-3 relative">
-                                <div className="absolute -left-1.5 top-3 w-3 h-3 bg-[#121820] border-l border-b border-blue-900/30 rotate-45" />
+                              <div
+                                key={j}
+                                className={`rounded-lg p-3 relative border ${
+                                  isScopeClarification(r)
+                                    ? 'bg-[#1c1a10] border-yellow-700/40'
+                                    : 'bg-[#121820] border-blue-900/30'
+                                }`}
+                              >
+                                <div
+                                  className={`absolute -left-1.5 top-3 w-3 h-3 rotate-45 border-l border-b ${
+                                    isScopeClarification(r)
+                                      ? 'bg-[#1c1a10] border-yellow-700/40'
+                                      : 'bg-[#121820] border-blue-900/30'
+                                  }`}
+                                />
                                 <div className="flex items-center gap-2 mb-2 flex-wrap relative z-10">
-                                  <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-blue-900/40 text-blue-300">
-                                    {(r.response_type || 'REBUTTAL').replace(/_/g, ' ')}
+                                  <span
+                                    className={`text-[10px] uppercase font-mono px-1.5 py-0.5 rounded ${
+                                      isScopeClarification(r)
+                                        ? 'bg-yellow-500/20 text-yellow-200'
+                                        : 'bg-blue-900/40 text-blue-300'
+                                    }`}
+                                  >
+                                    {responseTypeLabel(r.response_type)}
                                   </span>
                                 </div>
-                                <div className="text-[13px] font-sans text-blue-100/90 leading-relaxed relative z-10">
-                                  {r.rebuttal_text || JSON.stringify(r)}
+                                <div className={`text-[13px] font-sans leading-relaxed relative z-10 ${
+                                  isScopeClarification(r) ? 'text-yellow-50/90' : 'text-blue-100/90'
+                                }`}>
+                                  <LatexText>{r.rebuttal_text || JSON.stringify(r)}</LatexText>
                                 </div>
                               </div>
                             ))}
@@ -663,7 +801,12 @@ export default function Review() {
             </div>
           </div>
           <div className="prose prose-invert prose-sm max-w-none prose-pre:bg-[#0d1117] prose-pre:border prose-pre:border-white/10 prose-headings:font-bold prose-a:text-blue-400">
-            <ReactMarkdown remarkPlugins={[remarkBreaks]}>{reportContent}</ReactMarkdown>
+            <ReactMarkdown
+              remarkPlugins={LATEX_REMARK_PLUGINS}
+              rehypePlugins={LATEX_REHYPE_PLUGINS}
+            >
+              {normalizeLatexDelimiters(reportContent)}
+            </ReactMarkdown>
           </div>
         </div>
       </div>

@@ -132,12 +132,40 @@ Rules:
 - Prefer definitions stated in prose, key assumptions, limitations, and
   central techniques. Skip generic background prose, motivation, and
   acknowledgements.
+- An atom must be a reviewable scientific concept or claim, not a clipped
+  sentence fragment, equation neighbor, citation sentence, table/caption
+  text, or local implementation detail.
 - For theorem-like atoms, separate `assumptions` and `conclusions` when
   the statement makes them explicit; otherwise leave them empty.
 - `source_quote` must appear verbatim (modulo whitespace) in the section
   body. Do not paraphrase the quote.
 - `confidence` is 0.0–1.0. Be conservative.
 - Return ONLY the JSON object. No prose. No markdown.
+
+Positive examples to extract:
+- Definition: "We define the self-attention layer as mapping a sequence of
+  queries and keys to a weighted sum of values."
+- Assumption: "We assume the input graph is connected and has bounded degree."
+- Technique: "Residual connections are applied around every sub-layer before
+  layer normalization."
+- Limitation: "The method requires paired supervision and does not address
+  fully unsupervised transfer."
+- Bound/theorem-like assertion: "Under Lipschitz losses, the regret is
+  O(sqrt(T)) with high probability."
+- Open problem: "Whether the same guarantee holds for adaptive adversaries
+  remains open."
+
+Negative examples to drop:
+- Dangling fragments: "Transformer decoder has six layers and";
+  "Research goal make sequence generation less"; "where d_k is".
+- Equation-neighbor snippets: "as shown in Eq. (3)", "we set alpha = 0.1",
+  or a line that only introduces notation for the next display.
+- Narrative glue: "We now describe the experiments", "The rest of the paper is
+  organized as follows", "This motivates our approach."
+- Citations/background only: "Prior work studied this problem [12]" unless the
+  paper makes a specific related-work claim that matters to its argument.
+- Captions/results narration: "Accuracy on WMT14 is shown in Table 2" unless it
+  states a central empirical claim.
 """
 
 _HEADER_SYSTEM_PROMPT = (
@@ -177,6 +205,27 @@ Rules:
 - Drop atoms that are just equation-neighbor fragments, citations, captions, section transitions, or incomplete clauses.
 - Drop atoms that require too much context to state concisely and faithfully.
 - Return every atom_id exactly once. No prose. No markdown.
+
+Header examples:
+- KEEP source "We use scaled dot-product attention to avoid large dot products
+  pushing softmax into regions with small gradients."
+  -> "Scaled dot-product attention stabilizes softmax gradients"
+- KEEP source "The decoder is auto-regressive, masking future positions during
+  training."
+  -> "Decoder self-attention masks future positions"
+- KEEP source "Sinusoidal encodings may allow the model to extrapolate to
+  sequence lengths longer than those seen during training."
+  -> "Sinusoidal positional encodings support length extrapolation"
+- KEEP source "Our algorithm assumes the graph is connected."
+  -> "Algorithm assumes connected input graphs"
+- DROP source "Transformer decoder has six layers and"
+  reason: dangling fragment, not a complete concept.
+- DROP source "Research goal make sequence generation less"
+  reason: ungrammatical clipped motivation, not a reviewable atom.
+- DROP source "where $d_k$ is the dimension of the keys"
+  reason: local notation explanation, not a standalone claim.
+- DROP source "The rest of this section is organized as follows"
+  reason: section transition.
 """
 
 _DANGLING_HEADER_ENDINGS = {
