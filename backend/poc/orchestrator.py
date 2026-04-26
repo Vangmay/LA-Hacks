@@ -14,13 +14,10 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
-import os
 import uuid
 import zipfile
 from datetime import datetime
 from pathlib import Path
-
-import httpx
 
 from agents.atom_extractor import AtomExtractorAgent
 from agents.base import AgentContext
@@ -51,34 +48,6 @@ _SCAFFOLD_FILES = (
 )
 
 _OUTPUTS_DIR = Path(__file__).resolve().parents[1] / "outputs" / "poc"
-
-
-def _poc_model() -> str:
-    return settings.poc_scaffold_model or settings.openai_model
-
-
-def _make_poc_client() -> "AsyncOpenAI":
-    from openai import AsyncOpenAI
-    api_key = (
-        os.getenv(settings.poc_scaffold_api_key_env)
-        or getattr(settings, settings.poc_scaffold_api_key_env.lower(), None)
-        or settings.openai_api_key
-    )
-    base_url = (
-        settings.poc_scaffold_base_url
-        or settings.openai_base_url
-        or None
-    )
-    kwargs: dict = {
-        "api_key": api_key or "missing-api-key",
-        "http_client": httpx.AsyncClient(
-            timeout=settings.poc_scaffold_timeout_seconds,
-            follow_redirects=True,
-        ),
-    }
-    if base_url:
-        kwargs["base_url"] = base_url
-    return AsyncOpenAI(**kwargs)
 
 
 class PoCOrchestrator:
@@ -122,12 +91,7 @@ class PoCOrchestrator:
         )
 
         # ── 2. Extract research atoms (replaces ClaimExtractorAgent) ──────────
-        poc_client = _make_poc_client()
-        poc_model = _poc_model()
-
-        ext_result = await AtomExtractorAgent(
-            client=poc_client, model=poc_model
-        ).run(
+        ext_result = await AtomExtractorAgent().run(
             AgentContext(job_id=job_id, parsed_paper=paper)
         )
         if ext_result.status == "error":
@@ -149,9 +113,7 @@ class PoCOrchestrator:
         )
 
         # ── 3. Filter atoms (testable vs theoretical) ─────────────────────────
-        filter_result = await ClaimFilterAgent(
-            client=poc_client, model=poc_model
-        ).run(
+        filter_result = await ClaimFilterAgent().run(
             AgentContext(job_id=job_id, extra={"atoms": candidate_atoms})
         )
         testable_ids: set = set(filter_result.output.get("testable", []))
@@ -177,7 +139,7 @@ class PoCOrchestrator:
         # ── 4. Extract metrics in parallel for ALL candidate atoms ────────────
         metric_results = await asyncio.gather(
             *[
-                MetricExtractorAgent(client=poc_client, model=poc_model).run(
+                MetricExtractorAgent().run(
                     AgentContext(
                         job_id=job_id,
                         parsed_paper=paper,

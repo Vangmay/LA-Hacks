@@ -185,12 +185,14 @@ async def list_claims(session_id: str):
             "section": claim_data.get("section"),
             "testability": "testable" if claim_id in testable_ids else "theoretical",
             "spec_summary": spec_summary,
+            "has_scaffold": bool(spec and spec.get("scaffold_files")),
         })
 
     return {
         "total": len(claims_out),
         "testable": len(testable_ids),
         "theoretical": len(claims_out) - len(testable_ids),
+        "paper_title": job.get("paper_title", ""),
         "claims": claims_out,
     }
 
@@ -274,6 +276,7 @@ async def get_scaffold_status(session_id: str):
         "scaffold_status": scaffold_status,
         "selected_claim_ids": job.get("selected_claim_ids", []),
         "scaffold_error": job.get("scaffold_error"),
+        "job_error": job.get("error"),
         "zip_ready": bool(job.get("zip_path") and Path(job["zip_path"]).exists()),
     }
 

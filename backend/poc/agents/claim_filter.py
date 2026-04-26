@@ -1,8 +1,7 @@
 import asyncio
 import json
 import logging
-import re
-from typing import List, Optional
+from typing import List
 
 from openai import AsyncOpenAI
 
@@ -28,13 +27,7 @@ _SYSTEM_PROMPT = (
 class ClaimFilterAgent(BaseAgent):
     agent_id = "claim_filter"
 
-    def __init__(
-        self,
-        client: Optional[AsyncOpenAI] = None,
-        model: Optional[str] = None,
-    ) -> None:
-        self._client = client or AsyncOpenAI(api_key=settings.openai_api_key)
-        self._model = model or settings.openai_model
+    _client = AsyncOpenAI(api_key=settings.openai_api_key)
 
     async def run(self, context: AgentContext) -> AgentResult:
         atoms: List[ResearchAtom] = context.extra.get("atoms", [])
@@ -92,7 +85,7 @@ class ClaimFilterAgent(BaseAgent):
         ])
 
         response = await self._client.chat.completions.create(
-            model=self._model,
+            model=settings.openai_model,
             messages=[
                 {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt},
@@ -101,8 +94,6 @@ class ClaimFilterAgent(BaseAgent):
             max_tokens=1500,
         )
         raw = response.choices[0].message.content
-        # Strip Gemma-style <thought>...</thought> tags
-        raw = re.sub(r"<thought>.*?</thought>\s*", "", raw, flags=re.DOTALL).strip()
 
         try:
             parsed = json.loads(raw)
@@ -130,7 +121,7 @@ class ClaimFilterAgent(BaseAgent):
 
     async def _retry_parse(self, user_prompt: str) -> dict:
         response = await self._client.chat.completions.create(
-            model=self._model,
+            model=settings.openai_model,
             messages=[
                 {"role": "system", "content": _SYSTEM_PROMPT + " Respond with ONLY valid JSON, no markdown."},
                 {"role": "user", "content": user_prompt},
@@ -139,7 +130,6 @@ class ClaimFilterAgent(BaseAgent):
             max_tokens=1500,
         )
         raw = response.choices[0].message.content
-        raw = re.sub(r"<thought>.*?</thought>\s*", "", raw, flags=re.DOTALL).strip()
         try:
             return json.loads(raw)
         except json.JSONDecodeError:

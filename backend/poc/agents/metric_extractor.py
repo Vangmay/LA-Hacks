@@ -1,8 +1,6 @@
 import json
 import logging
-import re
 import uuid
-from typing import Optional
 
 from openai import AsyncOpenAI
 
@@ -34,13 +32,7 @@ If numeric_threshold cannot be extractable, set it to null."""
 class MetricExtractorAgent(BaseAgent):
     agent_id = "metric_extractor"
 
-    def __init__(
-        self,
-        client: Optional[AsyncOpenAI] = None,
-        model: Optional[str] = None,
-    ) -> None:
-        self._client = client or AsyncOpenAI(api_key=settings.openai_api_key)
-        self._model = model or settings.openai_model
+    _client = AsyncOpenAI(api_key=settings.openai_api_key)
 
     async def run(self, context: AgentContext) -> AgentResult:
         atom: ResearchAtom | None = context.atom or context.extra.get("atom")
@@ -82,7 +74,7 @@ class MetricExtractorAgent(BaseAgent):
         )
 
         response = await self._client.chat.completions.create(
-            model=self._model,
+            model=settings.openai_model,
             messages=[
                 {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt},
@@ -91,8 +83,6 @@ class MetricExtractorAgent(BaseAgent):
             max_tokens=1000,
         )
         raw = response.choices[0].message.content
-        # Strip Gemma-style <thought>...</thought> tags
-        raw = re.sub(r"<thought>.*?</thought>\s*", "", raw, flags=re.DOTALL).strip()
 
         try:
             data = json.loads(raw)
@@ -150,7 +140,7 @@ class MetricExtractorAgent(BaseAgent):
 
     async def _retry_parse(self, user_prompt: str) -> dict:
         response = await self._client.chat.completions.create(
-            model=self._model,
+            model=settings.openai_model,
             messages=[
                 {"role": "system", "content": _SYSTEM_PROMPT + "\nRespond with ONLY valid JSON, no markdown."},
                 {"role": "user", "content": user_prompt},
@@ -159,7 +149,6 @@ class MetricExtractorAgent(BaseAgent):
             max_tokens=1000,
         )
         raw = response.choices[0].message.content
-        raw = re.sub(r"<thought>.*?</thought>\s*", "", raw, flags=re.DOTALL).strip()
         try:
             return json.loads(raw)
         except json.JSONDecodeError:
