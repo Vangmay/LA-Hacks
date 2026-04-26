@@ -425,11 +425,13 @@ class AtomExtractorAgent(BaseAgent):
             Callable[[list[ResearchAtom], dict[str, Any]], Awaitable[None]]
         ] = None,
         normalize_headers: bool = True,
+        model: Optional[str] = None,
     ) -> None:
         self._client = client
         self._max_section_chars = max_section_chars
         self._progress_callback = progress_callback
         self._normalize_headers = normalize_headers
+        self._model = model or settings.openai_model
 
     def _get_client(self) -> AsyncOpenAI:
         if self._client is None:
@@ -612,7 +614,7 @@ class AtomExtractorAgent(BaseAgent):
             )
 
             response = await client.chat.completions.create(
-                model=settings.openai_model,
+                model=self._model,
                 messages=[
                     {"role": "system", "content": _SYSTEM_PROMPT},
                     {"role": "user", "content": prompt},
@@ -696,7 +698,7 @@ class AtomExtractorAgent(BaseAgent):
                 candidates_json=json.dumps(payload, ensure_ascii=False, indent=2)
             )
             response = await client.chat.completions.create(
-                model=settings.openai_model,
+                model=self._model,
                 messages=[
                     {"role": "system", "content": _CRITIC_SYSTEM_PROMPT},
                     {"role": "user", "content": prompt},
@@ -809,7 +811,7 @@ class AtomExtractorAgent(BaseAgent):
             candidates_json=json.dumps(payload, ensure_ascii=False, indent=2),
         )
         response = await client.chat.completions.create(
-            model=settings.openai_model,
+            model=self._model,
             messages=[
                 {"role": "system", "content": _QUOTE_REPAIR_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
@@ -898,7 +900,7 @@ class AtomExtractorAgent(BaseAgent):
                 atoms_json=json.dumps(payload, ensure_ascii=False, indent=2)
             )
             response = await client.chat.completions.create(
-                model=settings.openai_model,
+                model=self._model,
                 messages=[
                     {"role": "system", "content": _HEADER_SYSTEM_PROMPT},
                     {"role": "user", "content": prompt},

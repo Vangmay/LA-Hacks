@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-from typing import List
+from typing import List, Optional
 
 from openai import AsyncOpenAI
 
@@ -27,7 +27,13 @@ _SYSTEM_PROMPT = (
 class ClaimFilterAgent(BaseAgent):
     agent_id = "claim_filter"
 
-    _client = AsyncOpenAI(api_key=settings.openai_api_key)
+    def __init__(
+        self,
+        client: Optional[AsyncOpenAI] = None,
+        model: Optional[str] = None,
+    ) -> None:
+        self._client = client or AsyncOpenAI(api_key=settings.openai_api_key)
+        self._model = model or settings.openai_model
 
     async def run(self, context: AgentContext) -> AgentResult:
         atoms: List[ResearchAtom] = context.extra.get("atoms", [])
@@ -85,7 +91,7 @@ class ClaimFilterAgent(BaseAgent):
         ])
 
         response = await self._client.chat.completions.create(
-            model=settings.openai_model,
+            model=self._model,
             messages=[
                 {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt},
@@ -121,7 +127,7 @@ class ClaimFilterAgent(BaseAgent):
 
     async def _retry_parse(self, user_prompt: str) -> dict:
         response = await self._client.chat.completions.create(
-            model=settings.openai_model,
+            model=self._model,
             messages=[
                 {"role": "system", "content": _SYSTEM_PROMPT + " Respond with ONLY valid JSON, no markdown."},
                 {"role": "user", "content": user_prompt},
