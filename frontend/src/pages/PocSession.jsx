@@ -31,7 +31,8 @@ function grotesk(size = 13, weight = 400) {
 
 
 // --- Local: ClaimRow, SuccessCriterion, ScaffoldFileChip, ReportPanel ---
-function ClaimRow({ claim, selected, reproStatus, onClick }) {
+function ClaimRow({ claim, selected, reproStatus, onClick, checkable, checked, onCheckChange }) {
+  const stop = (e) => e.stopPropagation()
   return (
     <div
       onClick={onClick}
@@ -42,14 +43,29 @@ function ClaimRow({ claim, selected, reproStatus, onClick }) {
         background: selected ? 'rgba(91,91,214,0.10)' : 'transparent',
         cursor: 'pointer',
         transition: 'background 0.15s',
+        display: 'flex',
+        gap: 8,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginBottom: 4 }}>
-        <TestabilityChip testability={claim.testability} />
-        <ReproChip status={reproStatus} />
+      {checkable ? (
+        <input
+          type="checkbox"
+          checked={!!checked}
+          onClick={stop}
+          onChange={(e) => onCheckChange?.(e.target.checked)}
+          style={{ marginTop: 2, accentColor: C.indigo, cursor: 'pointer' }}
+        />
+      ) : (
+        <span style={{ width: 13, flexShrink: 0 }} />
+      )}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginBottom: 4 }}>
+          <TestabilityChip testability={claim.testability} />
+          <ReproChip status={reproStatus} />
+        </div>
+        <div style={{ ...mono(10), color: C.muted, marginBottom: 3 }}>{claim.claim_id}</div>
+        <div style={{ ...grotesk(12), color: C.text, lineHeight: 1.45, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{claim.text}</div>
       </div>
-      <div style={{ ...mono(10), color: C.muted, marginBottom: 3 }}>{claim.claim_id}</div>
-      <div style={{ ...grotesk(12), color: C.text, lineHeight: 1.45, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{claim.text}</div>
     </div>
   );
 }
@@ -150,6 +166,9 @@ export default function PocSession() {
   const [analysisStatus, setAnalysisStatus] = useState(null)
   const [report, setReport]             = useState(null)
   const [reproStatuses, setReproStatuses] = useState({})
+  const [checkedIds, setCheckedIds]     = useState(() => new Set())
+  const [scaffoldStatus, setScaffoldStatus] = useState('awaiting_selection')
+  const [scaffoldError, setScaffoldError]   = useState(null)
 
   const feedRef     = useRef(null)
   const fileInputRef = useRef(null)
@@ -183,9 +202,10 @@ export default function PocSession() {
     es.addEventListener('report_ready', (e) => {
       setFeed(f => [...f, { event_type: 'report_ready', payload: JSON.parse(e.data) }])
       setZipReady(true)
+      setScaffoldStatus('ready')
       setJobStatus('complete')
     })
-    es.onerror = () => setJobStatus(s => s === 'processing' ? 'complete' : s)
+    es.onerror = () => setJobStatus(s => s === 'processing' ? 'ready' : s)
 
     return () => es.close()
   }, [sessionId])
@@ -222,6 +242,47 @@ export default function PocSession() {
     }, 2000)
     return () => clearInterval(t)
   }, [analysisStatus, sessionId])
+
+  // Poll scaffold status so the download button activates as soon as Phase 2 finishes
+  useEffect(() => {
+    let cancelled = false
+    const tick = async () => {
+      try {
+        const s = await api.poc.scaffoldStatus(sessionId)
+        if (cancelled) return
+        setScaffoldStatus(s.scaffold_status || 'awaiting_selection')
+        setScaffoldError(s.scaffold_error || null)
+        setZipReady(!!s.zip_ready)
+        if (s.scaffold_status === 'ready' || s.scaffold_status === 'error') return
+      } catch {}
+      if (!cancelled) setTimeout(tick, 2000)
+    }
+    tick()
+    return () => { cancelled = true }
+  }, [sessionId])
+
+  const toggleChecked = (claimId, on) => {
+    setCheckedIds(prev => {
+      const next = new Set(prev)
+      if (on) next.add(claimId); else next.delete(claimId)
+      return next
+    })
+  }
+
+  const handleGenerateScaffolds = async () => {
+    const ids = Array.from(checkedIds)
+    if (ids.length === 0) return
+    setScaffoldStatus('generating')
+    setScaffoldError(null)
+    setZipReady(false)
+    try {
+      await api.poc.generateScaffolds(sessionId, ids)
+    } catch (err) {
+      console.error('Scaffold generation failed', err)
+      setScaffoldStatus('error')
+      setScaffoldError(String(err))
+    }
+  }
 
   const handleUpload = async (e) => {
     const file = e.target.files?.[0]
@@ -278,6 +339,9 @@ export default function PocSession() {
                   selected={selectedId === claim.claim_id}
                   reproStatus={reproStatuses[claim.claim_id]}
                   onClick={() => setSelectedId(selectedId === claim.claim_id ? null : claim.claim_id)}
+                  checkable={claim.testability === 'testable' && scaffoldStatus !== 'generating'}
+                  checked={checkedIds.has(claim.claim_id)}
+                  onCheckChange={(on) => toggleChecked(claim.claim_id, on)}
                 />
               ))
             )}
@@ -295,14 +359,45 @@ export default function PocSession() {
       </div>
       {/* Bottom action bar */}
       <div style={{ background: C.surface, borderTop: `1px solid ${C.border}`, padding: '9px 16px', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+        {(() => {
+          const canGenerate = checkedIds.size > 0 && scaffoldStatus !== 'generating' && jobStatus !== 'processing'
+          const generating = scaffoldStatus === 'generating'
+          return (
+            <button
+              onClick={handleGenerateScaffolds}
+              disabled={!canGenerate}
+              style={{
+                ...mono(11, 700),
+                letterSpacing: '0.05em',
+                padding: '5px 14px',
+                borderRadius: 3,
+                border: `1px solid ${canGenerate ? C.purple : C.border}`,
+                background: canGenerate ? 'rgba(179,136,255,0.10)' : 'rgba(255,255,255,0.03)',
+                color: canGenerate ? C.purple : C.muted,
+                cursor: canGenerate ? 'pointer' : 'not-allowed',
+              }}
+            >
+              {generating ? '⟳ GENERATING…' : `⚡ GENERATE SCAFFOLDS (${checkedIds.size})`}
+            </button>
+          )
+        })()}
+        <div style={{ width: 1, height: 16, background: C.border }} />
         <button onClick={() => window.open(`/api/poc/${sessionId}/scaffold.zip`, '_blank')} disabled={!zipReady} style={{ ...mono(11, 700), letterSpacing: '0.05em', padding: '5px 14px', borderRadius: 3, border: `1px solid ${zipReady ? C.indigo : C.border}`, background: zipReady ? 'rgba(91,91,214,0.15)' : 'rgba(255,255,255,0.03)', color: zipReady ? C.indigo : C.muted, cursor: zipReady ? 'pointer' : 'not-allowed' }}>↓ SCAFFOLD.ZIP</button>
         <div style={{ width: 1, height: 16, background: C.border }} />
         <input ref={fileInputRef} type="file" accept=".json" onChange={handleUpload} style={{ display: 'none' }} />
         <button onClick={() => fileInputRef.current?.click()} disabled={!zipReady || uploading} style={{ ...mono(11, 700), letterSpacing: '0.05em', padding: '5px 14px', borderRadius: 3, border: `1px solid ${zipReady && !uploading ? C.cyan : C.border}`, background: zipReady && !uploading ? 'rgba(0,234,255,0.08)' : 'rgba(255,255,255,0.03)', color: zipReady && !uploading ? C.cyan : C.muted, cursor: zipReady && !uploading ? 'pointer' : 'not-allowed' }}>{uploading ? '⟳ UPLOADING…' : '↑ UPLOAD RESULTS.JSON'}</button>
         {analysisStatus === 'analyzing' && (<span style={{ ...mono(11), color: C.indigo }}>⟳ Analyzing results…</span>)}
         {analysisStatus === 'complete' && report && (<span style={{ ...mono(11), color: '#22C55E' }}>✓ Analysis complete — {report.results?.length ?? 0} results</span>)}
+        {scaffoldError && (<span style={{ ...mono(11), color: '#EF4444' }}>scaffold error: {scaffoldError}</span>)}
         <div style={{ flex: 1 }} />
-        <span style={{ ...mono(10), color: C.muted }}>{!zipReady ? 'Generating scaffolds…' : analysisStatus !== 'complete' ? 'Download scaffold → run pytest → upload poc_results.json' : 'Reproducibility analysis complete'}</span>
+        <span style={{ ...mono(10), color: C.muted }}>{
+          jobStatus === 'processing' ? 'Extracting atoms + metrics…'
+            : scaffoldStatus === 'awaiting_selection' ? 'Pick claims → click GENERATE SCAFFOLDS'
+            : scaffoldStatus === 'generating' ? 'Generating scaffolds…'
+            : !zipReady ? 'Scaffolds queued…'
+            : analysisStatus !== 'complete' ? 'Download scaffold → run pytest → upload poc_results.json'
+            : 'Reproducibility analysis complete'
+        }</span>
       </div>
     </div>
   );
