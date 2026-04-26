@@ -1,8 +1,15 @@
+import os
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     openai_api_key: str = ""
+    openrouter_api_key: str = ""
+    openrouter_model: str = "google/gemini-3-flash-preview"
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_http_referer: str = "http://localhost:3000"
+    openrouter_title: str = "PaperCourt"
     gemini_api_key: str = ""
     gemma_api_key: str = ""
     semantic_scholar_api_key: str = ""
@@ -10,6 +17,7 @@ class Settings(BaseSettings):
     serp_api_key: str = ""
     openai_model: str = "gpt-4o"
     openai_base_url: str = ""
+    openai_timeout_seconds: float = 300.0
     backend_port: int = 8000
     frontend_port: int = 5173
     max_parallel_claims: int = 5
@@ -73,6 +81,10 @@ class Settings(BaseSettings):
     deepdive_max_output_tokens_light: int = 32768
 
     model_config = SettingsConfigDict(env_file=(".env", "backend/.env"), extra="ignore")
+
+    def model_post_init(self, __context) -> None:  # noqa: ANN001
+        if self.openrouter_api_key and not os.getenv("OPENAI_MODEL"):
+            self.openai_model = self.openrouter_model
 
 
 settings = Settings()

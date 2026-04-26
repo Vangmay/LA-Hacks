@@ -2,7 +2,11 @@ import json
 import logging
 import os
 import uuid
-from typing import Optional, Dict
+from datetime import date, datetime
+from enum import Enum
+from typing import Any, Optional, Dict
+
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -19,14 +23,27 @@ class JobStore:
                 with open(self._store_path, "r", encoding="utf-8") as f:
                     self._jobs = json.load(f)
                 logger.info(f"Loaded {len(self._jobs)} jobs from {self._store_path}")
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to load jobs from {self._store_path}: {e}")
+                self._jobs = {}
+                self._quarantine_corrupt_store()
             except Exception as e:
                 logger.error(f"Failed to load jobs from {self._store_path}: {e}")
+                self._jobs = {}
+
+    def _quarantine_corrupt_store(self) -> None:
+        corrupt_path = f"{self._store_path}.corrupt"
+        try:
+            os.replace(self._store_path, corrupt_path)
+            logger.warning(f"Moved corrupt job store to {corrupt_path}")
+        except OSError as e:
+            logger.warning(f"Failed to move corrupt job store {self._store_path}: {e}")
 
     def _save(self) -> None:
         try:
             os.makedirs(os.path.dirname(self._store_path), exist_ok=True)
             with open(self._store_path, "w", encoding="utf-8") as f:
-                json.dump(self._jobs, f)
+                json.dump(self._jobs, f, default=_json_default)
         except Exception as e:
             logger.error(f"Failed to save jobs to {self._store_path}: {e}")
 
@@ -107,3 +124,13 @@ class JobStore:
 
 
 job_store = JobStore()
+
+
+def _json_default(value: Any) -> Any:
+    if isinstance(value, BaseModel):
+        return value.model_dump(mode="json")
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, Enum):
+        return value.value
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")

@@ -140,15 +140,36 @@ async def main_async() -> None:
         client=_FakeSequenceOpenAI(
             [
                 {
-                    "atoms": [
+                    "candidates": [
                         {
                             "atom_type": "technique",
                             "source_quote": "We introduce a compact attention mechanism that removes recurrence.",
                             "text": "compact attention mechanism that removes recurrence by",
                             "section_heading": "Main",
                             "importance": "high",
+                            "reviewability": "learning_only",
+                            "checkability": "conceptual",
+                            "claim_scope": "model architecture",
+                            "why_this_is_an_atom": "central technique stated in one source sentence",
                             "role_in_paper": "central technique",
+                            "dependency_hints": [],
+                            "equation_refs": [],
+                            "citation_refs": [],
                             "confidence": 0.9,
+                        }
+                    ],
+                    "warnings": [],
+                },
+                {
+                    "decisions": [
+                        {
+                            "candidate_id": "cand_llm_002",
+                            "action": "rewrite",
+                            "new_text": "Compact attention removes recurrent computation",
+                            "drop_reason": "",
+                            "merge_with": None,
+                            "reviewability": "learning_only",
+                            "checkability": "conceptual",
                         }
                     ],
                     "warnings": [],
