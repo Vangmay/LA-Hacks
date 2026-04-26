@@ -122,6 +122,24 @@ async def _submit_arxiv_poc(arxiv_url: str) -> dict:
     }
 
 
+# ── GET /poc/sessions ─────────────────────────────────────────────────────────
+
+
+@router.get("/sessions")
+async def list_sessions():
+    jobs = job_store.get_all(mode="poc")
+    # Return reversed to show newest first
+    sessions = []
+    for j in reversed(jobs):
+        sessions.append({
+            "session_id": j.get("job_id"),
+            "arxiv_id": j.get("arxiv_id", "unknown"),
+            "title": j.get("paper_metadata", {}).get("title"),
+            "status": j.get("status"),
+        })
+    return {"sessions": sessions}
+
+
 # ── GET /poc/{session_id}/stream ───────────────────────────────────────────────
 
 
