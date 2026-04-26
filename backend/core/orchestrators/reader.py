@@ -76,15 +76,34 @@ class ReaderOrchestrator:
 
             async def on_atom_progress(partial_atoms: list[ResearchAtom], progress: dict[str, Any]) -> None:
                 current_job = job_store.get(session_id) or {}
+                prev_snapshot = current_job.get("graph_snapshot") or {}
+                stage = progress.get("stage", "Extracting atoms")
+                # Preserve previously-reported batch counts when a later phase
+                # (normalization) emits without them; otherwise the progress
+                # bar would reset from N/N back to 0/0.
+                completed = progress.get("batches_completed")
+                if completed is None:
+                    completed = prev_snapshot.get("extraction_batches_completed")
+                total = progress.get("batches_total")
+                if total is None:
+                    total = prev_snapshot.get("extraction_batches_total")
+                current_batch = progress.get("current_batch")
+                if current_batch is None:
+                    current_batch = prev_snapshot.get("extraction_current_batch")
+                visible_atoms = partial_atoms
+                recent_atoms = _recent_atom_snapshots(partial_atoms)
                 job_store.update(
                     session_id,
                     total_atoms=max(len(partial_atoms), current_job.get("total_atoms", 0)),
-                    reader_stage=progress.get("stage", "Extracting atoms"),
+                    reader_stage=stage,
                     graph_snapshot=_graph_snapshot(
-                        partial_atoms,
-                        stage=progress.get("stage", "Extracting atoms"),
-                        extraction_batches_completed=progress.get("batches_completed"),
-                        extraction_batches_total=progress.get("batches_total"),
+                        visible_atoms,
+                        stage=stage,
+                        extraction_batches_completed=completed,
+                        extraction_batches_total=total,
+                        extraction_current_batch=current_batch,
+                        parsed_atoms=len(partial_atoms),
+                        recent_atoms=recent_atoms,
                     ),
                 )
 
@@ -203,6 +222,9 @@ def _graph_snapshot(
     stage: str | None = None,
     extraction_batches_completed: int | None = None,
     extraction_batches_total: int | None = None,
+    extraction_current_batch: int | None = None,
+    parsed_atoms: int | None = None,
+    recent_atoms: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     comprehension_states = comprehension_states or {}
     start_set = set(start_here or [])
@@ -213,10 +235,11 @@ def _graph_snapshot(
             "atom_type": atom.atom_type.value,
             "section": atom.section_heading,
             "label": _node_label(atom),
+            "text": atom.text,
             "parsed_order": idx + 1,
             "comprehension_status": comprehension_states.get(atom.atom_id, "unvisited"),
             "importance": atom.importance.value,
-            "source_excerpt": atom.source_span.raw_excerpt[:200],
+            "source_excerpt": atom.source_span.raw_excerpt[:500],
             "start_here": atom.atom_id in start_set,
         }
         for idx, atom in enumerate(atoms)
@@ -237,11 +260,12 @@ def _graph_snapshot(
         "edges": edges,
         "start_here": start_here or [],
         "stage": stage or "Building learner graph",
-        "parsed_atoms": len(nodes),
+        "parsed_atoms": parsed_atoms if parsed_atoms is not None else len(nodes),
         "total_atoms": len(nodes),
         "extraction_batches_completed": extraction_batches_completed,
         "extraction_batches_total": extraction_batches_total,
-        "recent_atoms": [
+        "extraction_current_batch": extraction_current_batch,
+        "recent_atoms": recent_atoms if recent_atoms is not None else [
             {
                 "id": node["id"],
                 "label": node["label"],
@@ -252,11 +276,64 @@ def _graph_snapshot(
     }
 
 
+def _recent_atom_snapshots(atoms: list[ResearchAtom], limit: int = 5) -> list[dict[str, Any]]:
+    start = max(len(atoms) - limit + 1, 1)
+    return [
+        {
+            "id": atom.atom_id,
+            "label": atom.text or _node_label(atom),
+            "parsed_order": idx,
+        }
+        for idx, atom in enumerate(atoms[-limit:], start=start)
+    ]
+
+
 def _node_label(atom: ResearchAtom) -> str:
-    base = atom.atom_type.value.replace("_", " ").title()
-    if atom.section_heading:
-        return f"{base} ({atom.section_heading[:30]})"
-    return base
+    text = _clean_label_text(atom.text or atom.source_span.raw_excerpt or "")
+    if not text:
+        return atom.atom_id
+
+    lowered = text.lower()
+    for prefix in (
+        "we introduce ",
+        "we propose ",
+        "we present ",
+        "we construct ",
+        "we define ",
+        "we prove ",
+        "we show ",
+        "this paper introduces ",
+        "this paper presents ",
+        "the paper introduces ",
+        "the paper presents ",
+    ):
+        if lowered.startswith(prefix):
+            text = text[len(prefix):]
+            break
+
+    return _safe_concept_label(text) or atom.atom_id
+
+
+def _clean_label_text(text: str) -> str:
+    text = text.replace("$", " ")
+    for char in "\\{}[]()":
+        text = text.replace(char, " ")
+    return " ".join(text.split())
+
+
+def _safe_concept_label(text: str, limit: int = 96) -> str:
+    cleaned = " ".join(str(text or "").split()).strip(" ,.;:")
+    if len(cleaned) <= limit:
+        return cleaned
+    clipped = cleaned[:limit].rsplit(" ", 1)[0].strip(" ,.;:")
+    dangling = {
+        "a", "an", "the", "at", "to", "of", "by", "with", "for", "from", "in",
+        "on", "and", "or", "but", "as", "than", "that", "which", "less", "more",
+    }
+    words = clipped.split()
+    while words and words[-1].lower().strip(" ,.;:") in dangling:
+        words.pop()
+    return " ".join(words).strip(" ,.;:") or cleaned[:limit].strip(" ,.;:")
 
 
 def _build_source(job: dict[str, Any]) -> PaperSource:

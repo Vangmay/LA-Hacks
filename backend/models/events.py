@@ -40,6 +40,7 @@ class DAGEventType(str, Enum):
     PARSE_COMPLETE = "parse_complete"
 
     ATOM_EXTRACTION_STARTED = "atom_extraction_started"
+    ATOM_EXTRACTION_PROGRESS = "atom_extraction_progress"
     ATOM_CREATED = "atom_created"
     ATOM_EXTRACTION_COMPLETE = "atom_extraction_complete"
 

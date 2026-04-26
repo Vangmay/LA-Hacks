@@ -103,17 +103,54 @@ class ReviewOrchestrator:
             async def on_atom_progress(partial_atoms: list[ResearchAtom], progress: dict[str, Any]) -> None:
                 stage = progress.get("stage", "Extracting atoms")
                 current_job = job_store.get(job_id) or {}
+                prev_snapshot = current_job.get("graph_snapshot") or {}
+                # Preserve previously-reported batch counts when a later phase
+                # (normalization) emits without them; otherwise the progress
+                # bar would reset from N/N back to 0/0.
+                completed = progress.get("batches_completed")
+                if completed is None:
+                    completed = prev_snapshot.get("extraction_batches_completed")
+                total = progress.get("batches_total")
+                if total is None:
+                    total = prev_snapshot.get("extraction_batches_total")
+                current_batch = progress.get("current_batch")
+                if current_batch is None:
+                    current_batch = prev_snapshot.get("extraction_current_batch")
+                publish_atoms = progress.get("publish_atoms", False)
+                visible_atoms = partial_atoms
+                recent_atoms = _recent_atom_snapshots(partial_atoms)
+                snapshot = _graph_snapshot(
+                    visible_atoms,
+                    stage=stage,
+                    extraction_batches_completed=completed,
+                    extraction_batches_total=total,
+                    extraction_current_batch=current_batch,
+                    parsed_atoms=len(partial_atoms),
+                    recent_atoms=recent_atoms,
+                )
                 job_store.update(
                     job_id,
                     total_atoms=max(len(partial_atoms), current_job.get("total_atoms", 0)),
                     review_stage=stage,
-                    graph_snapshot=_graph_snapshot(
-                        partial_atoms,
-                        stage=stage,
-                        extraction_batches_completed=progress.get("batches_completed"),
-                        extraction_batches_total=progress.get("batches_total"),
-                    ),
+                    graph_snapshot=snapshot,
                 )
+                await _publish(
+                    job_id,
+                    DAGEventType.ATOM_EXTRACTION_PROGRESS,
+                    payload={
+                        "stage": stage,
+                        "nodes": snapshot["nodes"],
+                        "edges": snapshot["edges"],
+                        "parsed_atoms": len(partial_atoms),
+                        "total_atoms": max(len(partial_atoms), current_job.get("total_atoms", 0)),
+                        "extraction_batches_completed": completed,
+                        "extraction_batches_total": total,
+                        "extraction_current_batch": current_batch,
+                        "recent_atoms": recent_atoms,
+                    },
+                )
+                if not publish_atoms:
+                    return
                 for idx, atom in enumerate(partial_atoms, start=1):
                     should_update_existing = stage == "Normalizing atom headers"
                     if atom.atom_id in emitted_atoms and not should_update_existing:
@@ -456,6 +493,9 @@ def _graph_snapshot(
     stage: str | None = None,
     extraction_batches_completed: int | None = None,
     extraction_batches_total: int | None = None,
+    extraction_current_batch: int | None = None,
+    parsed_atoms: int | None = None,
+    recent_atoms: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     verdict_label = {v.atom_id: v.label.value for v in (verdicts or [])}
     nodes = [
@@ -488,11 +528,12 @@ def _graph_snapshot(
         "nodes": nodes,
         "edges": edges,
         "stage": stage or "Building DAG",
-        "parsed_atoms": len(nodes),
+        "parsed_atoms": parsed_atoms if parsed_atoms is not None else len(nodes),
         "total_atoms": len(nodes),
         "extraction_batches_completed": extraction_batches_completed,
         "extraction_batches_total": extraction_batches_total,
-        "recent_atoms": [
+        "extraction_current_batch": extraction_current_batch,
+        "recent_atoms": recent_atoms if recent_atoms is not None else [
             {
                 "id": node["id"],
                 "label": node["label"],
@@ -501,6 +542,18 @@ def _graph_snapshot(
             for node in nodes[-5:]
         ],
     }
+
+
+def _recent_atom_snapshots(atoms: list[ResearchAtom], limit: int = 5) -> list[dict[str, Any]]:
+    start = max(len(atoms) - limit + 1, 1)
+    return [
+        {
+            "id": atom.atom_id,
+            "label": _node_label(atom),
+            "parsed_order": idx,
+        }
+        for idx, atom in enumerate(atoms[-limit:], start=start)
+    ]
 
 
 def _node_label(atom: ResearchAtom) -> str:
