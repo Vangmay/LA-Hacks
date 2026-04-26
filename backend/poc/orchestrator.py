@@ -6,18 +6,16 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
-from agents.base import AgentContext
-from agents.claim_extractor import ClaimExtractorAgent
-from agents.dag_builder import DAGBuilderAgent
-from agents.parser import ParserAgent
-from poc.agents.claim_filter import ClaimFilterAgent
-from poc.agents.metric_extractor import MetricExtractorAgent
-from poc.agents.scaffold_generator import ScaffoldGeneratorAgent
-from config import settings
-from core.dag import DAG
-from core.event_bus import event_bus
-from core.job_store import job_store
-from models import ClaimUnit, DAGEvent, DAGEventType
+from backend.agents.base import AgentContext
+from backend.agents.claim_extractor import ClaimExtractorAgent
+from backend.agents.parser import ParserAgent
+from backend.poc.agents.claim_filter import ClaimFilterAgent
+from backend.poc.agents.metric_extractor import MetricExtractorAgent
+from backend.poc.agents.scaffold_generator import ScaffoldGeneratorAgent
+from backend.config import settings
+from backend.core.event_bus import event_bus
+from backend.core.job_store import job_store
+from backend.models import ClaimUnit, DAGEvent, DAGEventType
 
 logger = logging.getLogger(__name__)
 
@@ -65,18 +63,7 @@ class PoCOrchestrator:
         claim_units = [ClaimUnit.model_validate(c) for c in raw_claims]
         job_store.update(job_id, claims={c.claim_id: c.model_dump() for c in claim_units})
 
-        # ── 3. Build DAG ──────────────────────────────────────────────────────
-        dag_result = await DAGBuilderAgent().run(
-            AgentContext(job_id=job_id, extra={"claims": raw_claims})
-        )
-        dag = DAG()
-        for c in claim_units:
-            dag.add_node(c.claim_id)
-        for edge in dag_result.output.get("edges", []):
-            dag.add_edge(edge["from"], edge["to"])
-        job_store.update(job_id, dag=dag)
-
-        # ── 4. Filter claims ──────────────────────────────────────────────────
+        # ── 3. Filter claims ──────────────────────────────────────────────────
         filter_result = await ClaimFilterAgent().run(
             AgentContext(job_id=job_id, extra={"claims": claim_units})
         )
@@ -88,9 +75,9 @@ class PoCOrchestrator:
             await event_bus.publish(job_id, DAGEvent(
                 event_id=str(uuid.uuid4()),
                 job_id=job_id,
-                event_type=DAGEventType.NODE_CLASSIFIED,
-                claim_id=claim.claim_id,
+                event_type=DAGEventType.ATOM_CREATED,
                 payload={
+                    "claim_id": claim.claim_id,
                     "testability": testability,
                     "reason": classifications.get(claim.claim_id, {}).get("reason", ""),
                 },
@@ -99,11 +86,11 @@ class PoCOrchestrator:
 
         testable_claims = [c for c in claim_units if c.claim_id in testable_ids]
 
-        # ── 5. Extract metrics in parallel ────────────────────────────────────
+        # ── 4. Extract metrics in parallel ────────────────────────────────────
         metric_results = await asyncio.gather(
             *[
                 MetricExtractorAgent().run(
-                    AgentContext(job_id=job_id, claim=c, extra={"paper_metadata": paper_metadata})
+                    AgentContext(job_id=job_id, extra={"claim": c, "paper_metadata": paper_metadata})
                 )
                 for c in testable_claims
             ],
@@ -118,7 +105,7 @@ class PoCOrchestrator:
             if result.status in ("success", "inconclusive"):
                 poc_specs[claim.claim_id] = result.output
 
-        # ── 6. Generate scaffolds in parallel (max 5 concurrent) ─────────────
+        # ── 5. Generate scaffolds in parallel (max 5 concurrent) ─────────────
         semaphore = asyncio.Semaphore(settings.max_parallel_claims)
 
         async def _scaffold_one(claim: ClaimUnit, spec: dict) -> tuple:
@@ -126,8 +113,7 @@ class PoCOrchestrator:
                 result = await ScaffoldGeneratorAgent().run(
                     AgentContext(
                         job_id=job_id,
-                        claim=claim,
-                        extra={"poc_spec": spec, "paper_metadata": paper_metadata},
+                        extra={"claim": claim, "poc_spec": spec, "paper_metadata": paper_metadata},
                     )
                 )
                 return claim.claim_id, result
@@ -152,22 +138,21 @@ class PoCOrchestrator:
             await event_bus.publish(job_id, DAGEvent(
                 event_id=str(uuid.uuid4()),
                 job_id=job_id,
-                event_type=DAGEventType.SCAFFOLD_GENERATED,
-                claim_id=claim_id,
-                payload={"status": result.status},
+                event_type=DAGEventType.CHECK_COMPLETE,
+                payload={"claim_id": claim_id, "status": result.status},
                 timestamp=datetime.utcnow(),
             ))
 
         job_store.update(job_id, poc_specs=poc_specs)
 
-        # ── 7. Package zip ────────────────────────────────────────────────────
+        # ── 6. Package zip ────────────────────────────────────────────────────
         zip_path = await self._build_zip(job_id, poc_specs, paper_metadata)
         job_store.update(job_id, zip_path=zip_path)
 
         await event_bus.publish(job_id, DAGEvent(
             event_id=str(uuid.uuid4()),
             job_id=job_id,
-            event_type=DAGEventType.POC_READY,
+            event_type=DAGEventType.REPORT_READY,
             payload={"zip_path": zip_path, "testable_count": len(testable_ids)},
             timestamp=datetime.utcnow(),
         ))
