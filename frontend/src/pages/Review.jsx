@@ -9,6 +9,7 @@ import rehypeKatex from 'rehype-katex'
 import 'katex/dist/katex.min.css'
 import dagre from 'dagre'
 import { api } from '../api/client'
+import FormalizationPanel from '../features/formalization/components/FormalizationPanel'
 
 const STATUS_COLORS = {
   pending: '#6b7280',
@@ -111,6 +112,10 @@ const initialState = {
 }
 
 function reducer(state, action) {
+  if (action.type === 'RESET') {
+    return initialState
+  }
+
   if (action.type === 'INIT') {
     const atoms = {}
     const nodes = (action.payload.dag?.nodes || []).map(n => ({ ...n, id: n.id || n.atom_id }))
@@ -202,13 +207,37 @@ function reducer(state, action) {
         },
       }
     }
-    case 'atom_extraction_complete':
+    case 'atom_extraction_complete': {
+      const finalNodes = Array.isArray(payload?.atoms)
+        ? payload.atoms.map(n => ({ ...n, id: n.id || n.atom_id }))
+        : []
+      if (finalNodes.length > 0) {
+        const finalAtoms = {}
+        for (const atom of finalNodes) {
+          finalAtoms[atom.id] = atom
+        }
+        return {
+          ...state,
+          buildStage: 'Building dependency graph',
+          status: { ...state.status, total_atoms: payload.total_atoms || finalNodes.length },
+          atoms: finalAtoms,
+          dag: {
+            ...state.dag,
+            nodes: finalNodes,
+            edges: [],
+            parsed_atoms: finalNodes.length,
+            total_atoms: payload.total_atoms || finalNodes.length,
+          },
+          recentAtoms: finalNodes.slice(-5),
+        }
+      }
       return {
         ...state,
         buildStage: 'Building dependency graph',
         status: { ...state.status, total_atoms: payload.total_atoms || state.status?.total_atoms },
         dag: { ...state.dag, total_atoms: payload.total_atoms || state.dag.total_atoms || state.dag.nodes.length },
       }
+    }
     case 'graph_build_started':
       return { ...state, buildStage: 'Building dependency graph' }
     case 'edge_created': {
@@ -468,6 +497,13 @@ export default function Review() {
 
   useEffect(() => {
     if (!jobId) return
+    dispatch({ type: 'RESET' })
+    setSelectedId(null)
+    setStatementExpanded(false)
+    setError('')
+    setIsReportOpen(false)
+    setReportContent('')
+
     let cancelled = false
     let eventSource = null
 
@@ -738,6 +774,8 @@ export default function Review() {
                   </LatexText>
                 </div>
               )}
+
+              <FormalizationPanel jobId={jobId} atom={selected} />
 
               {(state.checks[selected.id] || []).length > 0 && (
                 <div className="mt-4">

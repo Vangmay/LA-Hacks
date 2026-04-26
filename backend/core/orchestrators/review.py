@@ -190,6 +190,10 @@ class ReviewOrchestrator:
                 )
             await _publish(job_id, DAGEventType.ATOM_EXTRACTION_COMPLETE, payload={
                 "total_atoms": len(atoms),
+                "atoms": [
+                    _atom_payload(atom, parsed_order=idx + 1)
+                    for idx, atom in enumerate(atoms)
+                ],
             })
 
             graph = await _build_graph(job_id, atoms)

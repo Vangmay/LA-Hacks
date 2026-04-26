@@ -33,5 +33,9 @@ dist/
 # Test fixtures
 backend/tests/fixtures/*.pdf
 
+# Generated review/formalization outputs
+backend/outputs/*_pipeline.json
+backend/outputs/formalizations/
+
 # Build artifacts
 *.zip

@@ -7,11 +7,11 @@ import os
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
-from sse_starlette.sse import EventSourceResponse
 
 from core.event_bus import event_bus
 from core.job_store import job_store
 from core.orchestrators.review import ReviewOrchestrator
+from core.sse import LoopSafeEventSourceResponse
 from ingestion.arxiv import ArxivSourceError, fetch_arxiv_source, parse_arxiv_url
 from models import DAGEventType
 
@@ -152,7 +152,7 @@ async def stream(request: Request, job_id: str):
             except asyncio.CancelledError:
                 pass
 
-    return EventSourceResponse(event_gen())
+    return LoopSafeEventSourceResponse(event_gen())
 
 
 @router.get("/{job_id}/report")
