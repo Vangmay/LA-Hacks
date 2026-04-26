@@ -213,6 +213,9 @@ function reducer(state, action) {
   }
 }
 
+const DAG_NODE_WIDTH = 300
+const DAG_NODE_HEIGHT = 118
+
 function AtomNode({ data }) {
   const isSelected = data.selectedId === data.id
   const color = statusColor(data.status)
@@ -221,7 +224,7 @@ function AtomNode({ data }) {
     <>
       <Handle type="target" position={Position.Left} className="!w-2 !h-2 !border-0" style={{ background: color }} />
       <div 
-        className={`px-4 py-2 border rounded-md min-w-[150px] transition-all duration-200`}
+        className="box-border flex h-[118px] w-[300px] flex-col overflow-hidden rounded-md border px-4 py-3 transition-all duration-200"
         style={{
           backgroundColor: '#131720',
           borderColor: isSelected ? color : `${color}40`,
@@ -230,12 +233,17 @@ function AtomNode({ data }) {
       >
         <div className="flex items-center gap-2 mb-1">
           <span
-            className="w-2 h-2 rounded-full inline-block"
+            className="inline-block h-2 w-2 shrink-0 rounded-full"
             style={{ background: color, boxShadow: `0 0 4px ${color}80` }}
           />
-          <span className="text-[10px] uppercase font-mono opacity-70 text-[#E4E7F0]">{data.atom_type}</span>
+          <span className="min-w-0 truncate text-[10px] uppercase font-mono opacity-70 text-[#E4E7F0]">{data.atom_type}</span>
         </div>
-        <div className="text-xs font-sans truncate text-[#E4E7F0]">{compactLabel(data.label || data.text || data.id)}</div>
+        <div className="line-clamp-3 min-w-0 text-xs leading-snug font-sans text-[#E4E7F0] break-words">
+          {compactLabel(data.label || data.text || data.id)}
+        </div>
+        {data.section && (
+          <div className="mt-auto truncate pt-2 text-[10px] font-mono text-white/35">{data.section}</div>
+        )}
       </div>
       <Handle type="source" position={Position.Right} className="!w-2 !h-2 !border-0" style={{ background: color }} />
     </>
@@ -244,11 +252,23 @@ function AtomNode({ data }) {
 const nodeTypes = { atom: AtomNode }
 
 function compactLabel(value = '') {
-  const words = String(value)
+  const cleaned = String(value)
     .replace(/[$\\{}[\]().,;:]/g, ' ')
     .split(/\s+/)
     .filter(Boolean)
-  return words.slice(0, 6).join(' ') || String(value)
+    .join(' ')
+  if (cleaned.length <= 96) return cleaned || String(value)
+  const dangling = new Set(['a', 'an', 'the', 'at', 'to', 'of', 'by', 'with', 'for', 'from', 'in', 'on', 'and', 'or', 'but', 'as', 'than', 'that', 'which', 'less', 'more'])
+  const words = cleaned.slice(0, 96).split(/\s+/)
+  words.pop()
+  while (words.length && dangling.has(words[words.length - 1].toLowerCase())) {
+    words.pop()
+  }
+  return words.join(' ') || cleaned.slice(0, 96)
+}
+
+function argumentStrengthLabel(value = 'HIGH') {
+  return `ARGUMENT STRENGTH: ${String(value || 'HIGH').replace(/_/g, ' ').toUpperCase()}`
 }
 
 function BuildProgress({ state, nodes, edges, completed, total }) {
@@ -386,7 +406,7 @@ export default function Review() {
   const { rfNodes, rfEdges } = useMemo(() => {
     const dagreGraph = new dagre.graphlib.Graph()
     dagreGraph.setDefaultEdgeLabel(() => ({}))
-    dagreGraph.setGraph({ rankdir: 'LR', nodesep: 50, ranksep: 100 })
+    dagreGraph.setGraph({ rankdir: 'LR', nodesep: 90, ranksep: 150, marginx: 30, marginy: 30 })
 
     const mappedNodes = nodes.map((n) => ({
       id: n.id,
@@ -410,7 +430,7 @@ export default function Review() {
     })
 
     mappedNodes.forEach((node) => {
-      dagreGraph.setNode(node.id, { width: 250, height: 80 })
+      dagreGraph.setNode(node.id, { width: DAG_NODE_WIDTH, height: DAG_NODE_HEIGHT })
     })
 
     mappedEdges.forEach((edge) => {
@@ -424,8 +444,8 @@ export default function Review() {
       return {
         ...node,
         position: {
-          x: nodeWithPosition.x - 250 / 2,
-          y: nodeWithPosition.y - 80 / 2,
+          x: nodeWithPosition.x - DAG_NODE_WIDTH / 2,
+          y: nodeWithPosition.y - DAG_NODE_HEIGHT / 2,
         },
       }
     })
@@ -581,7 +601,7 @@ export default function Review() {
                           <div className="absolute -left-1.5 top-3 w-3 h-3 bg-[#1a1315] border-l border-b border-red-900/30 rotate-45" />
                           <div className="flex items-center gap-2 mb-2 flex-wrap relative z-10">
                             <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-red-900/40 text-red-300">
-                              {c.severity || 'HIGH'}
+                              {argumentStrengthLabel(c.severity)}
                             </span>
                             <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-white/10 text-white/70">
                               {(c.challenge_type || c.attacker_agent || 'CHALLENGE').replace(/_/g, ' ')}

@@ -140,6 +140,81 @@ Rules:
 - Return ONLY the JSON object. No prose. No markdown.
 """
 
+_HEADER_SYSTEM_PROMPT = (
+    "You clean source-grounded research atoms into concise standalone atom headers. "
+    "You never invent claims. If an atom cannot be expressed as a clear concise "
+    "standalone header from the supplied source text, mark it keep=false. Output JSON only."
+)
+
+_HEADER_PROMPT_TMPL = """Normalize these extracted research atoms into concise, standalone atom headers.
+
+Each input atom includes its current extracted text and source excerpt. Return one decision for every atom_id.
+
+Atoms:
+{atoms_json}
+
+Return a JSON object:
+{{
+  "atoms": [
+    {{
+      "atom_id": "atom_001",
+      "keep": true,
+      "header": "concise standalone atom header",
+      "drop_reason": ""
+    }}
+  ],
+  "warnings": []
+}}
+
+Rules:
+- `header` must be a complete standalone claim/title, not a dangling fragment.
+- Headers should name the concept or claim being reviewed, not copy the first words near an equation.
+- Never end a header with a dangling word such as at, to, of, by, with, for, and, or, but, less, more, using, because.
+- Examples of invalid fragments: "Research goal make sequence generation less"; "Transformer decoder has six layers and".
+- Keep headers concise: normally 5-24 words, maximum 160 characters.
+- Preserve the atom's meaning and type. Do not add claims not present in the source excerpt.
+- Prefer a clear noun phrase or short sentence over copied surrounding prose.
+- Drop atoms that are just equation-neighbor fragments, citations, captions, section transitions, or incomplete clauses.
+- Drop atoms that require too much context to state concisely and faithfully.
+- Return every atom_id exactly once. No prose. No markdown.
+"""
+
+_DANGLING_HEADER_ENDINGS = {
+    "a",
+    "an",
+    "the",
+    "at",
+    "to",
+    "of",
+    "by",
+    "with",
+    "for",
+    "from",
+    "in",
+    "on",
+    "and",
+    "or",
+    "but",
+    "as",
+    "than",
+    "that",
+    "which",
+    "less",
+    "more",
+    "very",
+    "much",
+    "many",
+    "such",
+    "where",
+    "when",
+    "while",
+    "because",
+    "via",
+    "using",
+}
+
+_MAX_HEADER_BATCH_ATOMS = 50
+
 
 class AtomExtractorAgent(BaseAgent):
     agent_id = "atom_extractor"
@@ -151,10 +226,12 @@ class AtomExtractorAgent(BaseAgent):
         progress_callback: Optional[
             Callable[[list[ResearchAtom], dict[str, Any]], Awaitable[None]]
         ] = None,
+        normalize_headers: bool = True,
     ) -> None:
         self._client = client
         self._max_section_chars = max_section_chars
         self._progress_callback = progress_callback
+        self._normalize_headers = normalize_headers
 
     def _get_client(self) -> AsyncOpenAI:
         if self._client is None:
@@ -192,6 +269,21 @@ class AtomExtractorAgent(BaseAgent):
             llm_atoms = []
 
         merged = _merge_atoms(deterministic, llm_atoms)
+        if self._normalize_headers and merged:
+            try:
+                merged, normalization_warnings = await self._normalize_headers_with_llm(merged)
+                warnings.extend(normalization_warnings)
+                await self._emit_progress(
+                    merged,
+                    {
+                        "stage": "Normalizing atom headers",
+                        "batches_completed": 1,
+                        "batches_total": 1,
+                    },
+                )
+            except Exception as exc:
+                logger.exception("LLM atom header normalization failed")
+                warnings.append(f"llm_header_normalization_failed: {exc}")
         result = AtomExtractionResult(
             paper_id=paper.paper_id,
             atoms=merged,
@@ -330,6 +422,103 @@ class AtomExtractorAgent(BaseAgent):
             )
 
         return atoms, warnings
+
+    async def _normalize_headers_with_llm(
+        self,
+        atoms: list[ResearchAtom],
+    ) -> tuple[list[ResearchAtom], list[str]]:
+        client = self._get_client()
+        warnings: list[str] = []
+        decisions: dict[str, dict[str, Any]] = {}
+
+        for batch_idx, batch in enumerate(_atom_batches(atoms, _MAX_HEADER_BATCH_ATOMS), start=1):
+            payload = [
+                {
+                    "atom_id": atom.atom_id,
+                    "atom_type": atom.atom_type.value,
+                    "section_heading": atom.section_heading,
+                    "current_text": atom.text[:600],
+                    "normalized_text": (atom.normalized_text or "")[:300],
+                    "source_excerpt": (atom.source_span.raw_excerpt or atom.text)[:900],
+                    "role_in_paper": atom.role_in_paper,
+                }
+                for atom in batch
+            ]
+            prompt = _HEADER_PROMPT_TMPL.format(
+                atoms_json=json.dumps(payload, ensure_ascii=False, indent=2)
+            )
+            response = await client.chat.completions.create(
+                model=settings.openai_model,
+                messages=[
+                    {"role": "system", "content": _HEADER_SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
+                ],
+                response_format={"type": "json_object"},
+                max_tokens=4500,
+            )
+            raw = response.choices[0].message.content or ""
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                warnings.append(f"llm_header_json_parse_failed_batch_{batch_idx}: {exc}")
+                continue
+
+            atom_entries = data.get("atoms") if isinstance(data, dict) else None
+            if not isinstance(atom_entries, list):
+                warnings.append(f"llm_header_response_missing_atoms_array_batch_{batch_idx}")
+                continue
+
+            batch_warnings = data.get("warnings") if isinstance(data, dict) else None
+            if isinstance(batch_warnings, list):
+                warnings.extend(str(w) for w in batch_warnings if str(w).strip())
+
+            for entry in atom_entries:
+                if not isinstance(entry, dict):
+                    continue
+                atom_id = str(entry.get("atom_id") or "").strip()
+                if atom_id:
+                    decisions[atom_id] = entry
+
+        if not decisions:
+            warnings.append("llm_header_normalization_returned_no_decisions")
+            return _renumber_atoms([atom for atom in atoms if _locally_keepable_header(atom.text)] or atoms), warnings
+
+        cleaned: list[ResearchAtom] = []
+        missing_decisions = 0
+        dropped = 0
+        for atom in atoms:
+            decision = decisions.get(atom.atom_id)
+            if decision is None:
+                missing_decisions += 1
+                if _locally_keepable_header(atom.text):
+                    cleaned.append(atom.model_copy(update={"text": _compact_header(atom.text)}))
+                continue
+
+            keep = _coerce_bool(decision.get("keep"), default=True)
+            header = _compact_header(str(decision.get("header") or ""))
+            if not keep:
+                dropped += 1
+                continue
+            if not _valid_atom_header(header):
+                dropped += 1
+                continue
+            cleaned.append(
+                atom.model_copy(
+                    update={
+                        "text": header,
+                        "normalized_text": header,
+                    }
+                )
+            )
+
+        if missing_decisions:
+            warnings.append(f"llm_header_missing_decisions: {missing_decisions}")
+        if dropped:
+            warnings.append(f"llm_header_dropped_atoms: {dropped}")
+        if not cleaned:
+            warnings.append("llm_header_normalization_dropped_all_atoms; preserving local keepable originals")
+            cleaned = [atom.model_copy(update={"text": _compact_header(atom.text)}) for atom in atoms if _locally_keepable_header(atom.text)]
+        return _renumber_atoms(cleaned), warnings
 
     async def _emit_progress(self, atoms: list[ResearchAtom], progress: dict[str, Any]) -> None:
         if self._progress_callback is None:
@@ -524,6 +713,59 @@ def _coerce_str_list(value: Any) -> list[str]:
     return out
 
 
+def _atom_batches(atoms: list[ResearchAtom], batch_size: int) -> list[list[ResearchAtom]]:
+    size = max(1, batch_size)
+    return [atoms[idx : idx + size] for idx in range(0, len(atoms), size)]
+
+
+def _coerce_bool(value: Any, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "yes", "1", "keep"}:
+            return True
+        if normalized in {"false", "no", "0", "drop"}:
+            return False
+    return default
+
+
+def _compact_header(value: str) -> str:
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    text = text.strip(" -:;,.")
+    if len(text) <= 160:
+        return text
+    clipped = text[:160].rsplit(" ", 1)[0].strip(" -:;,.")
+    return clipped or text[:160].strip(" -:;,.")
+
+
+def _valid_atom_header(value: str) -> bool:
+    text = _compact_header(value)
+    if not text:
+        return False
+    words = re.findall(r"[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)?", text)
+    if len(words) < 3:
+        return False
+    if len(text) > 180:
+        return False
+    last = words[-1].lower()
+    if last in _DANGLING_HEADER_ENDINGS:
+        return False
+    if re.search(r"(?:\bat\b|\bto\b|\band\b|\bby\b)\s*$", text, flags=re.IGNORECASE):
+        return False
+    if text.count("$") % 2 == 1:
+        return False
+    return True
+
+
+def _locally_keepable_header(value: str) -> bool:
+    text = _compact_header(value)
+    if _valid_atom_header(text):
+        return True
+    words = re.findall(r"[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)?", text)
+    return len(words) >= 6 and (words[-1].lower() not in _DANGLING_HEADER_ENDINGS)
+
+
 def _merge_atoms(
     deterministic: list[ResearchAtom],
     llm_atoms: list[ResearchAtom],
@@ -556,11 +798,13 @@ def _merge_atoms(
 
         merged.append(atom)
 
-    # Renumber to a clean sequence.
+    return _renumber_atoms(merged)
+
+
+def _renumber_atoms(atoms: list[ResearchAtom]) -> list[ResearchAtom]:
     renumbered: list[ResearchAtom] = []
-    for idx, atom in enumerate(merged, start=1):
-        new_id = f"atom_{idx:03d}"
-        renumbered.append(atom.model_copy(update={"atom_id": new_id}))
+    for idx, atom in enumerate(atoms, start=1):
+        renumbered.append(atom.model_copy(update={"atom_id": f"atom_{idx:03d}"}))
     return renumbered
 
 

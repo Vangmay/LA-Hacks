@@ -22,7 +22,7 @@ import core.orchestrators.review as review_orchestrator_module  # noqa: E402
 from agents.base import AgentResult  # noqa: E402
 from core.event_bus import event_bus  # noqa: E402
 from core.job_store import job_store  # noqa: E402
-from core.orchestrators.review import ReviewOrchestrator  # noqa: E402
+from core.orchestrators.review import ReviewOrchestrator, _node_label  # noqa: E402
 from models import (  # noqa: E402
     AtomImportance,
     Challenge,
@@ -81,6 +81,9 @@ def _atom(atom_id: str, atom_type: ResearchAtomType, text: str, section: str) ->
 
 
 class FakeAtomExtractorAgent:
+    def __init__(self, *_args, **_kwargs):
+        pass
+
     async def run(self, _context):
         atoms = [
             _atom(
@@ -331,10 +334,34 @@ async def test_orchestrator_mocked_atom_pipeline() -> None:
         _assert(expected in event_types, f"{expected} event missing")
 
 
+def test_atom_labels_preserve_concepts() -> None:
+    less_atom = _atom(
+        "atom_less",
+        ResearchAtomType.TECHNIQUE,
+        "Research goal make sequence generation less sequential",
+        "Introduction",
+    )
+    decoder_atom = _atom(
+        "atom_decoder",
+        ResearchAtomType.ASSERTION,
+        "Transformer decoder has six layers and uses encoder-decoder attention",
+        "Model Architecture",
+    )
+    _assert(
+        _node_label(less_atom) == "Research goal make sequence generation less sequential",
+        "labeler should not truncate concept headers into dangling fragments",
+    )
+    _assert(
+        _node_label(decoder_atom) == "Transformer decoder has six layers and uses encoder-decoder attention",
+        "labeler should preserve complete concept labels",
+    )
+
+
 async def main_async() -> None:
     await test_review_route_source_storage()
     await test_report_routes_require_completed_job()
     await test_orchestrator_mocked_atom_pipeline()
+    test_atom_labels_preserve_concepts()
 
 
 def main() -> int:
