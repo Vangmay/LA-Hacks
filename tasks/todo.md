@@ -1,3 +1,177 @@
+# Branch Commit And Main Sync
+
+## Goal
+Commit the completed autoformalization/AXLE work on `vrathi101_axle` in small,
+reviewable chunks, then merge the latest `main` and verify the branch still
+works.
+
+## Checklist
+- [x] Inspect current branch changes and separate source, UI, docs, and
+  generated artifacts.
+- [x] Commit backend autoformalization service/API changes.
+- [x] Commit frontend formalization UI changes.
+- [x] Commit project documentation/task notes for the autoformalization work.
+- [ ] Fetch and merge latest `main`.
+- [ ] Resolve any merge conflicts with the smallest correct edits.
+- [ ] Run targeted backend/frontend verification after merge.
+- [ ] Commit merge/conflict-resolution follow-up if needed.
+- [ ] Record final commit IDs, verification, and residual notes.
+
+## Review
+- Pending.
+
+---
+
+# AXLE Formalization Integration
+
+## Goal
+Implement the plan in `tasks/axle_integration_plan.md`: add an isolated
+Formalize mode that reads completed review jobs, runs an OpenAI + AXLE
+agentic loop per selected atom, streams progress over SSE, persists in-memory
+run state, writes Lean artifacts, and mounts a frontend panel on the review
+page.
+
+## Implementation Checklist
+- [x] Scaffold isolated backend package under `backend/formalization/`.
+- [x] Add env-driven AXLE/formalization settings without changing review flow.
+- [x] Add formalization models, event bus, store, and artifact outputs.
+- [x] Add AXLE client wrapper and unit-testable toolbox dispatch.
+- [x] Add context builder from `ParsedPaper`, `ResearchAtom`, and `ResearchGraph`.
+- [x] Add prompts and OpenAI tool-call agent loop with capped iterations.
+- [x] Add orchestrator and FastAPI router with run, atom, stream, and Lean endpoints.
+- [x] Wire router in `backend/main.py` and append AXLE keys to `backend/.env.example`.
+- [x] Add offline backend tests and live smoke/E2E scripts.
+- [x] Scaffold frontend formalization feature folder.
+- [x] Add frontend API, reducer, SSE hook, and focused UI components.
+- [x] Mount `FormalizationPanel` in `frontend/src/pages/Review.jsx` with minimal conflict surface.
+- [x] Run backend import/compile and formalization offline tests.
+- [x] Run existing deterministic review tests.
+- [x] Run frontend build.
+- [x] Attempt live AXLE/OpenAI testing against arXiv `1312.6114` when keys/services permit.
+- [x] Update documentation for the new Formalize mode.
+
+## Review
+- Implemented isolated backend Formalize mode in `backend/formalization/`:
+  settings, AXLE wrapper, tool schemas/dispatch, models, store, SSE event bus,
+  context builder, prompts, OpenAI tool-call agent loop, orchestrator, artifact
+  output helpers, API router, and offline/live scripts.
+- Implemented isolated frontend feature in `frontend/src/features/formalization/`
+  and mounted `FormalizationPanel` inside the existing Review atom inspector.
+- Added `core/sse.py` with a loop-safe SSE response and switched review/formalize
+  streams to it after existing API tests exposed the `sse-starlette` global event
+  loop issue.
+- Pinned `httpx<0.28` because the installed Starlette `TestClient` is
+  incompatible with `httpx 0.28+`.
+
+### Commands run
+- `python -m pip install axiom-axle`
+- `python -m pip install 'httpx<0.28'`
+- `PYTHONPATH=backend python -c "import main; import api.review; from models import ResearchAtom, ParsedPaper, AtomVerdict, ReviewReport; from formalization.api import router as _; print('imports ok')"`
+- `python -m compileall -q -x 'backend/.venv|backend/outputs' backend`
+- `PYTHONPATH=backend python backend/formalization/scripts/test_toolbox_offline.py`
+- `PYTHONPATH=backend python backend/formalization/scripts/test_agent_offline.py`
+- `PYTHONPATH=backend python backend/formalization/scripts/test_formalization_api_offline.py`
+- `python backend/scripts/test_tex_ingestion.py`
+- `python backend/scripts/test_tex_parser.py`
+- `python backend/scripts/test_numeric.py`
+- `python backend/scripts/test_dag_builder.py`
+- `python backend/scripts/test_defender.py`
+- `python backend/scripts/test_prompt_2_agents.py`
+- `python backend/scripts/test_review_tex_flow.py`
+- `python backend/scripts/test_reader_agents.py`
+- `python backend/scripts/test_reader_api.py`
+- `python backend/scripts/test_review_api.py`
+- `npm install` in `frontend/` to restore Rollup optional native deps.
+- `npm run build` in `frontend/`
+- `PYTHONPATH=backend python backend/formalization/scripts/test_axle_smoke.py`
+- `PYTHONPATH=backend python backend/formalization/scripts/test_formalize_e2e.py --paper-id 1312.6114 --max-iterations 4 --max-axle-calls 4`
+- `python backend/scripts/test_pipeline.py https://arxiv.org/pdf/1312.6114 --max-review-atoms 1`
+
+### Live results
+- AXLE smoke check passed on a tiny Lean `1 + 1 = 2` theorem.
+- Formalization E2E on arXiv `1312.6114` built a VAE/ELBO atom, used OpenAI and
+  AXLE, completed with label `formalized_only`, 4 tool calls, and 1 artifact.
+  AXLE surfaced import/formal-statement issues during proof verification; the
+  final verdict stayed conservative rather than claiming full verification.
+- Capped review-pipeline run on `1312.6114` parsed `Auto-Encoding Variational
+  Bayes`: 24 sections, 182 equations, 26 atoms, 11 graph edges; reviewed one
+  reviewable atom and produced `CONTESTED`. Output JSON:
+  `backend/outputs/1312_6114_e7cf57effe2e2166_pipeline.json`.
+
+### Residual risks
+- The formalization loop is intentionally capped for demos/tests; full paper
+  verification can be slow and may end in `formalized_only` or `gave_up`.
+- The merged Lean endpoint concatenates recorded artifacts for v1 instead of
+  making an extra AXLE merge call on every download.
+
+---
+
+## Full-Paper Formalization E2E (post-integration)
+
+### Goal
+Run the formalization loop end-to-end on the *whole* VAE paper (every
+formalization-eligible atom, not a single hand-built atom) and tighten the
+agent + prompts based on the real failure modes.
+
+### What we added
+- New script `backend/formalization/scripts/test_formalize_full_paper.py`:
+  fetches arXiv source → parse → run real `AtomExtractorAgent` and
+  `GraphBuilderAgent` → stuff job into `job_store` → create a
+  `FormalizationRun` over every theorem-/def-/assumption-/algorithm-shaped
+  atom → subscribe to the formalization event bus → log live progress and
+  save a per-atom JSON report under `backend/outputs/formalizations/_reports/`.
+- Stronger anti-cheat rules in `backend/formalization/prompts.py`: the model
+  is now forbidden from encoding atoms as `∃ x : Type, True`,
+  `def isFoo := False; theorem ¬ isFoo`, `axiom + trivial`, and the
+  `def x = expr; theorem x = expr := by rfl` rfl-tautology pattern that
+  passed AXLE in early runs.
+- Sturdier OpenAI rate-limit handling in `backend/formalization/agent.py`:
+  retry budget bumped from 8 to 20 attempts, jittered backoff, and visible
+  retry events on the SSE stream.
+
+### Live runs on arXiv 1312.6114 (Auto-Encoding Variational Bayes)
+
+Run 1 — parallelism=3, old prompt: 14 atoms in ~18m. 5 fully_verified,
+4 formalized_only, 3 not_a_theorem, 2 formalization_failed (both pure OpenAI
+429s, not Lean failures). Confirmed parallelism=3 collapses under the 30k TPM
+cap.
+
+Run 2 — parallelism=2, old prompt: 12 atoms in ~12m. 2 fully_verified,
+1 formalized_only, 1 formalization_failed (Lean syntax cap, not 429),
+8 not_a_theorem, 0 gave_up. **No rate-limit failures** — confirmed the
+parallelism=2 + retry patch fixed the throughput problem. One of the
+fully_verified atoms encoded the claim as `def x = expr; theorem x = expr := by rfl`,
+which prompted the anti-cheat prompt rewrite.
+
+Run 3 — parallelism=2, anti-cheat prompt: 8 atoms in ~10m. Final summary:
+`{fully_verified: 1, formalized_only: 1, formalization_failed: 2,
+not_a_theorem: 4, gave_up: 0}`. The lone fully_verified is atom_024 with a
+real proof: defines `kl_divergence` as an integral and proves
+`kl_divergence p q = 0 → elbo log_likelihood (kl_divergence p q) = log_likelihood`
+via `unfold elbo; rw [h]; simp`. Crucially, atom_012 hit "isotropic
+multivariate Gaussian not in current Mathlib" and *honestly* emitted
+`not_a_theorem` instead of fabricating — exactly the desired behavior. Reports
+under `backend/outputs/formalizations/_reports/1312_6114_*_full_paper.json`.
+
+### Verification
+- `PYTHONPATH=backend python backend/formalization/scripts/test_toolbox_offline.py`
+- `PYTHONPATH=backend python backend/formalization/scripts/test_agent_offline.py`
+- `PYTHONPATH=backend python backend/formalization/scripts/test_formalization_api_offline.py`
+- `PYTHONPATH=backend python backend/formalization/scripts/test_axle_smoke.py`
+- `PYTHONPATH=backend python backend/formalization/scripts/test_formalize_full_paper.py --paper-id 1312.6114 --parallelism 2`
+  (×3, all completed without hanging or rate-limit kills)
+
+### Residual notes
+- AXLE verifies syntax, not semantic faithfulness. The anti-cheat prompt
+  blocks the obvious cheats but cannot prevent every shallow encoding.
+- LLM atom extraction is stochastic — count and types of reviewable atoms
+  vary between runs (we saw 8/12/14 reviewable atoms across three runs of
+  the same paper). Aggregate verdict numbers are noisy; per-atom Lean
+  artifacts under `backend/outputs/formalizations/{run_id}/` are the
+  authoritative output for a given run.
+
+---
+
 # PaperCourt v0.4 Revamp Resume Plan
 
 ## Goal

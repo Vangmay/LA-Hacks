@@ -62,6 +62,7 @@ backend/
     job_store.py
     orchestrators/review.py
   api/review.py
+  formalization/       # isolated AXLE/Lean Formalize mode
 ```
 
 Reader, PoC, and Research mode files are still mostly stubs. Keep their imports
@@ -105,6 +106,27 @@ source atoms are at cascade risk.
 
 `/status` reports `completed_atoms` and `total_atoms`.
 
+## Formalize API
+
+Formalize mode is isolated under `backend/formalization/` and reads completed
+review jobs from `job_store`. It must not mutate review models, review agents,
+or the review orchestrator.
+
+- Frontend dev URL: `/api/formalize/*` (Vite strips `/api`)
+- Backend router prefix: `/formalize`
+- `POST /formalize/{job_id}` with JSON `{ "atom_ids": ["..."], "options": {} }`
+- `POST /formalize/{job_id}/atom/{atom_id}`
+- `GET /formalize/runs/{run_id}`
+- `GET /formalize/runs/{run_id}/atom/{atom_id}`
+- `GET /formalize/runs/{run_id}/stream`
+- `GET /formalize/runs/{run_id}/lean`
+
+AXLE config comes from `backend/.env`: `AXLE_API_KEY`, `AXLE_API_URL`,
+`AXLE_MAX_CONCURRENCY`, `AXLE_TIMEOUT_SECONDS`,
+`FORMALIZATION_PARALLELISM`, `FORMALIZATION_MAX_ITERATIONS_PER_ATOM`,
+`FORMALIZATION_MAX_AXLE_CALLS_PER_ATOM`, and
+`FORMALIZATION_LEAN_ENVIRONMENT`.
+
 ## Verification
 
 Run these before calling a review-pipeline change done:
@@ -121,12 +143,17 @@ python backend/scripts/test_prompt_2_agents.py
 python backend/scripts/test_review_tex_flow.py
 python backend/scripts/test_reader_agents.py
 python backend/scripts/test_reader_api.py
+PYTHONPATH=backend python backend/formalization/scripts/test_toolbox_offline.py
+PYTHONPATH=backend python backend/formalization/scripts/test_agent_offline.py
+PYTHONPATH=backend python backend/formalization/scripts/test_formalization_api_offline.py
 ```
 
 Live E2E with OpenAI and arXiv:
 
 ```bash
 python backend/scripts/test_pipeline.py --papers-file good_papers.txt
+PYTHONPATH=backend python backend/formalization/scripts/test_axle_smoke.py
+PYTHONPATH=backend python backend/formalization/scripts/test_formalize_e2e.py --paper-id 1312.6114
 ```
 
 Inspect the generated JSON files under `backend/outputs/` and compare atom
