@@ -1,8 +1,8 @@
 import logging
 from typing import Dict, List
 
-from backend.models import ExperimentResult, ReproductionStatus
-from backend.agents.base import BaseAgent, AgentContext, AgentResult
+from agents.base import AgentContext, AgentResult, BaseAgent
+from models import ExperimentResult, ReproductionStatus
 
 logger = logging.getLogger(__name__)
 

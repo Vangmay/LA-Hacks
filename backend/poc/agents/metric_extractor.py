@@ -4,13 +4,18 @@ import uuid
 
 from openai import AsyncOpenAI
 
-from backend.config import settings
-from backend.models import ClaimUnit, PoCSpec, MetricCriterion, ClaimTestability
-from backend.agents.base import BaseAgent, AgentContext, AgentResult
+from agents.base import AgentContext, AgentResult, BaseAgent
+from config import settings
+from models import (
+    ClaimTestability,
+    MetricCriterion,
+    PoCSpec,
+    ResearchAtom,
+)
 
 logger = logging.getLogger(__name__)
 
-_SYSTEM_PROMPT = """Extract all quantitative success and failure criteria from this claim. For each metric:
+_SYSTEM_PROMPT = """Extract all quantitative success and failure criteria from this research atom. For each metric:
 - metric_name: what is being measured (e.g. 'top-1 accuracy', 'training time', 'memory usage')
 - paper_reported_value: exact string from paper (e.g. '94.3% on ImageNet')
 - numeric_threshold: the numeric value as a float (null if not extractable)
@@ -21,7 +26,7 @@ _SYSTEM_PROMPT = """Extract all quantitative success and failure criteria from t
 
 Return JSON: {"success_criteria": [...], "failure_criteria": [...]}
 Failure criteria = negation of success criteria plus any explicit failure conditions stated.
-If numeric_threshold cannot be extracted, set it to null."""
+If numeric_threshold cannot be extractable, set it to null."""
 
 
 class MetricExtractorAgent(BaseAgent):
@@ -30,39 +35,43 @@ class MetricExtractorAgent(BaseAgent):
     _client = AsyncOpenAI(api_key=settings.openai_api_key)
 
     async def run(self, context: AgentContext) -> AgentResult:
-        claim: ClaimUnit | None = context.extra.get("claim")
-        if claim is None:
+        atom: ResearchAtom | None = context.atom or context.extra.get("atom")
+        if atom is None:
             return AgentResult(
                 agent_id=self.agent_id,
                 status="error",
                 output=self._empty_spec("unknown"),
                 confidence=0.0,
-                error="No claim provided in context.extra['claim']",
+                error="No atom provided in context.atom",
             )
 
         try:
-            spec_dict = await self._extract(claim)
+            spec_dict = await self._extract(atom)
         except Exception as exc:
-            logger.error("MetricExtractorAgent failed for %s: %s", claim.claim_id, exc)
+            logger.error("MetricExtractorAgent failed for %s: %s", atom.atom_id, exc)
             return AgentResult(
                 agent_id=self.agent_id,
-                claim_id=claim.claim_id,
                 status="error",
-                output=self._empty_spec(claim.claim_id),
+                output=self._empty_spec(atom.atom_id),
                 confidence=0.0,
                 error=str(exc),
             )
 
         return AgentResult(
             agent_id=self.agent_id,
-            claim_id=claim.claim_id,
             status="success",
             output=spec_dict,
             confidence=0.8,
         )
 
-    async def _extract(self, claim: ClaimUnit) -> dict:
-        user_prompt = f"Claim ID: {claim.claim_id}\nClaim text: {claim.text}"
+    async def _extract(self, atom: ResearchAtom) -> dict:
+        section = atom.section_heading or "?"
+        user_prompt = (
+            f"Atom ID: {atom.atom_id}\n"
+            f"Atom type: {atom.atom_type.value}\n"
+            f"Section: {section}\n"
+            f"Atom text: {atom.text}"
+        )
 
         response = await self._client.chat.completions.create(
             model=settings.openai_model,
@@ -96,7 +105,7 @@ class MetricExtractorAgent(BaseAgent):
 
         spec = PoCSpec(
             spec_id=str(uuid.uuid4()),
-            claim_id=claim.claim_id,
+            claim_id=atom.atom_id,
             testability=ClaimTestability.TESTABLE,
             success_criteria=success_criteria,
             failure_criteria=failure_criteria,
