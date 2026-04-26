@@ -3,8 +3,6 @@ import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../../api/client'
 import { ResearchIcon } from '../../assets/ModeIcons'
 
-const DEFAULT_SECTIONS = 'Core method\nExperiments\nRelated work and novelty'
-
 export default function ResearchLanding() {
   const navigate = useNavigate()
   const [runs, setRuns] = useState([])
@@ -12,7 +10,7 @@ export default function ResearchLanding() {
   const [arxivUrl, setArxivUrl] = useState('https://arxiv.org/abs/1706.03762')
   const [objective, setObjective] = useState('novelty_ideation')
   const [mode, setMode] = useState('live')
-  const [sections, setSections] = useState(DEFAULT_SECTIONS)
+  const [sections, setSections] = useState('')
   const [maxInvestigators, setMaxInvestigators] = useState(3)
   const [subagents, setSubagents] = useState(3)
   const [toolCalls, setToolCalls] = useState(12)
@@ -149,11 +147,12 @@ export default function ResearchLanding() {
                   </select>
                 </Field>
               </div>
-              <Field label="Sections">
+              <Field label="Investigation directions">
                 <textarea
                   value={sections}
                   onChange={(e) => setSections(e.target.value)}
                   rows={4}
+                  placeholder="Optional. Leave blank to let the director agent choose promising directions."
                   className="w-full resize-none rounded border border-white/10 bg-[#0D1017] px-3 py-2 text-sm outline-none focus:border-[#67E8F9]/50"
                 />
               </Field>
