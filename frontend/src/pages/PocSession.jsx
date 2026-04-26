@@ -139,6 +139,28 @@ function ReportPanel({ report }) {
   )
 }
 
+function ExtractingClaimsLoader() {
+  return (
+    <div className="animate-pulse" style={{ padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ ...mono(11, 600), color: C.cyan, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div className="animate-spin" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>⟳</div>
+        EXTRACTING CLAIMS...
+      </div>
+      {[1, 2, 3, 4, 5].map(i => (
+        <div key={i} style={{ padding: '8px 12px', borderLeft: `2px solid rgba(255,255,255,0.05)`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <div style={{ width: 60, height: 16, borderRadius: 8, background: 'rgba(255,255,255,0.05)' }} />
+            <div style={{ width: 40, height: 16, borderRadius: 8, background: 'rgba(255,255,255,0.05)' }} />
+          </div>
+          <div style={{ width: 50, height: 10, background: 'rgba(255,255,255,0.03)', borderRadius: 2 }} />
+          <div style={{ width: '90%', height: 12, background: 'rgba(255,255,255,0.05)', borderRadius: 2 }} />
+          <div style={{ width: '60%', height: 12, background: 'rgba(255,255,255,0.05)', borderRadius: 2 }} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function GeneratingScaffoldLoader() {
   return (
     <div className="animate-pulse" style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 20 }}>
@@ -394,9 +416,9 @@ export default function PocSession() {
           <div style={{ padding: '7px 12px', borderBottom: `1px solid ${C.border}`, ...mono(9, 700), color: C.muted, letterSpacing: '0.1em', textTransform: 'uppercase', flexShrink: 0 }}>CLAIMS {claimsData ? `(${claimsData.total})` : ''}</div>
           <div style={{ flex: 1, overflowY: 'auto' }}>
             {!claimsData ? (
-              <div style={{ padding: 16, ...mono(11), color: C.muted }}>Loading…</div>
+              <ExtractingClaimsLoader />
             ) : claimsData.claims.length === 0 ? (
-              <div style={{ padding: 16, ...mono(11), color: C.muted }}>{jobStatus === 'processing' ? '⟳ Extracting claims…' : 'No claims found.'}</div>
+              jobStatus === 'processing' ? <ExtractingClaimsLoader /> : <div style={{ padding: 16, ...mono(11), color: C.muted }}>No claims found.</div>
             ) : (
               claimsData.claims.map(claim => (
                 <ClaimRow
