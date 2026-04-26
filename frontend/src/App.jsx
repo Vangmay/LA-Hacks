@@ -4,9 +4,6 @@ import Home from './pages/Home';
 import Review from './pages/Review';
 import Reader from './pages/Reader';
 import PocSession from './pages/PocSession';
-import Home from './pages/Home'
-import Review from './pages/Review'
-import Reader from './pages/Reader'
 import ResearchLanding from './pages/research/ResearchLanding'
 import ResearchDeepDive from './pages/research/ResearchDeepDive'
 
