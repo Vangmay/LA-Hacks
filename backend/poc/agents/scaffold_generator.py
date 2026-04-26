@@ -4,9 +4,9 @@ import logging
 
 from openai import AsyncOpenAI
 
-from config import settings
-from models import ClaimUnit, PoCSpec
-from agents.base import BaseAgent, AgentContext, AgentResult
+from backend.config import settings
+from backend.models import ClaimUnit, PoCSpec
+from backend.agents.base import BaseAgent, AgentContext, AgentResult
 
 logger = logging.getLogger(__name__)
 
@@ -17,14 +17,14 @@ class ScaffoldGeneratorAgent(BaseAgent):
     _client = AsyncOpenAI(api_key=settings.openai_api_key)
 
     async def run(self, context: AgentContext) -> AgentResult:
-        claim: ClaimUnit | None = context.claim
+        claim: ClaimUnit | None = context.extra.get("claim")
         if claim is None:
             return AgentResult(
                 agent_id=self.agent_id,
                 status="error",
                 output={"scaffold_files": {}},
                 confidence=0.0,
-                error="No claim provided in context.claim",
+                error="No claim provided in context.extra['claim']",
             )
 
         poc_spec: dict = context.extra.get("poc_spec", {})
