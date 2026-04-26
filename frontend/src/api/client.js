@@ -45,6 +45,19 @@ export const api = {
     report: (jobId) => fetch(`${BASE}/review/${jobId}/report`).then(r => r.json()),
     reportMarkdown: (jobId) => fetch(`${BASE}/review/${jobId}/report/markdown`).then(r => r.text()),
   },
+  research: {
+    runs: () => fetch(`${BASE}/research/runs`).then(r => r.json()),
+    start: (req) => postJson(`${BASE}/research/start`, req),
+    status: (runId) => fetch(`${BASE}/research/${runId}/status`).then(r => r.json()),
+    snapshot: (runId) => fetch(`${BASE}/research/${runId}/snapshot`).then(r => r.json()),
+    stream: (runId) => new EventSource(`${BASE}/research/${runId}/stream`),
+    artifact: (runId, path) =>
+      fetch(`${BASE}/research/${runId}/artifacts/${encodeURI(path)}`).then(r => r.json()),
+    report: (runId) => fetch(`${BASE}/research/${runId}/report`).then(r => r.json()),
+    reportMarkdown: (runId) => fetch(`${BASE}/research/${runId}/report/markdown`).then(r => r.text()),
+    shared: (runId, artifact) => fetch(`${BASE}/research/${runId}/shared/${artifact}`).then(r => r.json()),
+    critique: (runId, criticId) => fetch(`${BASE}/research/${runId}/critique/${criticId}`).then(r => r.json()),
+  },
   poc: {
     submit: (file) => postFile(`${BASE}/poc`, file),
     claims: (sessionId) => fetch(`${BASE}/poc/${sessionId}/claims`).then(r => r.json()),
