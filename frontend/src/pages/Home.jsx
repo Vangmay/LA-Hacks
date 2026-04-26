@@ -51,7 +51,7 @@ export default function Home() {
           <button onClick={() => setMode('review')} className={`${mode === 'review' ? 'text-[#5B5BD6] opacity-100' : 'opacity-70'} hover:opacity-100 hover:text-[#5B5BD6] transition-colors`}>Review</button>
           <button onClick={() => setMode('reader')} className={`${mode === 'reader' ? 'text-[#5B5BD6] opacity-100' : 'opacity-70'} hover:opacity-100 hover:text-[#5B5BD6] transition-colors`}>Reader</button>
           <button onClick={() => setMode('poc')} className={`${mode === 'poc' ? 'text-[#5B5BD6] opacity-100' : 'opacity-70'} hover:opacity-100 hover:text-[#5B5BD6] transition-colors`}>PoC</button>
-          <button className="opacity-70 hover:opacity-100 hover:text-[#5B5BD6] transition-colors">Research</button>
+          <button onClick={() => navigate('/research')} className="opacity-70 hover:opacity-100 hover:text-[#5B5BD6] transition-colors">Research</button>
         </div>
       </header>
 
