@@ -158,6 +158,7 @@ export default function PocSession() {
   const [checkedIds, setCheckedIds]     = useState(() => new Set())
   const [scaffoldStatus, setScaffoldStatus] = useState('awaiting_selection')
   const [scaffoldError, setScaffoldError]   = useState(null)
+  const [sessions, setSessions]             = useState([])
 
   const feedRef     = useRef(null)
   const fileInputRef = useRef(null)
@@ -172,6 +173,11 @@ export default function PocSession() {
     load()
     const t = setInterval(load, 3000)
     return () => clearInterval(t)
+  }, [sessionId])
+
+  // Load available sessions
+  useEffect(() => {
+    api.poc.sessions().then(res => setSessions(res.sessions || [])).catch(() => {})
   }, [sessionId])
 
   // SSE stream
@@ -340,7 +346,21 @@ export default function PocSession() {
         <button onClick={() => navigate('/')} style={{ ...mono(11), background: 'none', border: `1px solid ${C.border}`, color: C.muted, cursor: 'pointer', padding: '3px 8px', borderRadius: 3 }}>← HOME</button>
         <div style={{ width: 1, height: 16, background: C.border }} />
         <span style={{ ...mono(11), color: C.muted }}>POC /</span>
-        <span style={{ ...mono(11, 600), color: C.text }}>{sessionId}</span>
+        <select 
+          value={sessionId} 
+          onChange={(e) => navigate(`/poc/${e.target.value}`)}
+          style={{ ...mono(11, 600), color: C.cyan, background: 'rgba(0,234,255,0.08)', border: `1px solid rgba(0,234,255,0.2)`, borderRadius: 4, padding: '2px 6px', cursor: 'pointer', outline: 'none', appearance: 'none' }}
+        >
+          {sessions.length === 0 ? (
+            <option value={sessionId}>{sessionId.split('-')[0]}</option>
+          ) : (
+            sessions.map(s => (
+              <option key={s.session_id} value={s.session_id} style={{ background: '#131720', color: C.text }}>
+                {s.arxiv_id !== 'unknown' ? s.arxiv_id : s.session_id.split('-')[0]} {s.status === 'error' ? '(error)' : ''}
+              </option>
+            ))
+          )}
+        </select>
         <div style={{ flex: 1 }} />
         {claimsData && (<span style={{ ...mono(10), color: C.muted }}>{claimsData.testable} testable · {claimsData.theoretical} theoretical</span>)}
         <div style={{ ...mono(10, 700), padding: '3px 8px', borderRadius: 3, background: statusChipStyle.bg, border: `1px solid ${statusChipStyle.border}`, color: statusChipStyle.color }}>{statusChipStyle.label}</div>

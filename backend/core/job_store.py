@@ -30,6 +30,12 @@ class JobStore:
     def exists(self, job_id: str) -> bool:
         return job_id in self._jobs
 
+    def get_all(self, mode: Optional[str] = None) -> list[dict]:
+        jobs = self._jobs.values()
+        if mode:
+            jobs = [j for j in jobs if j.get("mode") == mode]
+        return list(jobs)
+
     # ------------------------------------------------------------------
     # Reader session helpers
 
