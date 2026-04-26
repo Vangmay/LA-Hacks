@@ -1,11 +1,12 @@
 import { useEffect } from 'react'
 import { api } from '../api/client'
 
-export function useResearchStream(runId, dispatch) {
+export function useResearchStream(runId, dispatch, onCatchUp) {
   useEffect(() => {
     if (!runId) return
     let eventSource = null
     let closed = false
+    let receivedSnapshot = false
 
     try {
       eventSource = api.research.stream(runId)
@@ -17,8 +18,14 @@ export function useResearchStream(runId, dispatch) {
     const handleEvent = (e) => {
       try {
         const event = JSON.parse(e.data)
+        if (event.type === 'run.snapshot') receivedSnapshot = true
         dispatch({ type: 'EVENT', event })
-        if (event.type === 'run.finalized' || event.type === 'run.error') {
+        onCatchUp?.(event)
+        if (
+          event.type === 'run.finalized' ||
+          event.type === 'run.error' ||
+          (event.type === 'run.snapshot' && event.payload?.live === false)
+        ) {
           closed = true
           eventSource.close()
         }
@@ -31,7 +38,8 @@ export function useResearchStream(runId, dispatch) {
     eventSource.onmessage = handleEvent
     eventSource.onerror = () => {
       if (!closed) {
-        dispatch({ type: 'CONNECTION_ERROR', error: 'Research stream disconnected' })
+        dispatch({ type: 'CONNECTION_STATE', connection: receivedSnapshot ? 'reconnecting' : 'disconnected' })
+        onCatchUp?.()
       }
     }
 
@@ -39,5 +47,5 @@ export function useResearchStream(runId, dispatch) {
       closed = true
       if (eventSource) eventSource.close()
     }
-  }, [runId, dispatch])
+  }, [runId, dispatch, onCatchUp])
 }

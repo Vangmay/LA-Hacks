@@ -2,21 +2,44 @@ import { useState } from 'react'
 
 function eventLine(event) {
   const payload = event.payload || {}
-  if (event.type?.startsWith('subagent.tool')) {
-    return `${payload.subagent_id || 'subagent'} -> ${payload.tool_name || 'tool'}`
+  if (event.type === 'run.snapshot') return 'Loaded latest workspace snapshot'
+  if (event.type === 'run.started') return 'Run started'
+  if (event.type === 'investigator.planned') return `Planned investigator: ${payload.section_title || payload.investigator_id || 'section'}`
+  if (event.type === 'subagent.planned') return `Planned researcher: ${payload.taste?.label || shortId(payload.subagent_id)}`
+  if (event.type === 'subagent.started') return `Researcher started: ${shortId(payload.subagent_id)}`
+  if (event.type === 'subagent.completed') return `Researcher finished: ${shortId(payload.subagent_id)}`
+  if (event.type === 'subagent.budget') {
+    return `${shortId(payload.subagent_id)} used ${payload.research_used ?? 0}/${payload.research_max ?? '-'} API calls`
+  }
+  if (event.type === 'subagent.tool.requested') {
+    return `${shortId(payload.subagent_id)} called ${formatTool(payload.tool_name)}`
+  }
+  if (event.type === 'subagent.tool.result') {
+    return `${shortId(payload.subagent_id)} received ${formatTool(payload.tool_name)} results`
+  }
+  if (event.type === 'subagent.tool.error') {
+    return `${shortId(payload.subagent_id)} hit a tool error`
+  }
+  if (event.type === 'subagent.tool.rejected') {
+    return `${shortId(payload.subagent_id)} corrected an invalid action`
   }
   if (event.type === 'subagent.artifact.updated') {
-    return `${payload.subagent_id || 'subagent'} wrote ${payload.artifact || 'artifact'}`
+    return `${shortId(payload.subagent_id)} updated ${formatTool(payload.artifact || 'artifact')}`
   }
-  if (event.type === 'stage.entered') return `Stage entered: ${payload.stage}`
-  if (event.type === 'stage.completed') return `Stage completed: ${payload.stage}`
+  if (event.type === 'investigator.synthesized') return `Investigator synthesis ready: ${shortId(payload.investigator_id)}`
+  if (event.type === 'cross_investigator.completed') return 'Shared synthesis ready'
+  if (event.type === 'critique.completed') return `Critique ready: ${formatTool(payload.critic_id || payload.lens || 'critic')}`
+  if (event.type === 'stage.entered') return `Started ${stageLabel(payload.stage)}`
+  if (event.type === 'stage.completed') return `Finished ${stageLabel(payload.stage)}`
   if (event.type === 'run.finalized') return 'Final report ready'
-  return event.type || 'event'
+  if (event.type === 'run.error') return 'Run failed'
+  return formatTool(event.type || 'event')
 }
 
 export default function EventTicker({ events = [], onSelect }) {
   const [open, setOpen] = useState(true)
-  const recent = events.slice(-40).reverse()
+  const visibleEvents = events.filter((event) => event.type !== 'run.snapshot')
+  const recent = visibleEvents.slice(-40).reverse()
 
   return (
     <div className="border-t border-white/10 bg-[#0D1017]">
@@ -26,7 +49,7 @@ export default function EventTicker({ events = [], onSelect }) {
         className="flex w-full items-center gap-3 px-4 py-2 text-left text-[11px] uppercase tracking-wider text-white/50 hover:text-white"
       >
         <span className="h-1.5 w-1.5 rounded-full bg-[#67E8F9]" />
-        {events.length} live events
+        {visibleEvents.length} live activity updates
         <span className="ml-auto">{open ? 'Collapse' : 'Expand'}</span>
       </button>
       {open && (
@@ -49,4 +72,26 @@ export default function EventTicker({ events = [], onSelect }) {
       )}
     </div>
   )
+}
+
+function shortId(value) {
+  if (!value) return 'Researcher'
+  return String(value).replace(/^.*?(investigator_\d+_[^_]+_)?subagent_/, 'researcher ').replaceAll('_', ' ')
+}
+
+function formatTool(value) {
+  return String(value || 'tool').replaceAll('_', ' ')
+}
+
+function stageLabel(stage) {
+  const labels = {
+    bootstrap: 'workspace setup',
+    investigator_planning: 'investigator planning',
+    subagent_research: 'researcher search',
+    investigator_synthesis: 'investigator synthesis',
+    cross_investigator_deep_dive: 'shared synthesis',
+    critique: 'critique',
+    finalization: 'final report',
+  }
+  return labels[stage] || formatTool(stage || 'stage')
 }

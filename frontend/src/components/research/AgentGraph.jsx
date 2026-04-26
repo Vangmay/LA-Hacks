@@ -26,6 +26,16 @@ function personaColor(taste = {}) {
   return ROLE_COLORS[role] || '#b388ff'
 }
 
+function displayKind(kind) {
+  if (kind === 'subagent') return 'researcher'
+  if (kind === 'shared') return 'shared synthesis'
+  return String(kind || '').replaceAll('_', ' ')
+}
+
+function formatToolName(value) {
+  return value ? String(value).replaceAll('_', ' ') : ''
+}
+
 function CompactNode({ data }) {
   const active = data.selected?.kind === data.kind && data.selected?.id === data.id
   const color = data.kind === 'subagent' ? personaColor(data.taste) : statusColor(data.status)
@@ -38,15 +48,15 @@ function CompactNode({ data }) {
       >
         <div className="flex items-center gap-2">
           <span className="h-2 w-2 rounded-full" style={{ background: color, boxShadow: `0 0 10px ${color}` }} />
-          <span className="min-w-0 flex-1 truncate font-mono text-[10px] uppercase text-white/45">{data.kind}</span>
+          <span className="min-w-0 flex-1 truncate font-mono text-[10px] uppercase text-white/45">{displayKind(data.kind)}</span>
           <span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] text-white/50">{data.status || 'ready'}</span>
         </div>
         <div className="mt-2 line-clamp-2 text-sm font-medium text-[#E4E7F0]">{data.title}</div>
         {data.subtitle && <div className="mt-1 truncate text-xs text-white/45">{data.subtitle}</div>}
         {data.kind === 'subagent' && (
           <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-white/45">
-            <Meter label="research" value={data.budget?.research_used || 0} max={data.budget?.research_max || data.maxToolCalls || 0} />
-            <div className="truncate text-right">{data.lastTool || 'no tools yet'}</div>
+            <Meter label="api calls" value={data.budget?.research_used || 0} max={data.budget?.research_max || data.maxToolCalls || 0} />
+            <div className="truncate text-right">{formatToolName(data.lastTool) || 'no tools yet'}</div>
           </div>
         )}
       </div>

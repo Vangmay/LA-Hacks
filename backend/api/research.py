@@ -96,9 +96,10 @@ async def stream_run(request: Request, run_id: str):
     last_event_id = request.headers.get("last-event-id")
 
     async def event_gen():
-        snapshot_event = _snapshot_event(run_id)
+        stream_has_live_source = run_id in _live_runs or deepdive_event_bus.channel_exists(run_id)
+        snapshot_event = _snapshot_event(run_id, live=stream_has_live_source)
         yield _sse_payload(snapshot_event)
-        if run_id not in _live_runs and not deepdive_event_bus.channel_exists(run_id):
+        if not stream_has_live_source:
             return
 
         queue: asyncio.Queue = asyncio.Queue()
@@ -281,7 +282,7 @@ def _config_from_request(req: ResearchStartRequest) -> DeepDiveConfig:
     return base.model_copy(update=updates).normalized()
 
 
-def _snapshot_event(run_id: str) -> DeepDiveEvent:
+def _snapshot_event(run_id: str, *, live: bool) -> DeepDiveEvent:
     try:
         snapshot = build_run_snapshot(run_id)
     except FileNotFoundError:
@@ -289,7 +290,7 @@ def _snapshot_event(run_id: str) -> DeepDiveEvent:
     return DeepDiveEvent(
         type=DeepDiveEventType.RUN_SNAPSHOT,
         run_id=run_id,
-        payload={"snapshot": snapshot},
+        payload={"snapshot": snapshot, "live": live},
     )
 
 
