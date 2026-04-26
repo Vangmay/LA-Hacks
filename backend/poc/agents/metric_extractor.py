@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import uuid
 from typing import Optional
 
@@ -90,6 +91,8 @@ class MetricExtractorAgent(BaseAgent):
             max_tokens=1000,
         )
         raw = response.choices[0].message.content
+        # Strip Gemma-style <thought>...</thought> tags
+        raw = re.sub(r"<thought>.*?</thought>\s*", "", raw, flags=re.DOTALL).strip()
 
         try:
             data = json.loads(raw)
@@ -156,6 +159,7 @@ class MetricExtractorAgent(BaseAgent):
             max_tokens=1000,
         )
         raw = response.choices[0].message.content
+        raw = re.sub(r"<thought>.*?</thought>\s*", "", raw, flags=re.DOTALL).strip()
         try:
             return json.loads(raw)
         except json.JSONDecodeError:

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import re
 from typing import List, Optional
 
 from openai import AsyncOpenAI
@@ -100,6 +101,8 @@ class ClaimFilterAgent(BaseAgent):
             max_tokens=1500,
         )
         raw = response.choices[0].message.content
+        # Strip Gemma-style <thought>...</thought> tags
+        raw = re.sub(r"<thought>.*?</thought>\s*", "", raw, flags=re.DOTALL).strip()
 
         try:
             parsed = json.loads(raw)
@@ -136,6 +139,7 @@ class ClaimFilterAgent(BaseAgent):
             max_tokens=1500,
         )
         raw = response.choices[0].message.content
+        raw = re.sub(r"<thought>.*?</thought>\s*", "", raw, flags=re.DOTALL).strip()
         try:
             return json.loads(raw)
         except json.JSONDecodeError:

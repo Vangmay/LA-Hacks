@@ -1091,12 +1091,16 @@ def _candidate_entries_from_response(data: Any) -> Optional[list[Any]]:
 
 
 def _loads_json_object(raw: str) -> tuple[Optional[dict[str, Any]], Optional[str]]:
+    # Strip Gemma-style <thought>...</thought> tags that precede the JSON
+    cleaned = re.sub(r"<thought>.*?</thought>\s*", "", raw, flags=re.DOTALL).strip()
+    if not cleaned:
+        cleaned = raw
     try:
-        data = json.loads(raw)
+        data = json.loads(cleaned)
         return (data if isinstance(data, dict) else None), None
     except json.JSONDecodeError as first_exc:
-        repaired = _repair_json_backslashes(raw)
-        if repaired == raw:
+        repaired = _repair_json_backslashes(cleaned)
+        if repaired == cleaned:
             return None, str(first_exc)
         try:
             data = json.loads(repaired)
@@ -1104,7 +1108,7 @@ def _loads_json_object(raw: str) -> tuple[Optional[dict[str, Any]], Optional[str
             if repair_json is None:
                 return None, f"{first_exc}; repair_failed={second_exc}"
             try:
-                repair_output = repair_json(raw)
+                repair_output = repair_json(cleaned)
                 data = json.loads(repair_output)
             except Exception as repair_exc:  # noqa: BLE001
                 return None, f"{first_exc}; repair_failed={second_exc}; json_repair_failed={repair_exc}"
