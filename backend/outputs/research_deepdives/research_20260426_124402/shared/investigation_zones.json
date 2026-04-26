@@ -1,0 +1,48 @@
+{
+  "source": "director",
+  "rationale": "Given the massive citation count of the Transformer, a broad search is futile. Instead, I am focusing the budget on two critical technical tension points: the trade-off between the 'Attention' mechanism's quadratic complexity versus efficiency (Investigator 1), and the re-introduction of structural/recurrent priors that were 'dispensed with' but are essential for long-range reasoning (Investigator 2). This maximizes novelty discovery for high-performance, efficient architectures.",
+  "zones": [
+    {
+      "investigator_id": "investigator_01_sub_quadratic_scaling_and_retrieval_augmented_attention",
+      "section_id": "section_01_sub_quadratic_scaling_and_retrieval_augmented_attention",
+      "section_title": "Sub-Quadratic Scaling and Retrieval-Augmented Attention",
+      "requested_subagents": 2
+    },
+    {
+      "investigator_id": "investigator_02_inductive_bias_restoration_and_positional_encoding_novelty",
+      "section_id": "section_02_inductive_bias_restoration_and_positional_encoding_novelty",
+      "section_title": "Inductive Bias Restoration and Positional Encoding Novelty",
+      "requested_subagents": 2
+    }
+  ],
+  "raw_planner_output": [
+    {
+      "title": "Sub-Quadratic Scaling and Retrieval-Augmented Attention",
+      "why_promising": "The seed paper's primary impact was its parallelizability, but its O(n^2) complexity is now its greatest limitation. Investigating how successor papers (FlashAttention, Linformer) and State-Space Models (Mamba) challenge the 'All you Need' premise provides fertile ground for hardware-aware architectural novelty.",
+      "seed_hooks": [
+        "dispensing with recurrence and convolutions entirely",
+        "more parallelizable",
+        "significantly less time to train"
+      ],
+      "research_questions": [
+        "Which architectural critiques successfully replaced softmax self-attention while maintaining the 'Transformer' performance profile?",
+        "How has the integration of external retrieval mechanisms evolved to compensate for the attention window's finite memory limit?"
+      ],
+      "priority": 1
+    },
+    {
+      "title": "Inductive Bias Restoration and Positional Encoding Novelty",
+      "why_promising": "The seed paper relied on specific sinusoidal positional encodings to provide sequence order. Novelty ideation in this area focuses on whether 'Attention' truly replaced the need for recurrence or if structural priors (RoPE, Alibi, Graph biases) are necessary to solve the extrapolation and reasoning depth issues the original model faces.",
+      "seed_hooks": [
+        "positional encoding",
+        "English constituency parsing",
+        "global dependencies"
+      ],
+      "research_questions": [
+        "What are the most successful methods for sequence-length extrapolation that improve upon the original absolute positional encodings?",
+        "Are there emergent architectures that re-integrate recurrence or hierarchical structures to address the lack of recurrent state in the original design?"
+      ],
+      "priority": 2
+    }
+  ]
+}

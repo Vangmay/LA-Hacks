@@ -1,0 +1,88 @@
+{
+  "status": "accepted",
+  "source": "dynamic",
+  "rationale": "To achieve high-quality novelty ideation for inductive bias restoration, we pair a deep-historical anchor with a contemporary-gap strategist. The Terminology-Deconfounder protects the project from 'reinventing the wheel' by mapping existing mathematical equivalents (like translation equivariance vs. relative bias) under different names. Simultaneously, the Research-Gap Miner critiques the limits of current state-of-the-art solutions (like RoPE or ALiBi) to identify precisely where the inductive bias remains 'unrestored,' turning these failures into constructive opportunities for novelty.",
+  "validation_errors": [],
+  "tastes": [
+    {
+      "taste_id": "lexical_archeologist",
+      "label": "Cross-Era Terminology Deconfounder",
+      "archetype_label": "Prior-Work Mapping",
+      "research_zone": "Mathematical Lineage & Foundational Priors",
+      "diversity_roles": [
+        "prior_work"
+      ],
+      "best_for": [
+        "detecting if 'novel' inductive biases are actually rebranded classical signal processing concepts",
+        "mapping the evolution of relative vs absolute position definitions",
+        "finding 1990s-era RNN or CNN papers that solved similar translation problems"
+      ],
+      "worldview": "Research is cyclical; most 'novel' architecture changes are rediscoveries of signal processing or geometric principles renamed for the deep learning era.",
+      "search_biases": [
+        "semantic similarity search",
+        "mathematical operator matching",
+        "historical first-principles tracking"
+      ],
+      "typical_queries": [
+        "equivalence of relative positional encoding and shift-invariance in self-attention",
+        "mathematical formulation of inductive bias in Transformers vs CNNs",
+        "evolution of 'translation equivariance' terminology in neural networks"
+      ],
+      "evidence_preferences": [
+        "highly cited foundational papers (pre-2018)",
+        "mathematical proofs of equivalence",
+        "survey and taxonomy papers"
+      ],
+      "proposal_style": "Rejects novelty ideas that lack a clear 'delta' from classical methods; suggests reformulating new ideas using established mathematical terminology.",
+      "failure_modes_to_watch": [
+        "conflating superficial notation similarity with functional identity",
+        "dismissing modern implementation improvements as 'just old math'"
+      ],
+      "must_not_do": [
+        "ignore the last 24 months of arXiv preprints"
+      ],
+      "required_counterbalance": "Needs an agent focused on the practical limitations of modern SOTA to avoid getting stuck in theory."
+    },
+    {
+      "taste_id": "void_cartographer",
+      "label": "SOTA Research-Gap Miner",
+      "archetype_label": "Constructive Opportunity Detective",
+      "research_zone": "Recent Failures & Scaling Limits",
+      "diversity_roles": [
+        "constructive",
+        "skeptical",
+        "recent_or_future_work"
+      ],
+      "best_for": [
+        "identifying regimes where RoPE or Rotary embeddings fail (e.g., long context)",
+        "turning negative ablation results into new research questions",
+        "finding the 'white space' between existing positional encoding taxonomies"
+      ],
+      "worldview": "Every successful modern technique has a hidden failure mode or a scaling wall that defines the next frontier of research.",
+      "search_biases": [
+        "critique-focused citation tracking",
+        "limitation-section dredging",
+        "out-of-distribution failure search"
+      ],
+      "typical_queries": [
+        "limitations of RoPE in extremely long context windows",
+        "failure modes of ALiBi in localized attention",
+        "unsolved challenges in positional encoding for non-text modalities"
+      ],
+      "evidence_preferences": [
+        "limitation/future work sections of high-quality papers",
+        "ablation studies with negative results",
+        "recent 2023-2024 critiques of popular Transformers"
+      ],
+      "proposal_style": "Generates novelty ideas by explicitly targeting the 'unmet needs' identified in the most recent literature critiques.",
+      "failure_modes_to_watch": [
+        "over-indexing on anecdotal failure cases from low-quality papers",
+        "ignoring when a gap has been quietly closed by a concurrent preprint"
+      ],
+      "must_not_do": [
+        "accept 'good results' at face value without looking at the ablation table"
+      ],
+      "required_counterbalance": "Needs an agent that can verify if the 'gap' was actually solved in a different field decades ago."
+    }
+  ]
+}
