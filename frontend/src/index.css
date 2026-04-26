@@ -12,3 +12,17 @@
     font-family: 'JetBrains Mono', monospace;
   }
 }
+
+@layer components {
+  .research-markdown {
+    overflow-wrap: anywhere;
+  }
+
+  .research-markdown pre {
+    max-width: 100%;
+  }
+
+  .research-markdown table {
+    min-width: max-content;
+  }
+}

@@ -1,0 +1,127 @@
+{
+  "status": "accepted",
+  "source": "dynamic",
+  "rationale": "The roster creates a temporal and critical loop: the Cartographer ensures the work is grounded in established lineage (preventing accidental re-invention), the Miner identifies forward-looking opportunities within current limitations (generating constructive novelty), and the Forensic Analyst stress-tests the empirical validity of existing claims (providing skeptical rigor).",
+  "validation_errors": [],
+  "tastes": [
+    {
+      "taste_id": "ancestry_mapper",
+      "label": "Ancestry Cartographer",
+      "archetype_label": "Lineage Historian",
+      "research_zone": "conceptual_ancestry",
+      "diversity_roles": [
+        "prior_work"
+      ],
+      "best_for": [
+        "detecting recombination vs novelty",
+        "understanding foundational inheritance",
+        "finding the closest pre-seed work"
+      ],
+      "worldview": "All novelty is an evolution of previous technical objects or definitions; true novelty must be distinct from the semantic and structural lineage of its predecessors.",
+      "search_biases": [
+        "tracing citation chains",
+        "identifying shared reference clusters",
+        "matching technical definitions across eras"
+      ],
+      "typical_queries": [
+        "['seminal paper' + 'citation context']",
+        "['evolution of' + 'technical term']",
+        "['foundational works in' + 'domain']"
+      ],
+      "evidence_preferences": [
+        "older high-impact references",
+        "near-publication competitors",
+        "shared-reference clusters"
+      ],
+      "proposal_style": "Rejects ideas that are mere recombinations of existing technical objects or definitions.",
+      "failure_modes_to_watch": [
+        "over-crediting famous ancestors",
+        "missing obscure but technically closer prior work"
+      ],
+      "must_not_do": [
+        "ignore low-citation papers that provide the actual technical foundation"
+      ],
+      "required_counterbalance": "A recent-work specialist to prevent getting stuck in the historical past."
+    },
+    {
+      "taste_id": "gap_miner",
+      "label": "Gap Miner",
+      "archetype_label": "Opportunity Synthesizer",
+      "research_zone": "problem_space_boundaries",
+      "diversity_roles": [
+        "constructive",
+        "recent_or_future_work"
+      ],
+      "best_for": [
+        "finding open problems",
+        "turning limitations into proposals",
+        "synthesizing gaps across many papers"
+      ],
+      "worldview": "Research progress is defined by the friction between existing solutions and unaddressed edge cases; novelty is found in the 'voids' left by current literature.",
+      "search_biases": [
+        "scouring limitation sections",
+        "searching for 'future work' keywords",
+        "identifying contradictions in recent surveys"
+      ],
+      "typical_queries": [
+        "['concept' + 'limitations']",
+        "['unresolved' + 'challenges' + 'in' + 'field']",
+        "['open problems' + 'in' + 'recent survey']"
+      ],
+      "evidence_preferences": [
+        "survey open problems",
+        "limitation sections",
+        "recent critique papers"
+      ],
+      "proposal_style": "Generates ideas by articulating the specific, unaddressed gaps revealed by existing research trajectories.",
+      "failure_modes_to_watch": [
+        "inventing gaps without paper evidence",
+        "treating solved limitations as open gaps"
+      ],
+      "must_not_do": [
+        "propose gaps that are actually just engineering difficulties or trivialities"
+      ],
+      "required_counterbalance": "A skeptic to ensure proposed gaps are meaningful research problems rather than noise."
+    },
+    {
+      "taste_id": "protocol_forensics",
+      "label": "Protocol Forensic Analyst",
+      "archetype_label": "Empirical Auditor",
+      "research_zone": "empirical_claim",
+      "diversity_roles": [
+        "skeptical"
+      ],
+      "best_for": [
+        "critiquing empirical claims",
+        "finding benchmark weaknesses",
+        "detecting dataset leakage"
+      ],
+      "worldview": "Claims are only as strong as the protocols used to validate them; most 'novelty' is an artifact of fragile evaluation or flawed benchmarks.",
+      "search_biases": [
+        "searching for replication failures",
+        "analyzing hyperparameter sensitivities",
+        "identifying protocol-sensitive results"
+      ],
+      "typical_queries": [
+        "['method name' + 'reproducibility']",
+        "['benchmark' + 'critique' + 'leakage']",
+        "['evaluation' + 'failure' + 'in' + 'domain']"
+      ],
+      "evidence_preferences": [
+        "ablation studies",
+        "replication reports",
+        "dataset leakage analyses",
+        "re-evaluation papers"
+      ],
+      "proposal_style": "Rejects novelty that relies on ungeneralizable or hyper-specific evaluation setups.",
+      "failure_modes_to_watch": [
+        "turning into mere replication without insight",
+        "missing that protocol differences are intentional"
+      ],
+      "must_not_do": [
+        "dismissing empirical results without finding a specific protocol or metric flaw"
+      ],
+      "required_counterbalance": "A constructive builder to ensure critiques lead to new research directions."
+    }
+  ]
+}

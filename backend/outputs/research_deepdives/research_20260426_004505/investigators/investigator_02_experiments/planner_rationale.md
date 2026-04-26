@@ -1,0 +1,1 @@
+The roster creates a temporal and critical loop: the Cartographer ensures the work is grounded in established lineage (preventing accidental re-invention), the Miner identifies forward-looking opportunities within current limitations (generating constructive novelty), and the Forensic Analyst stress-tests the empirical validity of existing claims (providing skeptical rigor).

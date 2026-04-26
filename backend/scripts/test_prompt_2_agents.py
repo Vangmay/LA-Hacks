@@ -50,6 +50,7 @@ For every $x$ in $[-1,1]$, $x*x >= 0$.
 x + 1 = x + 1
 \end{equation}
 The statement follows from elementary algebra \cite{alg}.
+We introduce a compact attention mechanism that removes recurrence.
 \begin{thebibliography}{9}
 \bibitem{alg} Algebra reference.
 \end{thebibliography}
@@ -70,6 +71,24 @@ class _FakeCompletions:
 class _FakeOpenAI:
     def __init__(self, payload: dict) -> None:
         self.chat = SimpleNamespace(completions=_FakeCompletions(payload))
+
+
+class _FakeSequenceCompletions:
+    def __init__(self, payloads: list[dict]) -> None:
+        self.payloads = list(payloads)
+
+    async def create(self, **_kwargs):
+        if not self.payloads:
+            raise AssertionError("fake completion payload queue exhausted")
+        payload = self.payloads.pop(0)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))]
+        )
+
+
+class _FakeSequenceOpenAI:
+    def __init__(self, payloads: list[dict]) -> None:
+        self.chat = SimpleNamespace(completions=_FakeSequenceCompletions(payloads))
 
 
 def _assert(condition: bool, message: str) -> None:
@@ -115,6 +134,48 @@ async def main_async() -> None:
     _assert(
         any(a["atom_type"] == "theorem" for a in extracted_atoms),
         f"expected theorem atom, got: {extracted_atoms}",
+    )
+
+    normalized_extraction = await AtomExtractorAgent(
+        client=_FakeSequenceOpenAI(
+            [
+                {
+                    "atoms": [
+                        {
+                            "atom_type": "technique",
+                            "source_quote": "We introduce a compact attention mechanism that removes recurrence.",
+                            "text": "compact attention mechanism that removes recurrence by",
+                            "section_heading": "Main",
+                            "importance": "high",
+                            "role_in_paper": "central technique",
+                            "confidence": 0.9,
+                        }
+                    ],
+                    "warnings": [],
+                },
+                {
+                    "atoms": [
+                        {
+                            "atom_id": "atom_002",
+                            "keep": True,
+                            "header": "Compact attention removes recurrent computation",
+                            "drop_reason": "",
+                        }
+                    ],
+                    "warnings": [],
+                },
+            ]
+        )
+    ).run(AgentContext(job_id="prompt-2-normalize-test", parsed_paper=paper))
+    normalized_atoms = normalized_extraction.output.get("atoms", [])
+    texts = [a["text"] for a in normalized_atoms]
+    _assert(
+        "Compact attention removes recurrent computation" in texts,
+        f"normalizer did not rewrite bad atom header: {texts}",
+    )
+    _assert(
+        all(not text.endswith((" by", " to", " at", " and")) for text in texts),
+        f"normalizer left a dangling atom header: {texts}",
     )
 
     atom = _atom().model_copy(update={"equations": paper.equations, "citations": paper.bibliography})

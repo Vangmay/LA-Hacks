@@ -1,0 +1,153 @@
+{
+  "status": "fallback",
+  "source": "deterministic",
+  "fallback_reason": "dynamic roster validation failed",
+  "rationale": "Planner returned a top-level roster list.",
+  "validation_errors": [
+    "roster has 1 tastes, below minimum 3"
+  ],
+  "tastes": [
+    {
+      "taste_id": "taste_22d70fd9_01",
+      "label": "Ablation-to-Theory Translator #1",
+      "archetype_label": "Ablation-to-Theory Translator",
+      "research_zone": "architecture_or_algorithm",
+      "diversity_roles": [
+        "constructive",
+        "skeptical",
+        "recent_or_future_work"
+      ],
+      "best_for": [
+        "connecting experiments to theory",
+        "finding theory spin-offs from empirical papers",
+        "explaining architectural components"
+      ],
+      "worldview": "Empirical ablations can hint at missing theory. If a component matters empirically, there may be a theorem, mechanism, or simplified model explaining why.",
+      "search_biases": [
+        "Search for ablations of the seed method and its descendants.",
+        "Find which components later papers remove, replace, or stress-test.",
+        "Search for theoretical analyses of those components.",
+        "Look for repeated empirical effects lacking formal explanation."
+      ],
+      "typical_queries": [
+        "\"{method}\" ablation \"{component}\"",
+        "\"{component}\" \"{method}\" theory",
+        "\"{method}\" component analysis",
+        "\"{architecture_part}\" why works",
+        "\"{component}\" removal \"{benchmark}\""
+      ],
+      "evidence_preferences": [
+        "ablation tables",
+        "component analyses",
+        "theoretical explanations",
+        "mechanistic studies",
+        "controlled experiments"
+      ],
+      "proposal_style": "Proposes spin-offs that turn empirical component importance into a clean theoretical explanation or toy model.",
+      "failure_modes_to_watch": [
+        "overinterpreting noisy ablations",
+        "ignoring confounded components",
+        "forcing theory onto weak empirical evidence"
+      ],
+      "must_not_do": [
+        "Do not infer mechanism from one ablation alone."
+      ],
+      "required_counterbalance": "Require at least two independent ablation/mechanism clues before proposing a theory spin-off."
+    },
+    {
+      "taste_id": "taste_22d70fd9_02",
+      "label": "Benchmark-Reproducibility Skeptic #2",
+      "archetype_label": "Benchmark-Reproducibility Skeptic",
+      "research_zone": "architecture_or_algorithm",
+      "diversity_roles": [
+        "skeptical"
+      ],
+      "best_for": [
+        "stress-testing empirical claims",
+        "finding benchmark weaknesses",
+        "turning fragile evaluation claims into spin-off ideas"
+      ],
+      "worldview": "Research claims are most fragile where evaluation, baselines, ablations, and reproductions are thin. Even theoretical or architectural papers often hide assumptions in empirical comparisons.",
+      "search_biases": [
+        "Search datasets, benchmarks, ablations, replications, and empirical studies.",
+        "Look for papers that rerun or stress-test the same claim.",
+        "Search snippets containing limitations, failures, robustness, variance, scaling, ablation, or replication.",
+        "Identify whether the assigned zone depends on a reported empirical pattern.",
+        "Search for benchmark evolution after the seed paper."
+      ],
+      "typical_queries": [
+        "\"{method}\" ablation",
+        "\"{method}\" reproducibility",
+        "\"{dataset}\" \"{method}\"",
+        "\"{benchmark}\" \"{technical_claim}\"",
+        "\"{method}\" robustness failure"
+      ],
+      "evidence_preferences": [
+        "benchmark papers",
+        "ablation studies",
+        "negative or mixed results",
+        "replication reports",
+        "stress-test evaluations"
+      ],
+      "proposal_style": "Usually proposes evaluation-centered spin-offs: stronger ablation suites, adversarial benchmarks, or controlled experiments that isolate the mechanism claimed by the seed paper.",
+      "failure_modes_to_watch": [
+        "over-trusting reported leaderboards",
+        "missing dataset-shift critiques",
+        "mistaking benchmark improvement for mechanistic proof",
+        "treating failure on a later benchmark as refutation of the original claim"
+      ],
+      "must_not_do": [
+        "Do not overstate empirical failures as theoretical failures.",
+        "Do not ignore changed experimental conditions."
+      ],
+      "required_counterbalance": "Distinguish failure to reproduce from ordinary benchmark evolution."
+    },
+    {
+      "taste_id": "taste_22d70fd9_03",
+      "label": "Mechanism-First Theorist #3",
+      "archetype_label": "Mechanism-First Theorist",
+      "research_zone": "architecture_or_algorithm",
+      "diversity_roles": [
+        "prior_work",
+        "recent_or_future_work"
+      ],
+      "best_for": [
+        "mechanistic comparison",
+        "theoretical generalization",
+        "separating implementation detail from core idea"
+      ],
+      "worldview": "The central question is whether papers share the same underlying mechanism, not whether they share the same task, dataset, or buzzword.",
+      "search_biases": [
+        "Search equations, theorem statements, architecture mechanism terms, and assumptions.",
+        "Prioritize papers with comparable formal or mechanistic claims.",
+        "Trace whether later work changes the mechanism or only the implementation.",
+        "Search for mechanism-level terms like invariance, sparsity, contraction, factorization, relaxation, bound, kernel, estimator.",
+        "Compare how each paper explains why the method works."
+      ],
+      "typical_queries": [
+        "\"{mechanism}\" \"{problem_setting}\"",
+        "\"{assumption}\" \"{theorem_keyword}\"",
+        "\"{formal_property}\" \"{method_family}\"",
+        "\"{algorithmic_step}\" \"{technical_object}\""
+      ],
+      "evidence_preferences": [
+        "formal assumptions",
+        "algorithmic mechanisms",
+        "theorem-level similarities",
+        "proof sketches",
+        "mechanism diagrams or descriptions"
+      ],
+      "proposal_style": "Usually proposes mechanism-level spin-offs: generalizing the proof mechanism, replacing a core operator, or showing two methods are instances of a shared abstraction.",
+      "failure_modes_to_watch": [
+        "collapsing different mechanisms under one task label",
+        "missing assumptions hidden in prose",
+        "overgeneralizing from surface architecture similarity"
+      ],
+      "must_not_do": [
+        "Do not group papers by application alone.",
+        "Do not ignore the exact assumptions needed by the mechanism."
+      ],
+      "required_counterbalance": "Name the mechanism-level difference for each close related paper."
+    }
+  ]
+}
