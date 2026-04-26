@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from formalization.models import (
     AtomFormalization,
@@ -68,6 +68,41 @@ class FormalizationStore:
             atom = AtomFormalization(atom_id=atom_id, paper_id=paper_id)
             run.atom_formalizations[atom_id] = atom
         return atom
+
+    def update_atom_metadata(
+        self,
+        run_id: str,
+        atom_id: str,
+        *,
+        text: Optional[str] = None,
+        atom_type: Optional[str] = None,
+        importance: Optional[str] = None,
+        section_id: Optional[str] = None,
+        section_heading: Optional[str] = None,
+        queue_index: Optional[int] = None,
+        queue_total: Optional[int] = None,
+        max_iterations: Optional[int] = None,
+        max_axle_calls: Optional[int] = None,
+    ) -> None:
+        atom = self._require_atom(run_id, atom_id)
+        updates = {
+            "text": text,
+            "atom_type": atom_type,
+            "importance": importance,
+            "section_id": section_id,
+            "section_heading": section_heading,
+            "queue_index": queue_index,
+            "queue_total": queue_total,
+            "max_iterations": max_iterations,
+            "max_axle_calls": max_axle_calls,
+        }
+        for key, value in updates.items():
+            if value is not None:
+                setattr(atom, key, value)
+
+    def set_atom_context_summary(self, run_id: str, atom_id: str, summary: dict[str, Any]) -> None:
+        atom = self._require_atom(run_id, atom_id)
+        atom.context_summary = dict(summary)
 
     def set_atom_status(
         self,

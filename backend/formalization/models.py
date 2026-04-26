@@ -51,6 +51,16 @@ class FormalizationArtifact(BaseModel):
 class AtomFormalization(BaseModel):
     atom_id: str
     paper_id: str
+    text: Optional[str] = None
+    atom_type: Optional[str] = None
+    importance: Optional[str] = None
+    section_id: Optional[str] = None
+    section_heading: Optional[str] = None
+    queue_index: Optional[int] = None
+    queue_total: Optional[int] = None
+    max_iterations: Optional[int] = None
+    max_axle_calls: Optional[int] = None
+    context_summary: dict[str, Any] = Field(default_factory=dict)
     status: FormalizationStatus = FormalizationStatus.QUEUED
     label: Optional[FormalizationLabel] = None
     rationale: Optional[str] = None

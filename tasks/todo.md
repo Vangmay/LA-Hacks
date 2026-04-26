@@ -1,3 +1,161 @@
+# Formalization Snapshot Atom Metadata Debug
+
+## Goal
+Fix why Autoformalization atom Overview and Context tabs can show dashes for
+type, importance, queue, section, and context counts even after tool calls are
+visible for that atom.
+
+## Checklist
+- [x] Trace Overview and Context tab fields to frontend reducer state.
+- [x] Trace reducer fields back to backend formalization events and snapshots.
+- [x] Add a focused regression that reproduces the missing snapshot metadata.
+- [x] Persist atom display metadata and context summary in the backend run
+  snapshot.
+- [x] Hydrate frontend context from persisted snapshot data.
+- [x] Run targeted backend and frontend verification.
+
+## Review
+- Root cause: Overview fields (`text`, `atom_type`, `importance`, queue
+  position) and Context fields were only carried by live SSE events
+  (`atom_queued`, `atom_context_built`). The persisted formalization run
+  snapshot kept status, tool calls, artifacts, and verdicts, but not the atom
+  display metadata or context summary. A late connection, refresh, or dashboard
+  reopen could therefore show tool calls while Overview/Context stayed blank.
+- Fix: `AtomFormalization` now stores atom display metadata and a
+  `context_summary`. The orchestrator writes the queued atom payload and context
+  summary into the store before publishing their events. The frontend hydrates
+  `atom.context` from `context_summary` when a run snapshot is loaded.
+- Regression: `test_formalization_run_snapshot_keeps_atom_metadata` reproduces
+  the stale/late snapshot path with a fake agent and asserts the snapshot keeps
+  type, importance, queue, section, context counts, and TeX/prose char counts.
+- Verification:
+  - `PYTHONPATH=backend python backend/formalization/scripts/test_formalization_api_offline.py`
+  - `PYTHONPATH=backend python -c "import main; from formalization.api import router as _formalization_router; from formalization.models import AtomFormalization; print('imports ok')"`
+  - `python -m compileall -q -x 'backend/.venv|backend/outputs' backend`
+  - `PYTHONPATH=backend python backend/formalization/scripts/test_toolbox_offline.py`
+  - `PYTHONPATH=backend python backend/formalization/scripts/test_agent_offline.py`
+  - `python backend/scripts/test_atom_candidate_cleanup.py`
+  - `python backend/scripts/test_review_api.py`
+  - `python backend/scripts/test_review_tex_flow.py`
+  - `npm run build` in `frontend/`
+
+---
+
+# AXLE Import Error Debug
+
+## Goal
+Explain why Formalization can report `axiom-axle is not installed` even when
+the package appears installed locally.
+
+## Checklist
+- [x] Locate the code path that raises the `axiom-axle is not installed` error.
+- [x] Check whether the current shell Python can import `axle.AxleClient`.
+- [x] Check whether a live backend process is running under a different
+  interpreter or checkout.
+- [x] Distinguish Gemma model/tool-calling behavior from local AXLE tool
+  execution.
+
+## Review
+- The error is raised locally in `backend/formalization/axle_client.py` when the
+  backend executes an AXLE tool and cannot import `from axle import AxleClient`.
+- In the current shell, `/opt/anaconda3/bin/python` can import
+  `axle.AxleClient`, and `python -m pip show axiom-axle` reports version
+  `1.2.0` installed in `/opt/anaconda3/lib/python3.11/site-packages`.
+- No uvicorn/Vite server is currently listening, so the live backend interpreter
+  could not be inspected. If the error came from an older run, it can also be
+  stale state from before the package was installed or before the backend was
+  restarted.
+- Gemma does not install or host AXLE. Gemma emits tool calls; the FastAPI
+  backend executes those tool calls through the local `axiom-axle` Python
+  client.
+
+---
+
+# Transient Algorithm Caption Nodes Debug
+
+## Goal
+Explain and fix why the Review graph briefly shows the same two VAE-looking
+algorithm caption nodes regardless of the paper submitted.
+
+## Checklist
+- [x] Locate where `caption Minibatch...` and `caption Pseudocode...` enter the
+  graph data.
+- [x] Add or run a focused reproduction check before changing behavior.
+- [x] Identify whether this is stale job state, frontend state reuse, parser
+  noise, or event ordering.
+- [x] Apply the smallest root-cause fix if needed.
+- [x] Run targeted verification.
+
+## Review
+- Root cause: the two nodes are raw `algorithm` environment candidates from the
+  VAE paper source, not meaningful review atoms. The TeX contains those exact
+  captions in algorithm blocks, and the extractor was publishing deterministic
+  candidates to the live graph before the local cleanup pass removed them from
+  the final atom set.
+- Secondary UI issue: the Review page kept prior reducer state until the next
+  job loaded, so stale nodes from a previous job could briefly flash when
+  navigating between jobs.
+- Fix: filter deterministic and batched progress candidates with the same local
+  candidate cleanup used for final atoms, drop raw caption/algorithmic LaTeX
+  candidates, publish the final atom list with `atom_extraction_complete`, and
+  make the frontend reconcile to that final atom list while resetting state on
+  `jobId` changes.
+- Verification:
+  - `python backend/scripts/test_atom_candidate_cleanup.py`
+  - `PYTHONPATH=backend python -c "import main; from models import ResearchAtom, ParsedPaper, AtomVerdict, ReviewReport; print('imports ok')"`
+  - `python -m compileall -q -x 'backend/.venv|backend/outputs' backend`
+  - `python backend/scripts/test_review_tex_flow.py`
+  - `python backend/scripts/test_review_api.py`
+  - `npm run build` in `frontend/`
+
+---
+
+# Review Atom Formalize Button Debug
+
+## Goal
+Find why completed Review atoms do not show the Lean/Formalize controls in the
+atom detail view, then fix the smallest wiring or rendering bug if the feature
+is present but unreachable.
+
+## Checklist
+- [x] Review relevant existing lessons before changing code.
+- [x] Trace frontend Review atom selection/detail rendering.
+- [x] Trace frontend FormalizationPanel conditions, API paths, and button text.
+- [x] Trace backend formalization router mounting and route compatibility.
+- [x] Reproduce or statically prove why the button is absent in the user path.
+- [x] Apply the smallest correct fix if this is a product bug.
+- [x] Run targeted verification.
+
+## Review
+- Root cause: the currently running local servers are from the sibling checkout
+  `/Users/vedantrathi/Desktop/LA-Hacks`, not this repo
+  `/Users/vedantrathi/Desktop/LA-Hacks-2`.
+- The live Vite server on `localhost:5173` serves a `Review.jsx` that contains
+  `Atom statement` and `Review Thread` but not `FormalizationPanel`,
+  `AXLE Verification`, or `Run selected`.
+- The live backend on `localhost:8000` exposes `/review` routes but no
+  `/formalize` routes in `openapi.json`.
+- In this repo, `frontend/src/pages/Review.jsx` imports and mounts
+  `FormalizationPanel` for every selected atom, and `backend/main.py` mounts
+  the formalization router at `/formalize`.
+- No product-code patch was needed for `LA-Hacks-2`; the fix is to run the
+  frontend and backend from this checkout or merge these changes into the
+  checkout currently serving `localhost`.
+- Verification:
+  - `curl -s http://localhost:5173/src/pages/Review.jsx | rg ...` proved the
+    live Vite server was serving a Review page without formalization controls.
+  - `python` route inspection against the `LA-Hacks-2` app found
+    `/formalize/{job_id}`, `/formalize/{job_id}/atom/{atom_id}`,
+    `/formalize/runs/{run_id}`, `/formalize/runs/{run_id}/stream`, and
+    `/formalize/runs/{run_id}/lean`.
+  - `rg` confirmed `FormalizationPanel` is mounted in `Review.jsx` and exposes
+    `AXLE Verification`, `Run selected`, and `Run reviewable`.
+  - `npm install` was needed once because `LA-Hacks-2/frontend/node_modules`
+    was missing declared packages; then `npm run build` passed with the existing
+    large-chunk warning.
+
+---
+
 # Pull Main And Commit Formalization Dashboard
 
 ## Goal

@@ -178,7 +178,58 @@ class FormalizationAgent:
         loop_state: _LoopState,
         iteration: int,
     ) -> dict[str, Any]:
+        max_continuations = max(0, formalization_settings.formalization_max_continuations)
+        for cont_round in range(max_continuations + 1):
+            message, finish_reason = await self._invoke_model_once(
+                run_id, atom_id, messages, loop_state, iteration
+            )
+            # If the model emitted a tool call, accept it and let the outer loop dispatch.
+            # Continuation only fires when the turn was truncated AND no tool call landed.
+            if message.get("tool_calls"):
+                return message
+            truncated = finish_reason in {"length", "char_budget"}
+            if not truncated or cont_round == max_continuations:
+                return message
+            messages.append(message)
+            formalization_store.append_llm_message(run_id, atom_id, message)
+            char_budget = formalization_settings.formalization_max_output_chars
+            continue_msg = {
+                "role": "user",
+                "content": (
+                    f"Your previous response was truncated (finish_reason={finish_reason}, "
+                    f"~{char_budget}-char soft cap). Continue from where you stopped — do not "
+                    "restart. End this turn with exactly one tool call: an AXLE tool, "
+                    "record_artifact, or emit_verdict."
+                ),
+            }
+            messages.append(continue_msg)
+            formalization_store.append_llm_message(run_id, atom_id, continue_msg)
+            await _publish(
+                run_id,
+                FormalizationEventType.LLM_THOUGHT,
+                atom_id=atom_id,
+                payload={
+                    "delta": (
+                        f"\n[continuation {cont_round + 1}/{max_continuations}: prior turn "
+                        f"truncated ({finish_reason}); asking model to continue and commit to "
+                        "a tool call]\n"
+                    ),
+                    "iteration": iteration,
+                    "model_name": formalization_settings.formalization_model,
+                },
+            )
+        return message
+
+    async def _invoke_model_once(
+        self,
+        run_id: str,
+        atom_id: str,
+        messages: list[dict[str, Any]],
+        loop_state: _LoopState,
+        iteration: int,
+    ) -> tuple[dict[str, Any], Optional[str]]:
         max_attempts = max(1, formalization_settings.formalization_model_max_retries)
+        response: Any = None
         for attempt in range(1, max_attempts + 1):
             try:
                 formalization_store.increment_llm_call_count(run_id, atom_id)
@@ -221,20 +272,29 @@ class FormalizationAgent:
                 await asyncio.sleep(wait)
             self._last_request_at = time.monotonic()
 
-    async def _collect_stream(self, run_id: str, atom_id: str, stream: Any, iteration: int) -> dict[str, Any]:
+    async def _collect_stream(
+        self, run_id: str, atom_id: str, stream: Any, iteration: int
+    ) -> tuple[dict[str, Any], Optional[str]]:
         content_parts: list[str] = []
         tool_parts: dict[int, dict[str, Any]] = {}
+        finish_reason: Optional[str] = None
+        char_budget = max(0, formalization_settings.formalization_max_output_chars)
+        content_chars = 0
 
         async for chunk in stream:
             choices = getattr(chunk, "choices", None) or []
             if not choices:
                 continue
+            chunk_finish = getattr(choices[0], "finish_reason", None)
+            if chunk_finish is not None:
+                finish_reason = chunk_finish
             delta = getattr(choices[0], "delta", None)
             if delta is None:
                 continue
             content = getattr(delta, "content", None)
             if content:
                 content_parts.append(content)
+                content_chars += len(content)
                 await _publish(
                     run_id,
                     FormalizationEventType.LLM_THOUGHT,
@@ -259,26 +319,32 @@ class FormalizationAgent:
                         bucket["function"]["name"] += function.name
                     if getattr(function, "arguments", None):
                         bucket["function"]["arguments"] += function.arguments
+            # Soft char budget: if the model is monologuing without committing to a tool call,
+            # cut the stream early and surface a synthetic "char_budget" finish_reason so the
+            # caller can re-prompt for continuation. Never cut mid-tool-call.
+            if (
+                char_budget
+                and not tool_parts
+                and content_chars >= char_budget
+                and finish_reason is None
+            ):
+                finish_reason = "char_budget"
+                close = getattr(stream, "close", None) or getattr(stream, "aclose", None)
+                if callable(close):
+                    try:
+                        await close()
+                    except Exception:  # noqa: BLE001
+                        pass
+                break
 
         content = "".join(content_parts)
         tool_calls = [value for _, value in sorted(tool_parts.items()) if value["function"]["name"]]
         for index, tool_call in enumerate(tool_calls):
             tool_call["id"] = tool_call.get("id") or f"call_{uuid.uuid4().hex[:12]}_{index}"
-        if content and not content_parts:
-            await _publish(
-                run_id,
-                FormalizationEventType.LLM_THOUGHT,
-                atom_id=atom_id,
-                payload={
-                    "delta": content,
-                    "iteration": iteration,
-                    "model_name": formalization_settings.formalization_model,
-                },
-            )
         message = {"role": "assistant", "content": content or None}
         if tool_calls:
             message["tool_calls"] = tool_calls
-        return message
+        return message, finish_reason
 
     async def _handle_meta_tool(
         self,
@@ -736,11 +802,13 @@ def _parse_tool_call(tool_call: Any) -> tuple[str, dict[str, Any], str]:
     return name, args, call_id
 
 
-def _message_from_response(response: Any) -> dict[str, Any]:
-    message = response.choices[0].message
-    content = getattr(message, "content", None)
+def _message_from_response(response: Any) -> tuple[dict[str, Any], Optional[str]]:
+    choice = response.choices[0]
+    raw_message = choice.message
+    finish_reason = getattr(choice, "finish_reason", None)
+    content = getattr(raw_message, "content", None)
     tool_calls = []
-    for tool_call in getattr(message, "tool_calls", None) or []:
+    for tool_call in getattr(raw_message, "tool_calls", None) or []:
         name, args, call_id = _parse_tool_call(tool_call)
         tool_calls.append(
             {
@@ -749,10 +817,10 @@ def _message_from_response(response: Any) -> dict[str, Any]:
                 "function": {"name": name, "arguments": json.dumps(args)},
             }
         )
-    message = {"role": "assistant", "content": content}
+    message: dict[str, Any] = {"role": "assistant", "content": content}
     if tool_calls:
         message["tool_calls"] = tool_calls
-    return message
+    return message, finish_reason
 
 
 def _tool_message(result: ToolDispatchResult) -> dict[str, Any]:

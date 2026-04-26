@@ -47,22 +47,36 @@ class FormalizationOrchestrator:
             for index, atom_id in enumerate(run.selected_atom_ids, start=1):
                 atom = atom_by_id[atom_id]
                 formalization_store.ensure_atom(run_id, atom_id, atom.paper_id)
+                queued_payload = {
+                    "atom_id": atom_id,
+                    "atom_type": atom.atom_type.value,
+                    "importance": atom.importance.value,
+                    "text": atom.text[:500],
+                    "section_id": atom.section_id,
+                    "section_heading": atom.section_heading,
+                    "queue_index": index,
+                    "queue_total": total_atoms,
+                    "max_iterations": formalization_settings.formalization_max_iterations_per_atom,
+                    "max_axle_calls": formalization_settings.formalization_max_axle_calls_per_atom,
+                }
+                formalization_store.update_atom_metadata(
+                    run_id,
+                    atom_id,
+                    text=queued_payload["text"],
+                    atom_type=queued_payload["atom_type"],
+                    importance=queued_payload["importance"],
+                    section_id=queued_payload["section_id"],
+                    section_heading=queued_payload["section_heading"],
+                    queue_index=queued_payload["queue_index"],
+                    queue_total=queued_payload["queue_total"],
+                    max_iterations=queued_payload["max_iterations"],
+                    max_axle_calls=queued_payload["max_axle_calls"],
+                )
                 await _publish(
                     run_id,
                     FormalizationEventType.ATOM_QUEUED,
                     atom_id=atom_id,
-                    payload={
-                        "atom_id": atom_id,
-                        "atom_type": atom.atom_type.value,
-                        "importance": atom.importance.value,
-                        "text": atom.text[:500],
-                        "section_id": atom.section_id,
-                        "section_heading": atom.section_heading,
-                        "queue_index": index,
-                        "queue_total": total_atoms,
-                        "max_iterations": formalization_settings.formalization_max_iterations_per_atom,
-                        "max_axle_calls": formalization_settings.formalization_max_axle_calls_per_atom,
-                    },
+                    payload=queued_payload,
                 )
 
             semaphore = asyncio.Semaphore(max(1, formalization_settings.formalization_parallelism))
@@ -105,21 +119,23 @@ class FormalizationOrchestrator:
         try:
             formalization_store.set_atom_status(run_id, atom_id, FormalizationStatus.BUILDING_CONTEXT)
             context = build_context(job=job, paper=paper, atoms=atoms, graph=graph, atom_id=atom_id)
+            context_summary = {
+                "atom_id": atom_id,
+                "equations": len(context.get("equations") or []),
+                "citations": len(context.get("citations") or []),
+                "dependencies": len(context.get("dependencies") or []),
+                "nearby_prose_chars": len(context.get("nearby_prose") or ""),
+                "tex_excerpt_chars": len(context.get("tex_excerpt") or ""),
+                "section_heading": context.get("section_heading"),
+                "atom_text": context.get("atom_text"),
+                "formalization_hints": context.get("formalization_hints") or [],
+            }
+            formalization_store.set_atom_context_summary(run_id, atom_id, context_summary)
             await _publish(
                 run_id,
                 FormalizationEventType.ATOM_CONTEXT_BUILT,
                 atom_id=atom_id,
-                payload={
-                    "atom_id": atom_id,
-                    "equations": len(context.get("equations") or []),
-                    "citations": len(context.get("citations") or []),
-                    "dependencies": len(context.get("dependencies") or []),
-                    "nearby_prose_chars": len(context.get("nearby_prose") or ""),
-                    "tex_excerpt_chars": len(context.get("tex_excerpt") or ""),
-                    "section_heading": context.get("section_heading"),
-                    "atom_text": context.get("atom_text"),
-                    "formalization_hints": context.get("formalization_hints") or [],
-                },
+                payload=context_summary,
             )
             await self.agent.run_atom(run_id=run_id, atom_id=atom_id, context=context)
         except Exception as exc:  # noqa: BLE001

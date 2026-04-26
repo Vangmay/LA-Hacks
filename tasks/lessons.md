@@ -1,5 +1,9 @@
 # Lessons
 
+- Formalization dashboard state cannot rely on event-only metadata. Anything
+  needed by Overview or Context after refresh, late SSE connection, or dashboard
+  reopen must be persisted in the run snapshot, especially atom text/type,
+  importance, queue position, section, and context summary counts.
 - Do not demonstrate the AXLE formalization loop with tiny caps and present the
   result as representative. The point of the feature is iterative repair:
   AXLE feedback must be fed back to the agent repeatedly until the spec

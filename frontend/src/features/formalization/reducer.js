@@ -205,6 +205,7 @@ function hydrateAtom(atomId, atom = {}) {
     artifacts: atom.artifacts || [],
     tool_calls: atom.tool_calls || [],
     thoughts: atom.thoughts || [],
+    context: atom.context || atom.context_summary || {},
   }
 }
 

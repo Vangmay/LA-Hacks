@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 
 from fastapi.testclient import TestClient
@@ -7,6 +8,9 @@ from fastapi.testclient import TestClient
 import formalization.api as formalization_api
 import main as main_module
 from core.job_store import job_store
+from formalization.context_builder import load_review_job, rehydrate_job
+from formalization.orchestrator import FormalizationOrchestrator
+from formalization.store import formalization_store
 from models import (
     AtomImportance,
     PaperSource,
@@ -22,6 +26,14 @@ from models import (
 class NoopOrchestrator:
     async def run(self, _run_id: str) -> None:
         return None
+
+
+class CapturingAgent:
+    def __init__(self) -> None:
+        self.contexts: list[dict] = []
+
+    async def run_atom(self, *, run_id: str, atom_id: str, context: dict) -> None:
+        self.contexts.append(context)
 
 
 def main() -> None:
@@ -44,7 +56,38 @@ def main() -> None:
 
     response = client.post("/formalize/missing-job", json={})
     assert response.status_code == 404
+    asyncio.run(test_formalization_run_snapshot_keeps_atom_metadata())
     print("formalization API offline ok")
+
+
+async def test_formalization_run_snapshot_keeps_atom_metadata() -> None:
+    job_id, atom_id = make_completed_review_job()
+    job = load_review_job(job_id)
+    paper, _atoms, _graph = rehydrate_job(job)
+    run = formalization_store.create_run(
+        job_id=job_id,
+        paper_id=paper.paper_id,
+        selected_atom_ids=[atom_id],
+    )
+
+    agent = CapturingAgent()
+    await FormalizationOrchestrator(agent=agent).run(run.run_id)
+    snapshot = formalization_store.get_run(run.run_id).model_dump()
+    atom = snapshot["atom_formalizations"][atom_id]
+
+    assert atom["text"] == "1 + 1 = 2"
+    assert atom["atom_type"] == ResearchAtomType.PROPOSITION.value
+    assert atom["importance"] == AtomImportance.CORE.value
+    assert atom["queue_index"] == 1
+    assert atom["queue_total"] == 1
+    assert atom["max_iterations"] > 0
+    assert atom["max_axle_calls"] > 0
+    assert atom["section_heading"] == "Arithmetic"
+    assert atom["context_summary"]["atom_id"] == atom_id
+    assert atom["context_summary"]["section_heading"] == "Arithmetic"
+    assert atom["context_summary"]["tex_excerpt_chars"] > 0
+    assert atom["context_summary"]["nearby_prose_chars"] > 0
+    assert agent.contexts and agent.contexts[0]["atom_id"] == atom_id
 
 
 def make_completed_review_job() -> tuple[str, str]:
@@ -78,6 +121,7 @@ def make_completed_review_job() -> tuple[str, str]:
         source_span=span,
         extraction_confidence=1.0,
         importance=AtomImportance.CORE,
+        section_heading="Arithmetic",
     )
     graph = ResearchGraph(
         paper_id=source.paper_id,

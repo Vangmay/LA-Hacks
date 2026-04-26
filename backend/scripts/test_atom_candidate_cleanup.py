@@ -11,10 +11,12 @@ BACKEND = HERE.parent
 sys.path.insert(0, str(BACKEND))
 
 from agents.atom_extractor import (  # noqa: E402
+    AtomExtractorAgent,
     _dedupe_candidates,
     _finalize_atom_headers,
     _filter_grounded_candidates,
     _ground_candidates,
+    _local_candidate_filter,
     _loads_json_object,
     _resolve_candidate_spans,
 )
@@ -41,6 +43,24 @@ The reparameterization trick provides a differentiable estimator.
 \end{document}
 """
 
+ALGORITHM_TEX = r"""
+\documentclass{article}
+\title{Algorithm Caption Test}
+\begin{document}
+\section{Main}
+\begin{theorem}
+For every real number x, x squared is nonnegative.
+\end{theorem}
+\begin{algorithm}[t]
+\caption{Minibatch version of a training algorithm. Either stochastic estimator can be used.}
+\begin{algorithmic}
+\STATE Sample a minibatch.
+\STATE Update parameters.
+\end{algorithmic}
+\end{algorithm}
+\end{document}
+"""
+
 
 def _assert(condition: bool, message: str) -> None:
     if not condition:
@@ -55,6 +75,16 @@ def _paper():
         content_hash=hashlib.md5(SAMPLE_TEX.encode("utf-8")).hexdigest()[:16],
     )
     return parse_tex(SAMPLE_TEX, source)
+
+
+def _algorithm_paper():
+    source = PaperSource(
+        paper_id="algorithm-caption-test",
+        source_kind=SourceKind.MANUAL_TEX,
+        fetched_at=datetime.utcnow(),
+        content_hash=hashlib.md5(ALGORITHM_TEX.encode("utf-8")).hexdigest()[:16],
+    )
+    return parse_tex(ALGORITHM_TEX, source)
 
 
 def _candidate(candidate_id: str, quote: str, text: str | None = None) -> AtomCandidate:
@@ -215,6 +245,39 @@ def test_raw_latex_display_text_dropped() -> None:
     _assert(any("final_header_dropped" in warning for warning in warnings), str(warnings))
 
 
+def test_algorithm_caption_candidate_locally_dropped() -> None:
+    paper = _algorithm_paper()
+    extractor = AtomExtractorAgent()
+    candidates = extractor._extract_environment_candidates(paper)
+    _assert(
+        any(candidate.atom_type == ResearchAtomType.THEOREM for candidate in candidates),
+        f"expected theorem env candidate, got {candidates}",
+    )
+    _assert(
+        any(
+            candidate.atom_type == ResearchAtomType.ALGORITHM
+            and "caption" in candidate.text.lower()
+            for candidate in candidates
+        ),
+        f"expected raw algorithm caption candidate, got {candidates}",
+    )
+
+    warnings: list[str] = []
+    kept = _local_candidate_filter(candidates, warnings)
+    _assert(
+        any(candidate.atom_type == ResearchAtomType.THEOREM for candidate in kept),
+        f"theorem candidate should remain: {warnings}",
+    )
+    _assert(
+        not any(
+            candidate.atom_type == ResearchAtomType.ALGORITHM
+            and "caption" in candidate.text.lower()
+            for candidate in kept
+        ),
+        f"raw algorithm caption candidate leaked through local filter: {kept}",
+    )
+
+
 def main() -> int:
     test_exact_grounding_survives()
     print("  exact candidate grounding survives - OK")
@@ -232,6 +295,8 @@ def main() -> int:
     print("  long clean English header is not cropped - OK")
     test_raw_latex_display_text_dropped()
     print("  raw LaTeX display text dropped - OK")
+    test_algorithm_caption_candidate_locally_dropped()
+    print("  raw algorithm caption candidate locally dropped - OK")
     print("atom candidate cleanup tests OK")
     return 0
 

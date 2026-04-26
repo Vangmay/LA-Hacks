@@ -450,8 +450,11 @@ class AtomExtractorAgent(BaseAgent):
         deterministic = self._extract_environment_candidates(paper)
         warnings: list[str] = []
         batch_count = len(_section_batches(paper, self._max_section_chars))
+        progress_warnings: list[str] = []
+        progress_deterministic = _local_candidate_filter(deterministic, progress_warnings)
+        warnings.extend(progress_warnings)
         await self._emit_progress(
-            _candidates_to_research_atoms(paper, deterministic),
+            _candidates_to_research_atoms(paper, progress_deterministic),
             {
                 "stage": "Extracting deterministic atoms",
                 "batches_completed": 0,
@@ -646,13 +649,15 @@ class AtomExtractorAgent(BaseAgent):
                 candidates.append(candidate)
                 counter += 1
 
+            progress_candidates = _dedupe_candidates(
+                _merge_candidate_lists(seen, candidates),
+                warnings=[],
+            )
+            progress_candidates = _local_candidate_filter(progress_candidates, warnings=[])
             await self._emit_progress(
                 _candidates_to_research_atoms(
                     paper,
-                    _dedupe_candidates(
-                        _merge_candidate_lists(seen, candidates),
-                        warnings=[],
-                    ),
+                    progress_candidates,
                 ),
                 {
                     "stage": f"Extracting atom candidates ({batch_idx}/{len(batches)})",
@@ -1609,15 +1614,36 @@ def _locally_keep_candidate(candidate: AtomCandidate) -> bool:
         AtomReviewability.BACKGROUND,
     }:
         return False
+    if _looks_like_raw_caption_candidate(candidate):
+        return False
     if candidate.source_span is None:
         return False
     if candidate.source_span.match_confidence < _MAIN_DAG_MIN_SPAN_CONFIDENCE:
         return False
     text = _compact_header(candidate.text)
+    if _contains_raw_latex(text):
+        return False
     if _valid_atom_header(text):
         return True
     words = re.findall(r"[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)?", text)
     return len(words) >= 6 and (words[-1].lower() not in _DANGLING_HEADER_ENDINGS)
+
+
+def _looks_like_raw_caption_candidate(candidate: AtomCandidate) -> bool:
+    text = str(candidate.text or "").strip()
+    quote = str(candidate.source_quote or "").strip()
+    raw = f"{text}\n{quote}".strip()
+    if re.match(r"^\\caption\b", text):
+        return True
+    cleaned = _strip_inline_tex_noise(text).lower()
+    if cleaned.startswith("caption "):
+        return True
+    if (
+        candidate.atom_type == ResearchAtomType.ALGORITHM
+        and re.search(r"\\begin\{algorithmic\}|\\state|\\caption\b", raw, re.IGNORECASE)
+    ):
+        return True
+    return False
 
 
 def _dedupe_candidates(

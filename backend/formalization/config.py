@@ -26,6 +26,8 @@ class AxleSettings(BaseSettings):
     formalization_base_url: str = settings.deepdive_thinking_base_url or settings.openai_base_url
     formalization_reasoning_effort: str = settings.deepdive_thinking_reasoning_effort
     formalization_max_output_tokens: int = settings.deepdive_max_output_tokens_thinking
+    formalization_max_output_chars: int = 2000
+    formalization_max_continuations: int = 3
     formalization_model_timeout_seconds: float = settings.deepdive_model_timeout_seconds
     formalization_model_max_retries: int = max(20, settings.deepdive_model_max_retries)
     formalization_model_retry_max_delay_seconds: float = settings.deepdive_model_retry_max_delay_seconds
@@ -43,6 +45,8 @@ class AxleSettings(BaseSettings):
             "api_key_env": self.formalization_api_key_env,
             "reasoning_effort": self.formalization_reasoning_effort,
             "max_output_tokens": self.formalization_max_output_tokens,
+            "max_output_chars": self.formalization_max_output_chars,
+            "max_continuations": self.formalization_max_continuations,
             "model_timeout_seconds": self.formalization_model_timeout_seconds,
             "model_max_retries": self.formalization_model_max_retries,
             "model_min_interval_seconds": self.formalization_model_min_interval_seconds,
