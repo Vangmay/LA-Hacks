@@ -250,10 +250,16 @@ export default function PocSession() {
       try {
         const s = await api.poc.scaffoldStatus(sessionId)
         if (cancelled) return
-        setScaffoldStatus(s.scaffold_status || 'awaiting_selection')
+        const next = s.scaffold_status || 'phase_1'
+        setScaffoldStatus(next)
         setScaffoldError(s.scaffold_error || null)
         setZipReady(!!s.zip_ready)
-        if (s.scaffold_status === 'ready' || s.scaffold_status === 'error') return
+        // Phase 1 done → flip the header chip out of "processing" so the
+        // generate button is reachable.
+        if (next === 'awaiting_selection' || next === 'generating' || next === 'ready') {
+          setJobStatus(j => j === 'processing' ? 'ready' : j)
+        }
+        if (next === 'ready' || next === 'error') return
       } catch {}
       if (!cancelled) setTimeout(tick, 2000)
     }
@@ -360,7 +366,10 @@ export default function PocSession() {
       {/* Bottom action bar */}
       <div style={{ background: C.surface, borderTop: `1px solid ${C.border}`, padding: '9px 16px', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
         {(() => {
-          const canGenerate = checkedIds.size > 0 && scaffoldStatus !== 'generating' && jobStatus !== 'processing'
+          const canGenerate =
+            checkedIds.size > 0 &&
+            scaffoldStatus !== 'generating' &&
+            scaffoldStatus !== 'phase_1'
           const generating = scaffoldStatus === 'generating'
           return (
             <button
@@ -391,7 +400,7 @@ export default function PocSession() {
         {scaffoldError && (<span style={{ ...mono(11), color: '#EF4444' }}>scaffold error: {scaffoldError}</span>)}
         <div style={{ flex: 1 }} />
         <span style={{ ...mono(10), color: C.muted }}>{
-          jobStatus === 'processing' ? 'Extracting atoms + metrics…'
+          scaffoldStatus === 'phase_1' || jobStatus === 'processing' ? 'Extracting atoms + metrics…'
             : scaffoldStatus === 'awaiting_selection' ? 'Pick claims → click GENERATE SCAFFOLDS'
             : scaffoldStatus === 'generating' ? 'Generating scaffolds…'
             : !zipReady ? 'Scaffolds queued…'

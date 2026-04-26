@@ -242,8 +242,18 @@ async def get_scaffold_status(session_id: str):
     if not job_store.exists(session_id):
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
     job = job_store.get(session_id)
+    job_status = job.get("status")
+    # Phase 1 has not finished while job is still 'processing'; only after the
+    # orchestrator flips status to 'ready'/'complete' should the client see the
+    # awaiting_selection state.
+    scaffold_status = job.get("scaffold_status")
+    if not scaffold_status:
+        scaffold_status = (
+            "awaiting_selection" if job_status in ("ready", "complete") else "phase_1"
+        )
     return {
-        "scaffold_status": job.get("scaffold_status", "awaiting_selection"),
+        "job_status": job_status,
+        "scaffold_status": scaffold_status,
         "selected_claim_ids": job.get("selected_claim_ids", []),
         "scaffold_error": job.get("scaffold_error"),
         "zip_ready": bool(job.get("zip_path") and Path(job["zip_path"]).exists()),
