@@ -4,14 +4,14 @@ from typing import Dict, List
 
 from openai import AsyncOpenAI
 
-from backend.config import settings
-from backend.models import (
+from agents.base import AgentContext, AgentResult, BaseAgent
+from config import settings
+from models import (
     ExperimentResult,
     GapAnalysisEntry,
     ReproducibilityReport,
     ReproductionStatus,
 )
-from backend.agents.base import BaseAgent, AgentContext, AgentResult
 
 logger = logging.getLogger(__name__)
 

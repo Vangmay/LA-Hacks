@@ -4,9 +4,9 @@ import logging
 
 from openai import AsyncOpenAI
 
-from backend.config import settings
-from backend.models import ClaimUnit, PoCSpec
-from backend.agents.base import BaseAgent, AgentContext, AgentResult
+from agents.base import AgentContext, AgentResult, BaseAgent
+from config import settings
+from models import ResearchAtom
 
 logger = logging.getLogger(__name__)
 
@@ -17,33 +17,34 @@ class ScaffoldGeneratorAgent(BaseAgent):
     _client = AsyncOpenAI(api_key=settings.openai_api_key)
 
     async def run(self, context: AgentContext) -> AgentResult:
-        claim: ClaimUnit | None = context.extra.get("claim")
-        if claim is None:
+        atom: ResearchAtom | None = context.atom or context.extra.get("atom")
+        if atom is None:
             return AgentResult(
                 agent_id=self.agent_id,
                 status="error",
                 output={"scaffold_files": {}},
                 confidence=0.0,
-                error="No claim provided in context.extra['claim']",
+                error="No atom provided in context.atom",
             )
 
         poc_spec: dict = context.extra.get("poc_spec", {})
         paper_metadata: dict = context.extra.get("paper_metadata", {})
 
         try:
-            scaffold_files = await self._generate_all_files(claim, poc_spec, paper_metadata)
+            scaffold_files = await self._generate_all_files(atom, poc_spec, paper_metadata)
         except Exception as exc:
-            logger.error("ScaffoldGeneratorAgent failed for %s: %s", claim.claim_id, exc)
+            logger.error("ScaffoldGeneratorAgent failed for %s: %s", atom.atom_id, exc)
             return AgentResult(
                 agent_id=self.agent_id,
-                claim_id=claim.claim_id,
                 status="error",
                 output={"scaffold_files": {}},
                 confidence=0.0,
                 error=str(exc),
             )
 
-        # Syntax-check generated Python files; attempt one correction pass on failure
+        # Syntax-check the generated Python files; attempt one LLM correction
+        # pass per broken file. Even if the fix doesn't land cleanly, surface
+        # the (best-effort) code so the user always gets something to edit.
         syntax_errors = self._check_syntax(scaffold_files)
         if syntax_errors:
             for fname, err in syntax_errors.items():
@@ -52,16 +53,7 @@ class ScaffoldGeneratorAgent(BaseAgent):
                 except Exception as exc:
                     logger.warning("Syntax fix LLM call failed for %s: %s", fname, exc)
 
-            still_broken = self._check_syntax(scaffold_files)
-            if still_broken:
-                return AgentResult(
-                    agent_id=self.agent_id,
-                    claim_id=claim.claim_id,
-                    status="inconclusive",
-                    output={"scaffold_files": scaffold_files, "syntax_errors": still_broken},
-                    confidence=0.3,
-                    error=f"Syntax errors remain after correction attempt: {still_broken}",
-                )
+        still_broken = self._check_syntax(scaffold_files)
 
         updated_spec = dict(poc_spec)
         updated_spec["scaffold_files"] = scaffold_files
@@ -69,16 +61,20 @@ class ScaffoldGeneratorAgent(BaseAgent):
 
         return AgentResult(
             agent_id=self.agent_id,
-            claim_id=claim.claim_id,
-            status="success",
-            output={"scaffold_files": scaffold_files, "poc_spec": updated_spec},
-            confidence=0.8,
+            status="inconclusive" if still_broken else "success",
+            output={
+                "scaffold_files": scaffold_files,
+                "poc_spec": updated_spec,
+                "syntax_errors": still_broken,
+            },
+            confidence=0.3 if still_broken else 0.8,
+            error=(f"Syntax errors remain: {still_broken}" if still_broken else None),
         )
 
     # ── File generation ────────────────────────────────────────────────────────
 
     async def _generate_all_files(
-        self, claim: ClaimUnit, poc_spec: dict, paper_metadata: dict
+        self, atom: ResearchAtom, poc_spec: dict, paper_metadata: dict
     ) -> dict:
         title = paper_metadata.get("title", "Unknown Paper")
         abstract = paper_metadata.get("abstract", "")
@@ -89,12 +85,12 @@ class ScaffoldGeneratorAgent(BaseAgent):
         success_criteria_json = json.dumps(poc_spec.get("success_criteria", []), indent=2)
 
         impl_py = await self._gen_implementation(
-            claim, title, abstract, relevant_sections, success_criteria_json
+            atom, title, abstract, relevant_sections, success_criteria_json
         )
         test_py = await self._gen_test_harness(success_criteria_json, impl_py)
         logger_py = self._gen_results_logger()
         req_txt = await self._gen_requirements(impl_py, test_py)
-        readme_md = await self._gen_readme(claim, title, success_criteria_json)
+        readme_md = await self._gen_readme(atom, title, success_criteria_json)
 
         return {
             "implementation.py": impl_py,
@@ -106,26 +102,27 @@ class ScaffoldGeneratorAgent(BaseAgent):
 
     async def _gen_implementation(
         self,
-        claim: ClaimUnit,
+        atom: ResearchAtom,
         title: str,
         abstract: str,
         relevant_sections: str,
         success_criteria_json: str,
     ) -> str:
+        section_hint = atom.section_heading or "?"
         system = (
             "You are implementing a research paper's method in Python. Generate clean, runnable code "
-            "that implements the algorithm/method described in the claim and surrounding paper context.\n"
+            "that implements the algorithm/method described in the atom and surrounding paper context.\n"
             "Requirements:\n"
-            f"- Add a comment at the top: # Implements claim {claim.claim_id}: {claim.text[:100]}\n"
+            f"- Add a comment at the top: # Implements {atom.atom_type.value} {atom.atom_id}: {atom.text[:100]}\n"
             "- Include detailed inline comments referencing specific paper sections "
             "(e.g. # See Section 3.2: Algorithm 1)\n"
             "- Use only standard Python + numpy + torch/sklearn as appropriate — no obscure dependencies\n"
             "- Include a main() function that runs a minimal demonstration\n"
-            "- If the full method is too complex, implement the core component that tests the specific claim\n"
+            "- If the full method is too complex, implement the core component that tests the specific atom\n"
             "Return ONLY the Python code, no explanation."
         )
         user = (
-            f"Claim: {claim.text}\n\n"
+            f"Atom ({atom.atom_type.value}, section: {section_hint}): {atom.text}\n\n"
             f"Paper: {title}\nAbstract: {abstract[:500]}\n\n"
             f"Relevant sections:\n{relevant_sections}\n\n"
             f"Success criteria:\n{success_criteria_json}"
@@ -134,7 +131,7 @@ class ScaffoldGeneratorAgent(BaseAgent):
 
     async def _gen_test_harness(self, success_criteria_json: str, impl_code: str) -> str:
         system = (
-            "Generate a pytest test file that verifies the success criteria for this claim.\n"
+            "Generate a pytest test file that verifies the success criteria for this atom.\n"
             "Requirements:\n"
             "- Import from implementation.py\n"
             "- One test function per success criterion: def test_{metric_name}():\n"
@@ -180,14 +177,17 @@ class ScaffoldGeneratorAgent(BaseAgent):
         user = f"implementation.py:\n{impl_code}\n\ntest_harness.py:\n{test_code}"
         return await self._llm_call(system, user, max_tokens=300)
 
-    async def _gen_readme(self, claim: ClaimUnit, title: str, success_criteria_json: str) -> str:
+    async def _gen_readme(self, atom: ResearchAtom, title: str, success_criteria_json: str) -> str:
         system = (
-            "Write a clear README for this proof-of-concept scaffold. Include: what claim this tests, "
+            "Write a clear README for this proof-of-concept scaffold. Include: what atom this tests, "
             "setup instructions (pip install -r requirements.txt), how to run (pytest test_harness.py -v), "
             "how to interpret results, and what the success criteria are. Be concise — max 40 lines."
         )
         user = (
-            f"Claim ID: {claim.claim_id}\nClaim: {claim.text}\n\n"
+            f"Atom ID: {atom.atom_id}\n"
+            f"Atom type: {atom.atom_type.value}\n"
+            f"Section: {atom.section_heading or '?'}\n"
+            f"Atom text: {atom.text}\n\n"
             f"Paper: {title}\n\nSuccess criteria:\n{success_criteria_json}"
         )
         return await self._llm_call(system, user, max_tokens=800)
