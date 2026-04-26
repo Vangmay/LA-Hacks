@@ -1,0 +1,48 @@
+{
+  "source": "director",
+  "rationale": "Given the Transformer's status as a foundational architecture, novelty ideation must move beyond basic improvements. These directions target the architecture's two primary frontiers: overcoming the quadratic complexity ceiling and reconsidering the 'recurrence-free' philosophy through modern state-space and hybrid lenses.",
+  "zones": [
+    {
+      "investigator_id": "investigator_01_scaling_beyond_quadratic_complexity_and_quadratic_vram",
+      "section_id": "section_01_scaling_beyond_quadratic_complexity_and_quadratic_vram",
+      "section_title": "Scaling Beyond Quadratic Complexity and Quadratic VRAM",
+      "requested_subagents": 2
+    },
+    {
+      "investigator_id": "investigator_02_inductive_bias_restoration_and_state_space_hybrids",
+      "section_id": "section_02_inductive_bias_restoration_and_state_space_hybrids",
+      "section_title": "Inductive Bias Restoration and State-Space Hybrids",
+      "requested_subagents": 2
+    }
+  ],
+  "raw_planner_output": [
+    {
+      "title": "Scaling Beyond Quadratic Complexity and Quadratic VRAM",
+      "why_promising": "The seed paper explicitly identifies $O(n^2 \\cdot d)$ complexity as a trade-off for parallelization. This is the most contested area of literature, where 'Long-Context' and 'Linear Attention' research provides the highest density of novelty and performance critiques.",
+      "seed_hooks": [
+        "Table 1: Complexity per Layer",
+        "Section 5.2: Self-Attention layer complexity $O(n^2 \\cdot d)$",
+        "Section 3.2.1: Scaled Dot-Product Attention bottleneck"
+      ],
+      "research_questions": [
+        "How have FlashAttention and Kernel-based methods altered the theoretical complexity vs. hardware-actualized latency trade-offs?",
+        "What are the persistent 'expressivity gaps' between the original Softmax-Attention and more efficient Linear or Sparse Attention approximations?"
+      ],
+      "priority": 1
+    },
+    {
+      "title": "Inductive Bias Restoration and State-Space Hybrids",
+      "why_promising": "Vaswani et al. argued that recurrence and convolution are unnecessary. However, 7 years of research suggests that for specific tasks (long sequences, causality, hardware efficiency), some recurrent-like state management (e.g., Mamba, RWKV) offers superior scaling laws. Investigating this 'return to recurrence' offers significant delta for novelty.",
+      "seed_hooks": [
+        "Abstract: 'dispensing with recurrence and convolutions entirely'",
+        "Section 2: Background (contrasts with Extended Neural GPU and ByteNet)",
+        "Section 3.5: Positional Encoding as a substitute for sequence order"
+      ],
+      "research_questions": [
+        "In what specific regimes do modern State-Space Models (SSMs) outperform the vanilla Transformer's 'All-to-All' attention?",
+        "Can positional encoding methods be generalized to mimic the inductive biases of the RNNs that the Transformer originally replaced?"
+      ],
+      "priority": 2
+    }
+  ]
+}
