@@ -6,12 +6,18 @@ export function useFormalizationStream(runId, dispatch) {
   useEffect(() => {
     if (!runId) return undefined
     const eventSource = formalizationApi.stream(runId)
+    let closed = false
+
+    eventSource.onopen = () => {
+      dispatch({ type: 'CONNECTION_STATE', connection: 'connected' })
+    }
 
     eventSource.addEventListener('formalization_update', (event) => {
       try {
         const data = JSON.parse(event.data)
         dispatch({ type: 'EVENT', event: data })
         if (TERMINAL_EVENTS.has(data.event_type)) {
+          closed = true
           eventSource.close()
         }
       } catch (err) {
@@ -20,12 +26,14 @@ export function useFormalizationStream(runId, dispatch) {
     })
 
     eventSource.onerror = () => {
-      if (eventSource.readyState !== EventSource.CLOSED) {
-        dispatch({ type: 'ERROR', error: 'Lost formalization stream connection' })
-        eventSource.close()
+      if (!closed && eventSource.readyState !== EventSource.CLOSED) {
+        dispatch({ type: 'CONNECTION_STATE', connection: 'reconnecting' })
       }
     }
 
-    return () => eventSource.close()
+    return () => {
+      closed = true
+      eventSource.close()
+    }
   }, [runId, dispatch])
 }

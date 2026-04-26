@@ -1,4 +1,5 @@
 export const FORMALIZATION_EVENTS = {
+  RUN_SNAPSHOT: 'run_snapshot',
   RUN_STARTED: 'run_started',
   ATOM_QUEUED: 'atom_queued',
   ATOM_CONTEXT_BUILT: 'atom_context_built',
@@ -8,6 +9,7 @@ export const FORMALIZATION_EVENTS = {
   AXLE_CHECK_RESULT: 'axle_check_result',
   AXLE_VERIFY_RESULT: 'axle_verify_result',
   ARTIFACT_RECORDED: 'artifact_recorded',
+  ARTIFACT_UPDATED: 'artifact_updated',
   ATOM_VERDICT: 'atom_verdict',
   ATOM_ERROR: 'atom_error',
   RUN_COMPLETE: 'run_complete',

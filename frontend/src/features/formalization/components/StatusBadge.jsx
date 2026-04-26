@@ -1,4 +1,8 @@
 const COLORS = {
+  idle: 'bg-white/5 text-white/60 border-white/10',
+  running: 'bg-cyan-500/15 text-cyan-100 border-cyan-300/30',
+  pending: 'bg-slate-500/15 text-slate-200 border-slate-400/30',
+  success: 'bg-emerald-500/15 text-emerald-100 border-emerald-400/30',
   queued: 'bg-slate-500/15 text-slate-200 border-slate-400/30',
   building_context: 'bg-blue-500/15 text-blue-200 border-blue-400/30',
   llm_thinking: 'bg-indigo-500/15 text-indigo-200 border-indigo-400/30',

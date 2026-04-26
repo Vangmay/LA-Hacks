@@ -35,6 +35,7 @@ class FormalizationOrchestrator:
                 "run_id": run_id,
                 "job_id": run.job_id,
                 "selected_atom_ids": run.selected_atom_ids,
+                "runtime": formalization_settings.runtime_metadata(),
             },
         )
 
@@ -42,7 +43,8 @@ class FormalizationOrchestrator:
             job = load_review_job(run.job_id)
             paper, atoms, graph = rehydrate_job(job)
             atom_by_id = {atom.atom_id: atom for atom in atoms}
-            for atom_id in run.selected_atom_ids:
+            total_atoms = len(run.selected_atom_ids)
+            for index, atom_id in enumerate(run.selected_atom_ids, start=1):
                 atom = atom_by_id[atom_id]
                 formalization_store.ensure_atom(run_id, atom_id, atom.paper_id)
                 await _publish(
@@ -54,6 +56,12 @@ class FormalizationOrchestrator:
                         "atom_type": atom.atom_type.value,
                         "importance": atom.importance.value,
                         "text": atom.text[:500],
+                        "section_id": atom.section_id,
+                        "section_heading": atom.section_heading,
+                        "queue_index": index,
+                        "queue_total": total_atoms,
+                        "max_iterations": formalization_settings.formalization_max_iterations_per_atom,
+                        "max_axle_calls": formalization_settings.formalization_max_axle_calls_per_atom,
                     },
                 )
 
@@ -108,6 +116,9 @@ class FormalizationOrchestrator:
                     "dependencies": len(context.get("dependencies") or []),
                     "nearby_prose_chars": len(context.get("nearby_prose") or ""),
                     "tex_excerpt_chars": len(context.get("tex_excerpt") or ""),
+                    "section_heading": context.get("section_heading"),
+                    "atom_text": context.get("atom_text"),
+                    "formalization_hints": context.get("formalization_hints") or [],
                 },
             )
             await self.agent.run_atom(run_id=run_id, atom_id=atom_id, context=context)

@@ -1,3 +1,96 @@
+# Pull Main And Commit Formalization Dashboard
+
+## Goal
+Sync `vrathi101_axle` with the latest `origin/main`, preserve the clean Lean
+formalization live dashboard work, resolve any conflicts, verify, and commit the
+final branch state.
+
+## Checklist
+- [x] Stash current local formalization/dashboard edits.
+- [x] Fetch and merge latest `origin/main`.
+- [x] Reapply local edits and resolve conflicts if needed.
+- [x] Run targeted backend/frontend verification.
+- [x] Commit the final synced changes.
+
+## Review
+- Fetched `origin/main` and merged it into `vrathi101_axle`; Git completed the
+  merge without textual conflicts.
+- Reapplied the local formalization dashboard work cleanly after the merge.
+- Verified after merge:
+  - `PYTHONPATH=backend python -c "import main; import api.review; import api.research; from models import ResearchAtom, ParsedPaper, AtomVerdict, ReviewReport; from formalization.api import router as _formalization_router; print('imports ok')"`
+  - `python -m compileall -q -x 'backend/.venv|backend/outputs' backend`
+  - `PYTHONPATH=backend python backend/formalization/scripts/test_toolbox_offline.py`
+  - `PYTHONPATH=backend python backend/formalization/scripts/test_agent_offline.py`
+  - `PYTHONPATH=backend python backend/formalization/scripts/test_formalization_api_offline.py`
+  - `npm run build` in `frontend/`
+- Residual note: frontend build passes with Vite's existing large-chunk warning.
+
+---
+
+# Lean Formalization Live UI
+
+## Goal
+Rebuild Formalize mode into a clean, observable Lean/AXLE agent experience that
+matches the high-level live deep-research UI style: visible run topology,
+parallel atom progress, model/tool activity, Lean artifacts, AXLE feedback, and
+high tool-call/runtime limits using the same Gemma thinking profile conventions
+as deep research where the local code supports it.
+
+## Checklist
+- [x] Inspect deep-research live UI, model routing, tool limits, and concurrency
+  patterns.
+- [x] Inspect current formalization API/events/store/frontend state shape.
+- [x] Update formalization config/runtime defaults for Gemma thinking and much
+  higher iteration/tool-call budgets while preserving bounded concurrency.
+- [x] Add any missing event payloads needed for frontend observability.
+- [x] Rework formalization frontend into an organized live dashboard for run
+  overview, atom parallelism, stream timeline, AXLE calls, and Lean artifacts.
+- [x] Run backend import/compile/formalization offline tests.
+- [x] Run frontend build.
+
+## Review
+- Backend formalization remains isolated under `backend/formalization/`.
+  Defaults now mirror the deep-dive Gemma thinking profile:
+  `gemma-4-26b-a4b-it`, `GEMMA_API_KEY`, Google OpenAI-compatible base URL,
+  high reasoning effort, 32k output tokens, 20 model retries, and deep-dive
+  parallelism defaults for atom workers / AXLE concurrency.
+- Formalization SSE now starts with a run snapshot and includes runtime
+  metadata, atom queue details, context summaries, model/iteration deltas,
+  Lean artifact code, tool durations, and artifact status updates after AXLE
+  checks / proof verification.
+- Frontend formalization UI stays under `frontend/src/features/formalization/`.
+  The compact Review sidebar panel now opens a full live dashboard with a
+  React Flow atom-agent graph, run/atom inspector, tool timeline, model thought
+  stream, context panel, Lean artifact viewer, and bottom activity ticker.
+- Verification:
+  - `PYTHONPATH=backend python -c "import main; import api.review; import api.research; from models import ResearchAtom, ParsedPaper, AtomVerdict, ReviewReport; from formalization.api import router as _formalization_router; print('imports ok')"`
+  - `python -m compileall -q -x 'backend/.venv|backend/outputs' backend`
+  - `PYTHONPATH=backend python backend/formalization/scripts/test_toolbox_offline.py`
+  - `PYTHONPATH=backend python backend/formalization/scripts/test_agent_offline.py`
+  - `PYTHONPATH=backend python backend/formalization/scripts/test_formalization_api_offline.py`
+  - `npm run build` in `frontend/`
+- Frontend build still emits the existing Vite large chunk warning.
+
+---
+
+# AXLE Pipeline Explanation
+
+## Goal
+Explain the latest AXLE commits and trace how Formalize mode works end to end
+from completed review job to frontend stream and Lean artifact output.
+
+## Checklist
+- [ ] Review latest branch commits and identify the AXLE-specific changes.
+- [ ] Trace backend API, orchestrator, agent, AXLE toolbox, store, events, and
+  outputs.
+- [ ] Trace frontend formalization panel, API calls, SSE reducer, and atom UI.
+- [ ] Summarize the full pipeline with concrete file references.
+
+## Review
+- Pending.
+
+---
+
 # Branch Commit And Main Sync
 
 ## Goal

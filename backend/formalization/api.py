@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
@@ -15,7 +17,8 @@ from formalization.context_builder import (
     validate_atom_selection,
 )
 from formalization.event_bus import formalization_event_bus
-from formalization.events import FormalizationEventType
+from formalization.events import FormalizationEvent, FormalizationEventType
+from formalization.config import formalization_settings
 from formalization.models import FormalizationOptions
 from formalization.orchestrator import FormalizationOrchestrator
 from formalization.outputs import merged_lean
@@ -36,6 +39,7 @@ class FormalizationStartResponse(BaseModel):
     run_id: str
     status: str
     selected_atom_ids: list[str] = Field(default_factory=list)
+    runtime: dict = Field(default_factory=dict)
 
 
 @router.post("/{job_id}", response_model=FormalizationStartResponse)
@@ -77,6 +81,23 @@ async def stream(request: Request, run_id: str):
 
     async def event_gen():
         queue: asyncio.Queue = asyncio.Queue()
+        run = formalization_store.get_run(run_id)
+        snapshot_id = f"snapshot-{uuid.uuid4()}"
+        yield {
+            "event": "formalization_update",
+            "id": snapshot_id,
+            "data": FormalizationEvent(
+                event_id=snapshot_id,
+                run_id=run_id,
+                event_type=FormalizationEventType.RUN_SNAPSHOT,
+                payload={
+                    "run": run.model_dump() if run else {},
+                    "runtime": formalization_settings.runtime_metadata(),
+                    "live": True,
+                },
+                timestamp=datetime.utcnow(),
+            ).model_dump_json(),
+        }
 
         async def drain():
             try:
@@ -155,4 +176,5 @@ async def _create_run(
         run_id=run.run_id,
         status=run.status.value,
         selected_atom_ids=selected_atom_ids,
+        runtime=formalization_settings.runtime_metadata(),
     )

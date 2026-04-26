@@ -2,9 +2,7 @@ import { useEffect, useReducer, useState } from 'react'
 import { formalizationApi } from '../api'
 import { formalizationReducer, initialFormalizationState } from '../reducer'
 import { useFormalizationStream } from '../hooks/useFormalizationStream'
-import AtomDetail from './AtomDetail'
-import AtomList from './AtomList'
-import LiveTrace from './LiveTrace'
+import FormalizationDashboard from './FormalizationDashboard'
 import StatusBadge from './StatusBadge'
 import SummaryStrip from './SummaryStrip'
 
@@ -12,6 +10,7 @@ export default function FormalizationPanel({ jobId, atom }) {
   const [state, dispatch] = useReducer(formalizationReducer, initialFormalizationState)
   const [isStarting, setIsStarting] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [expanded, setExpanded] = useState(false)
   useFormalizationStream(state.runId, dispatch)
 
   useEffect(() => {
@@ -20,7 +19,6 @@ export default function FormalizationPanel({ jobId, atom }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.runId, state.status])
 
-  const selectedFormalAtom = state.selectedAtomId ? state.atoms[state.selectedAtomId] : null
   const selectedReviewAtomId = atom?.id || atom?.atom_id
   const busy = isStarting || ['queued', 'running', 'building_context', 'llm_thinking', 'axle_running'].includes(state.status)
 
@@ -38,6 +36,7 @@ export default function FormalizationPanel({ jobId, atom }) {
     try {
       const response = await fn()
       dispatch({ type: 'START_RESPONSE', payload: response })
+      setExpanded(true)
     } catch (err) {
       dispatch({ type: 'ERROR', error: err.message || 'Failed to start formalization' })
     } finally {
@@ -55,6 +54,14 @@ export default function FormalizationPanel({ jobId, atom }) {
       dispatch({ type: 'ERROR', error: err.message || 'Failed to refresh formalization run' })
     } finally {
       setIsRefreshing(false)
+    }
+  }
+
+  function handleDashboardSelect(selected) {
+    if (selected?.kind === 'atom') {
+      dispatch({ type: 'SELECT_ATOM', atomId: selected.id })
+    } else {
+      dispatch({ type: 'SELECT', selected })
     }
   }
 
@@ -92,6 +99,14 @@ export default function FormalizationPanel({ jobId, atom }) {
             Refresh
           </button>
         )}
+        {state.runId && (
+          <button
+            onClick={() => setExpanded(true)}
+            className="rounded border border-[#67E8F9]/30 bg-[#67E8F9]/10 px-3 py-1.5 text-xs text-[#67E8F9] hover:bg-[#67E8F9]/15"
+          >
+            Live dashboard
+          </button>
+        )}
       </div>
 
       {state.error && (
@@ -101,33 +116,51 @@ export default function FormalizationPanel({ jobId, atom }) {
       )}
 
       {state.runId && (
-        <div className="mb-3 space-y-2">
+        <div className="mb-3 space-y-3">
           <div className="truncate font-mono text-[10px] text-white/35">run {state.runId}</div>
+          <div className="grid grid-cols-2 gap-2 text-[11px]">
+            <MiniStat label="Atoms" value={`${state.counts?.completed_atoms || 0}/${state.counts?.atoms || 0}`} />
+            <MiniStat label="Active" value={state.counts?.running_atoms || 0} />
+            <MiniStat label="Tool calls" value={state.counts?.tool_calls || 0} />
+            <MiniStat label="Workers" value={state.runtime?.parallelism || '-'} />
+          </div>
           <SummaryStrip summary={state.summary} />
+          <div className="rounded border border-white/10 bg-black/10 p-2 text-[11px] leading-relaxed text-white/55">
+            {(state.runtime?.model_name || 'formalization model')} - Lean {state.runtime?.lean_environment || 'environment'} - AXLE concurrency {state.runtime?.axle_max_concurrency || '-'}
+          </div>
         </div>
       )}
 
-      <div className="space-y-3">
-        <AtomList
-          atomOrder={state.atomOrder}
-          atoms={state.atoms}
-          selectedAtomId={state.selectedAtomId}
-          onSelect={(atomId) => dispatch({ type: 'SELECT_ATOM', atomId })}
-        />
-        <LiveTrace events={state.events} selectedAtomId={state.selectedAtomId} />
-        <AtomDetail atom={selectedFormalAtom} />
-      </div>
-
       {state.runId && (
-        <a
-          href={formalizationApi.leanUrl(state.runId)}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-3 inline-flex rounded border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/65 hover:bg-white/10"
-        >
-          Open merged Lean
-        </a>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <a
+            href={formalizationApi.leanUrl(state.runId)}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex rounded border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/65 hover:bg-white/10"
+          >
+            Open merged Lean
+          </a>
+        </div>
+      )}
+
+      {expanded && (
+        <FormalizationDashboard
+          state={state}
+          leanUrl={state.runId ? formalizationApi.leanUrl(state.runId) : ''}
+          onClose={() => setExpanded(false)}
+          onSelect={handleDashboardSelect}
+        />
       )}
     </section>
+  )
+}
+
+function MiniStat({ label, value }) {
+  return (
+    <div className="rounded border border-white/10 bg-black/10 p-2">
+      <div className="text-[9px] uppercase tracking-wider text-white/35">{label}</div>
+      <div className="mt-1 font-mono text-white/75">{value}</div>
+    </div>
   )
 }

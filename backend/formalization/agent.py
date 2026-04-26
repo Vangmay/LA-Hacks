@@ -3,14 +3,18 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional
 
+import httpx
+from openai import AsyncOpenAI
+
 from config import settings
-from core.openai_client import make_async_openai
 from formalization.config import formalization_settings
 from formalization.event_bus import formalization_event_bus
 from formalization.events import FormalizationEvent, FormalizationEventType
@@ -52,10 +56,22 @@ class FormalizationAgent:
     ) -> None:
         self._client = client
         self.toolbox = toolbox or FormalizationToolbox()
+        self._request_lock = asyncio.Lock()
+        self._last_request_at = 0.0
 
     def _get_client(self) -> Any:
         if self._client is None:
-            self._client = make_async_openai()
+            kwargs: dict[str, Any] = {}
+            if formalization_settings.formalization_base_url:
+                kwargs["base_url"] = formalization_settings.formalization_base_url
+            self._client = AsyncOpenAI(
+                api_key=_resolve_api_key(formalization_settings.formalization_api_key_env),
+                http_client=httpx.AsyncClient(
+                    timeout=formalization_settings.formalization_model_timeout_seconds,
+                    follow_redirects=True,
+                ),
+                **kwargs,
+            )
         return self._client
 
     async def run_atom(self, *, run_id: str, atom_id: str, context: dict[str, Any]) -> None:
@@ -73,7 +89,7 @@ class FormalizationAgent:
 
         for iteration in range(1, max_iterations + 1):
             formalization_store.set_atom_status(run_id, atom_id, FormalizationStatus.LLM_THINKING)
-            assistant_message = await self._complete(run_id, atom_id, messages, loop_state)
+            assistant_message = await self._complete(run_id, atom_id, messages, loop_state, iteration)
             if not assistant_message.get("tool_calls"):
                 assistant_message.pop("tool_calls", None)
             messages.append(assistant_message)
@@ -135,7 +151,7 @@ class FormalizationAgent:
                     if done:
                         return
                 elif name in AXLE_TOOL_NAMES:
-                    feedback = self._handle_axle_feedback(
+                    feedback = await self._handle_axle_feedback(
                         run_id=run_id,
                         atom_id=atom_id,
                         result=result,
@@ -160,22 +176,20 @@ class FormalizationAgent:
         atom_id: str,
         messages: list[dict[str, Any]],
         loop_state: _LoopState,
+        iteration: int,
     ) -> dict[str, Any]:
-        max_attempts = 20
+        max_attempts = max(1, formalization_settings.formalization_model_max_retries)
         for attempt in range(1, max_attempts + 1):
             try:
                 formalization_store.increment_llm_call_count(run_id, atom_id)
+                await self._pace_model()
                 response = await self._get_client().chat.completions.create(
-                    model=settings.openai_model,
-                    messages=messages,
-                    tools=self.toolbox.schemas,
-                    tool_choice="auto",
-                    stream=True,
-                    max_tokens=1800,
+                    **_chat_kwargs(messages=messages, tools=self.toolbox.schemas)
                 )
                 break
             except Exception as exc:  # noqa: BLE001
-                if exc.__class__.__name__ != "RateLimitError" or attempt >= max_attempts:
+                retryable = exc.__class__.__name__ in {"RateLimitError", "APITimeoutError", "APIConnectionError"}
+                if not retryable or attempt >= max_attempts:
                     raise
                 if "Request too large" in str(exc):
                     messages[:] = _compact_messages(messages, loop_state, force=True)
@@ -185,14 +199,29 @@ class FormalizationAgent:
                     run_id,
                     FormalizationEventType.LLM_THOUGHT,
                     atom_id=atom_id,
-                    payload={"delta": f"OpenAI rate limited; retrying in {delay:.1f}s (attempt {attempt}/{max_attempts})."},
+                    payload={
+                        "delta": f"Formalization model rate limited; retrying in {delay:.1f}s (attempt {attempt}/{max_attempts}).",
+                        "iteration": iteration,
+                        "model_name": formalization_settings.formalization_model,
+                    },
                 )
                 await asyncio.sleep(delay)
         if hasattr(response, "__aiter__"):
-            return await self._collect_stream(run_id, atom_id, response)
+            return await self._collect_stream(run_id, atom_id, response, iteration)
         return _message_from_response(response)
 
-    async def _collect_stream(self, run_id: str, atom_id: str, stream: Any) -> dict[str, Any]:
+    async def _pace_model(self) -> None:
+        interval = max(0.0, formalization_settings.formalization_model_min_interval_seconds)
+        if interval <= 0:
+            return
+        async with self._request_lock:
+            elapsed = time.monotonic() - self._last_request_at
+            wait = interval - elapsed
+            if wait > 0:
+                await asyncio.sleep(wait)
+            self._last_request_at = time.monotonic()
+
+    async def _collect_stream(self, run_id: str, atom_id: str, stream: Any, iteration: int) -> dict[str, Any]:
         content_parts: list[str] = []
         tool_parts: dict[int, dict[str, Any]] = {}
 
@@ -210,7 +239,11 @@ class FormalizationAgent:
                     run_id,
                     FormalizationEventType.LLM_THOUGHT,
                     atom_id=atom_id,
-                    payload={"delta": content},
+                    payload={
+                        "delta": content,
+                        "iteration": iteration,
+                        "model_name": formalization_settings.formalization_model,
+                    },
                 )
             for tool_delta in getattr(delta, "tool_calls", None) or []:
                 index = getattr(tool_delta, "index", 0)
@@ -236,7 +269,11 @@ class FormalizationAgent:
                 run_id,
                 FormalizationEventType.LLM_THOUGHT,
                 atom_id=atom_id,
-                payload={"delta": content},
+                payload={
+                    "delta": content,
+                    "iteration": iteration,
+                    "model_name": formalization_settings.formalization_model,
+                },
             )
         message = {"role": "assistant", "content": content or None}
         if tool_calls:
@@ -288,6 +325,8 @@ class FormalizationAgent:
                     "iteration": artifact.iteration,
                     "path": artifact.path,
                     "lean_code_chars": len(artifact.lean_code),
+                    "lean_code": _trim_text(artifact.lean_code, 24000),
+                    "lean_code_truncated": len(artifact.lean_code) > 24000,
                     "axle_check_okay": artifact.axle_check_okay,
                     "axle_verify_okay": artifact.axle_verify_okay,
                 },
@@ -325,7 +364,7 @@ class FormalizationAgent:
             )
         return False, None
 
-    def _handle_axle_feedback(
+    async def _handle_axle_feedback(
         self,
         *,
         run_id: str,
@@ -346,6 +385,12 @@ class FormalizationAgent:
                     run_id,
                     atom_id,
                     loop_state.latest_artifact_id,
+                    axle_check_okay=spec_okay,
+                )
+                await _publish_artifact_update(
+                    run_id,
+                    atom_id,
+                    artifact_id=loop_state.latest_artifact_id,
                     axle_check_okay=spec_okay,
                 )
             if loop_state.latest_artifact_kind == "spec":
@@ -398,6 +443,12 @@ class FormalizationAgent:
                     run_id,
                     atom_id,
                     loop_state.latest_artifact_id,
+                    axle_verify_okay=verify_okay,
+                )
+                await _publish_artifact_update(
+                    run_id,
+                    atom_id,
+                    artifact_id=loop_state.latest_artifact_id,
                     axle_verify_okay=verify_okay,
                 )
             if verify_okay:
@@ -502,6 +553,36 @@ def _append_user_feedback(
     message = {"role": "user", "content": content}
     messages.append(message)
     formalization_store.append_llm_message(run_id, atom_id, message)
+
+
+def _settings_key_value(env_name: str) -> str:
+    normalized = env_name.lower()
+    if hasattr(settings, normalized):
+        return str(getattr(settings, normalized) or "")
+    return ""
+
+
+def _resolve_api_key(env_name: str) -> str:
+    value = os.getenv(env_name) or _settings_key_value(env_name)
+    if not value:
+        raise RuntimeError(f"missing formalization model API key for {env_name}")
+    return value
+
+
+def _chat_kwargs(*, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> dict[str, Any]:
+    kwargs: dict[str, Any] = {
+        "model": formalization_settings.formalization_model or settings.openai_model,
+        "messages": messages,
+        "tools": tools,
+        "tool_choice": "auto",
+        "stream": True,
+        "max_tokens": max(512, formalization_settings.formalization_max_output_tokens),
+    }
+    if formalization_settings.formalization_reasoning_effort:
+        kwargs["extra_body"] = {
+            "reasoning_effort": formalization_settings.formalization_reasoning_effort,
+        }
+    return kwargs
 
 
 def _normalize_agent_tool_args(name: str, args: dict[str, Any], loop_state: _LoopState) -> dict[str, Any]:
@@ -711,13 +792,38 @@ async def _publish_tool_result(run_id: str, atom_id: str, result: ToolDispatchRe
         )
 
 
+async def _publish_artifact_update(
+    run_id: str,
+    atom_id: str,
+    *,
+    artifact_id: str,
+    axle_check_okay: Optional[bool] = None,
+    axle_verify_okay: Optional[bool] = None,
+) -> None:
+    payload: dict[str, Any] = {"artifact_id": artifact_id}
+    if axle_check_okay is not None:
+        payload["axle_check_okay"] = axle_check_okay
+    if axle_verify_okay is not None:
+        payload["axle_verify_okay"] = axle_verify_okay
+    await _publish(
+        run_id,
+        FormalizationEventType.ARTIFACT_UPDATED,
+        atom_id=atom_id,
+        payload=payload,
+    )
+
+
 def _tool_event_payload(record: ToolCallRecord) -> dict[str, Any]:
+    duration_ms = None
+    if record.completed_at:
+        duration_ms = round((record.completed_at - record.started_at).total_seconds() * 1000)
     return {
         "call_id": record.call_id,
         "tool_name": record.tool_name,
         "arguments": _summarize_arguments(record.arguments),
         "started_at": record.started_at.isoformat(),
         "completed_at": record.completed_at.isoformat() if record.completed_at else None,
+        "duration_ms": duration_ms,
         "status": record.status,
         "result_summary": record.result_summary,
         "error": record.error,
@@ -816,7 +922,8 @@ def _rate_limit_delay_seconds(exc: Exception, attempt: int) -> float:
 
     text = str(exc)
     jitter = random.uniform(0.5, 3.0)
+    max_delay = max(5.0, formalization_settings.formalization_model_retry_max_delay_seconds)
     match = re.search(r"try again in ([0-9.]+)s", text, flags=re.IGNORECASE)
     if match:
-        return min(180.0, max(5.0, float(match.group(1)) + 3.0 + jitter))
-    return min(180.0, 10.0 * attempt + jitter)
+        return min(max_delay, max(5.0, float(match.group(1)) + 3.0 + jitter))
+    return min(max_delay, 10.0 * attempt + jitter)
