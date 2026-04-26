@@ -161,6 +161,7 @@ export default function PocSession() {
 
   const feedRef     = useRef(null)
   const fileInputRef = useRef(null)
+  const prevSelectedId = useRef(null)
 
   // Load + poll claims
   useEffect(() => {
@@ -219,17 +220,28 @@ export default function PocSession() {
 
   // Load spec when testable claim selected
   useEffect(() => {
-    if (!selectedId) { setSpec(null); return }
+    if (!selectedId) { 
+      setSpec(null); 
+      prevSelectedId.current = null;
+      return; 
+    }
     const claim = claimsData?.claims?.find(c => c.claim_id === selectedId)
-    if (claim?.testability !== 'testable') { setSpec(null); return }
-    setSpecLoading(true)
-    api.poc.spec(sessionId, selectedId)
-      .then(s => { 
-        setSpec(s)
-        setSpecLoading(false)
-        setSelectedFile('README.md')
-      })
-      .catch(() => { setSpec(null); setSpecLoading(false) })
+    if (claim && claim.testability !== 'testable') { 
+      setSpec(null); 
+      return; 
+    }
+    
+    if (selectedId !== prevSelectedId.current) {
+      prevSelectedId.current = selectedId
+      setSpecLoading(true)
+      api.poc.spec(sessionId, selectedId)
+        .then(s => { 
+          setSpec(s)
+          setSpecLoading(false)
+          setSelectedFile('README.md')
+        })
+        .catch(() => { setSpec(null); setSpecLoading(false) })
+    }
   }, [selectedId, sessionId, claimsData])
 
   // Poll for analysis report once results uploaded
