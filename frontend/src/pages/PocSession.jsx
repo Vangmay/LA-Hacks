@@ -1,5 +1,4 @@
 
-
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
@@ -7,8 +6,6 @@ import Chip from '../components/Chip';
 import SectionLabel from '../components/SectionLabel';
 import TestabilityChip from '../components/TestabilityChip';
 import ReproChip from '../components/ReproChip';
-import FeedRow from '../components/FeedRow';
-
 
 const C = {
   bg:      '#0A0C10',
@@ -20,8 +17,6 @@ const C = {
   indigo:  '#5B5BD6',
   cyan:    '#00eaff',
   purple:  '#b388ff',
-  // Added for new features
-  codeTab: '#00eaff',
 };
 
 function mono(size = 11, weight = 400) {
@@ -31,8 +26,6 @@ function grotesk(size = 13, weight = 400) {
   return { fontFamily: 'Space Grotesk, sans-serif', fontSize: size, fontWeight: weight };
 }
 
-
-// --- Local: ClaimRow, SuccessCriterion, ScaffoldFileChip, ReportPanel ---
 function ClaimRow({ claim, selected, reproStatus, onClick, checkable, checked, onCheckChange }) {
   const stop = (e) => e.stopPropagation()
   return (
@@ -102,18 +95,34 @@ function SuccessCriterion({ c }) {
   )
 }
 
-function ScaffoldFileChip({ name }) {
+function ScaffoldFileRow({ name, selected, onClick }) {
+  const ext = name.includes('.') ? name.split('.').pop() : ''
+  const baseName = name.includes('.') ? name.slice(0, name.lastIndexOf('.')) : name
+  const extColor = { py: C.cyan, md: C.purple, txt: C.muted }[ext] || C.muted
   return (
-    <span style={{
-      fontFamily: 'JetBrains Mono, monospace', fontSize: 10,
-      color: C.cyan,
-      background: 'rgba(0,234,255,0.08)',
-      border: '1px solid rgba(0,234,255,0.20)',
-      padding: '2px 8px',
-      borderRadius: 3,
-    }}>
-      {name}
-    </span>
+    <div
+      onClick={onClick}
+      style={{
+        padding: '7px 10px',
+        cursor: 'pointer',
+        background: selected ? 'rgba(0,234,255,0.07)' : 'transparent',
+        borderLeft: `2px solid ${selected ? C.cyan : 'transparent'}`,
+        display: 'flex', alignItems: 'center', gap: 7,
+        transition: 'background 0.12s',
+      }}
+    >
+      <span style={{
+        ...mono(9),
+        color: extColor,
+        minWidth: 26,
+        textAlign: 'center',
+        background: 'rgba(255,255,255,0.06)',
+        padding: '1px 4px',
+        borderRadius: 2,
+        flexShrink: 0,
+      }}>{ext || '?'}</span>
+      <span style={{ ...mono(10), color: selected ? C.text : C.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{baseName}</span>
+    </div>
   )
 }
 
@@ -160,27 +169,24 @@ export default function PocSession() {
   const { sessionId } = useParams()
   const navigate = useNavigate()
 
-  const [claimsData, setClaimsData]     = useState(null)
-  const [selectedId, setSelectedId]     = useState(null)
-  const [spec, setSpec]                 = useState(null)
-  const [specLoading, setSpecLoading]   = useState(false)
-  const [feed, setFeed]                 = useState([])
-  const [jobStatus, setJobStatus]       = useState('processing')
-  const [zipReady, setZipReady]         = useState(false)
-  const [uploading, setUploading]       = useState(false)
+  const [claimsData, setClaimsData]         = useState(null)
+  const [selectedId, setSelectedId]         = useState(null)
+  const [spec, setSpec]                     = useState(null)
+  const [specLoading, setSpecLoading]       = useState(false)
+  const [jobStatus, setJobStatus]           = useState('processing')
+  const [zipReady, setZipReady]             = useState(false)
+  const [uploading, setUploading]           = useState(false)
   const [analysisStatus, setAnalysisStatus] = useState(null)
-  const [report, setReport]             = useState(null)
-  const [reproStatuses, setReproStatuses] = useState({})
-  const [checkedIds, setCheckedIds]     = useState(() => new Set())
+  const [report, setReport]                 = useState(null)
+  const [reproStatuses, setReproStatuses]   = useState({})
+  const [checkedIds, setCheckedIds]         = useState(() => new Set())
   const [scaffoldStatus, setScaffoldStatus] = useState('awaiting_selection')
   const [scaffoldError, setScaffoldError]   = useState(null)
-  const [paperTitle, setPaperTitle]     = useState('')
-  const [codeTab, setCodeTab]           = useState('')
-  const [sessionError, setSessionError] = useState(null)
+  const [paperTitle, setPaperTitle]         = useState('')
+  const [codeTab, setCodeTab]               = useState('')
+  const [sessionError, setSessionError]     = useState(null)
 
-  const feedRef     = useRef(null)
   const fileInputRef = useRef(null)
-
 
   // Load + poll claims and paper title
   useEffect(() => {
@@ -202,23 +208,15 @@ export default function PocSession() {
     return () => clearInterval(t)
   }, [sessionId])
 
-  // SSE stream
+  // SSE stream — used for real-time claim refresh and phase completion signals
   useEffect(() => {
     const es = api.poc.stream(sessionId)
-
     const refresh = () =>
       api.poc.claims(sessionId).then(setClaimsData).catch(() => {})
 
-    es.addEventListener('atom_created', (e) => {
-      setFeed(f => [...f, { event_type: 'atom_created', payload: JSON.parse(e.data) }])
-      refresh()
-    })
-    es.addEventListener('check_complete', (e) => {
-      setFeed(f => [...f, { event_type: 'check_complete', payload: JSON.parse(e.data) }])
-      refresh()
-    })
-    es.addEventListener('report_ready', (e) => {
-      setFeed(f => [...f, { event_type: 'report_ready', payload: JSON.parse(e.data) }])
+    es.addEventListener('atom_created', () => refresh())
+    es.addEventListener('check_complete', () => refresh())
+    es.addEventListener('report_ready', () => {
       setZipReady(true)
       setScaffoldStatus('ready')
       setJobStatus('complete')
@@ -228,20 +226,20 @@ export default function PocSession() {
     return () => es.close()
   }, [sessionId])
 
-  // Auto-scroll feed
+  // Load spec when testable claim selected; auto-select first scaffold file
   useEffect(() => {
-    if (feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight
-  }, [feed])
-
-  // Load spec when testable claim selected
-  useEffect(() => {
-    if (!selectedId) { setSpec(null); return }
+    if (!selectedId) { setSpec(null); setCodeTab(''); return }
     const claim = claimsData?.claims?.find(c => c.claim_id === selectedId)
-    if (claim?.testability !== 'testable') { setSpec(null); return }
+    if (claim?.testability !== 'testable') { setSpec(null); setCodeTab(''); return }
     setSpecLoading(true)
     api.poc.spec(sessionId, selectedId)
-      .then(s => { setSpec(s); setSpecLoading(false) })
-      .catch(() => { setSpec(null); setSpecLoading(false) })
+      .then(s => {
+        setSpec(s)
+        const files = s.scaffold_files ? Object.keys(s.scaffold_files) : []
+        setCodeTab(files[0] || '')
+        setSpecLoading(false)
+      })
+      .catch(() => { setSpec(null); setCodeTab(''); setSpecLoading(false) })
   }, [selectedId, sessionId, claimsData])
 
   // Poll for analysis report once results uploaded
@@ -250,7 +248,6 @@ export default function PocSession() {
     const t = setInterval(async () => {
       try {
         const data = await api.poc.report(sessionId)
-        // Backend returns 202 (2xx) while still processing; skip until real report arrives
         if (!Array.isArray(data.results)) return
         setReport(data)
         setAnalysisStatus('complete')
@@ -263,7 +260,7 @@ export default function PocSession() {
     return () => clearInterval(t)
   }, [analysisStatus, sessionId])
 
-  // Poll scaffold status so the download button activates as soon as Phase 2 finishes
+  // Poll scaffold status
   useEffect(() => {
     let cancelled = false
     const tick = async () => {
@@ -274,11 +271,7 @@ export default function PocSession() {
         setScaffoldStatus(next)
         setScaffoldError(s.scaffold_error || s.job_error || null)
         setZipReady(!!s.zip_ready)
-        // Flip job status based on what the server reports
-        if (s.job_status === 'error') {
-          setJobStatus('error')
-          return
-        }
+        if (s.job_status === 'error') { setJobStatus('error'); return }
         if (next === 'awaiting_selection' || next === 'generating' || next === 'ready') {
           setJobStatus(j => j === 'processing' ? 'ready' : j)
         }
@@ -328,8 +321,9 @@ export default function PocSession() {
   }
 
   const selectedClaim = claimsData?.claims?.find(c => c.claim_id === selectedId)
+  const scaffoldFiles = spec?.scaffold_files ?? {}
+  const hasScaffoldFiles = Object.keys(scaffoldFiles).length > 0
 
-  // ── Status chip helper ──────────────────────────────────────────────────────
   const statusChipStyle = (() => {
     if (jobStatus === 'complete')
       return { bg: '#14532D', border: '#22C55E', color: '#22C55E', label: '✓ COMPLETE' }
@@ -353,13 +347,14 @@ export default function PocSession() {
         {claimsData && (<span style={{ ...mono(10), color: C.muted }}>{claimsData.testable} testable · {claimsData.theoretical} theoretical</span>)}
         <div style={{ ...mono(10, 700), padding: '3px 8px', borderRadius: 3, background: statusChipStyle.bg, border: `1px solid ${statusChipStyle.border}`, color: statusChipStyle.color }}>{statusChipStyle.label}</div>
       </div>
-      {/* Body: three columns */}
+
+      {/* Body: claims | detail | scaffold viewer */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
+
         {/* Claims list */}
-        <div style={{ width: 280, flexShrink: 0, background: C.sunken, borderRight: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ width: 260, flexShrink: 0, background: C.sunken, borderRight: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ padding: '7px 12px', borderBottom: `1px solid ${C.border}`, ...mono(9, 700), color: C.muted, letterSpacing: '0.1em', textTransform: 'uppercase', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span>CLAIMS {claimsData ? `(${claimsData.total})` : ''}</span>
-            {/* Select All Testable Button */}
             {claimsData && claimsData.claims?.length > 0 && (
               <button
                 onClick={() => {
@@ -375,8 +370,7 @@ export default function PocSession() {
               >
                 {(() => {
                   const testableIds = claimsData.claims.filter(c => c.testability === 'testable').map(c => c.claim_id)
-                  const allSelected = testableIds.every(id => checkedIds.has(id))
-                  return allSelected ? 'Unselect All' : 'Select All'
+                  return testableIds.every(id => checkedIds.has(id)) ? 'Unselect All' : 'Select All'
                 })()}
               </button>
             )}
@@ -404,11 +398,12 @@ export default function PocSession() {
             )}
           </div>
         </div>
+
         {/* Claim detail */}
-        <div style={{ width: 380, flexShrink: 0, background: C.surface, borderRight: `1px solid ${C.border}`, overflowY: 'auto', padding: 22, minWidth: 0, transition: 'box-shadow 0.2s' }}>
+        <div style={{ width: 340, flexShrink: 0, background: C.surface, borderRight: `1px solid ${C.border}`, overflowY: 'auto', padding: 22, minWidth: 0 }}>
           {!selectedClaim ? (
             <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8 }}>
-              <span style={{ ...mono(12), color: C.muted }}>Select a claim from the left panel</span>
+              <span style={{ ...mono(12), color: C.muted }}>Select a claim</span>
               {jobStatus === 'processing' && (<span style={{ ...mono(11), color: C.indigo }}>⟳ Pipeline running…</span>)}
             </div>
           ) : (
@@ -422,90 +417,144 @@ export default function PocSession() {
                 <div style={{ ...mono(10), color: C.muted, marginBottom: 8 }}>{selectedClaim.claim_id}</div>
                 <p style={{ ...grotesk(14), color: C.text, lineHeight: 1.65, margin: 0 }}>{selectedClaim.text}</p>
               </div>
+
               {selectedClaim.testability === 'theoretical' && (
                 <div style={{ padding: '10px 12px', background: 'rgba(107,114,128,0.07)', border: `1px solid ${C.border}`, borderRadius: 4, ...grotesk(12), color: C.muted, lineHeight: 1.5 }}>
                   This claim is theoretical — no executable scaffold can be generated.
                   {selectedClaim.spec_summary?.reason && (<div style={{ ...mono(10), marginTop: 6 }}>reason: {selectedClaim.spec_summary.reason}</div>)}
                 </div>
               )}
+
               {selectedClaim.testability === 'testable' && (
                 specLoading ? (
                   <div style={{ ...mono(11), color: C.muted }}>⟳ Loading spec…</div>
                 ) : !spec ? (
-                  <div style={{ ...mono(11), color: C.muted }}>{jobStatus === 'processing' ? '⟳ Scaffold generating…' : 'No spec available.'}</div>
+                  <div style={{ ...mono(11), color: C.muted }}>{jobStatus === 'processing' ? '⟳ Spec generating…' : 'No spec available.'}</div>
                 ) : (
                   <>
-                    <section style={{ marginBottom: 20 }}>
-                      {spec.success_criteria?.length > 0 && (
-                        <>
-                          <SectionLabel>Success Criteria</SectionLabel>
-                          {spec.success_criteria.map((c, i) => (<SuccessCriterion key={i} c={c} />))}
-                        </>
-                      )}
-                      {spec.environment && Object.keys(spec.environment).length > 0 && (
-                        <>
-                          <SectionLabel>Environment</SectionLabel>
-                          <div style={{ background: C.sunken, border: `1px solid ${C.border}`, borderRadius: 4, padding: '8px 10px' }}>
-                            {Object.entries(spec.environment).map(([k, v]) => (
-                              <div key={k} style={{ display: 'flex', gap: 12, marginBottom: 4 }}>
-                                <span style={{ ...mono(11), color: C.muted, minWidth: 100 }}>{k}</span>
-                                <span style={{ ...mono(11), color: C.text }}>{String(v)}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </>
-                      )}
-                      {spec.scaffold_files && Object.keys(spec.scaffold_files).length === 0 && scaffoldStatus === 'ready' && (
-                        <div style={{ padding: '8px 10px', background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.20)', borderRadius: 4, ...mono(11), color: '#EF4444', marginBottom: 10 }}>
-                          Scaffold generation failed for this claim (LLM error or timeout). Select it and click GENERATE SCAFFOLDS to retry.
+                    {spec.success_criteria?.length > 0 && (
+                      <section style={{ marginBottom: 18 }}>
+                        <SectionLabel>Success Criteria</SectionLabel>
+                        {spec.success_criteria.map((c, i) => (<SuccessCriterion key={i} c={c} />))}
+                      </section>
+                    )}
+                    {spec.environment && Object.keys(spec.environment).length > 0 && (
+                      <section style={{ marginBottom: 18 }}>
+                        <SectionLabel>Environment</SectionLabel>
+                        <div style={{ background: C.sunken, border: `1px solid ${C.border}`, borderRadius: 4, padding: '8px 10px' }}>
+                          {Object.entries(spec.environment).map(([k, v]) => (
+                            <div key={k} style={{ display: 'flex', gap: 12, marginBottom: 4 }}>
+                              <span style={{ ...mono(11), color: C.muted, minWidth: 100 }}>{k}</span>
+                              <span style={{ ...mono(11), color: C.text }}>{String(v)}</span>
+                            </div>
+                          ))}
                         </div>
-                      )}
-                      {spec.scaffold_files && Object.keys(spec.scaffold_files).length > 0 && (
-                        <>
-                          <SectionLabel>Scaffold Files</SectionLabel>
-                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-                            {Object.keys(spec.scaffold_files).map(name => (
-                              <span
-                                key={name}
-                                onClick={() => setCodeTab(codeTab === name ? '' : name)}
-                                style={{ cursor: 'pointer', opacity: codeTab === name ? 1 : 0.8, border: codeTab === name ? `2px solid ${C.codeTab}` : undefined, boxShadow: codeTab === name ? `0 0 0 2px ${C.codeTab}33` : undefined, marginBottom: 2 }}
-                                title={name}
-                              >
-                                <ScaffoldFileChip name={name} />
-                              </span>
-                            ))}
-                          </div>
-                          {codeTab && spec.scaffold_files[codeTab] && (
-                            <>
-                              <div style={{ ...mono(10), color: C.muted, marginBottom: 4 }}>{codeTab}</div>
-                              <pre style={{ background: C.sunken, border: `1px solid ${C.border}`, borderRadius: 4, padding: '10px 12px', ...mono(11), color: C.text, whiteSpace: 'pre-wrap', maxHeight: 220, overflowY: 'auto', margin: 0 }}>{spec.scaffold_files[codeTab]}</pre>
-                            </>
-                          )}
-                        </>
-                      )}
-                      {report && (
-                        <ReportPanel report={{ summary: report.summary, results: (report.results || []).filter(r => r.claim_id === selectedClaim.claim_id) }} />
-                      )}
-                    </section>
+                      </section>
+                    )}
+                    {report && (
+                      <ReportPanel report={{ summary: report.summary, results: (report.results || []).filter(r => r.claim_id === selectedClaim.claim_id) }} />
+                    )}
                   </>
                 )
               )}
             </>
           )}
         </div>
-        {/* Activity feed */}
-        <div style={{ width: 280, flexShrink: 0, background: C.sunken, borderLeft: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <div style={{ padding: '7px 12px', borderBottom: `1px solid ${C.border}`, ...mono(9, 700), color: C.muted, letterSpacing: '0.1em', textTransform: 'uppercase', flexShrink: 0 }}>ACTIVITY FEED</div>
-          <div ref={feedRef} style={{ flex: 1, overflowY: 'auto' }}>{feed.length === 0 ? (<div style={{ padding: 12, ...mono(10), color: C.muted }}>Waiting for events…</div>) : (feed.map((ev, i) => <FeedRow key={i} event={ev} />))}</div>
+
+        {/* Scaffold code viewer */}
+        <div style={{ flex: 1, minWidth: 0, background: C.sunken, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {/* Panel header */}
+          <div style={{ padding: '7px 12px', borderBottom: `1px solid ${C.border}`, ...mono(9, 700), color: C.muted, letterSpacing: '0.1em', textTransform: 'uppercase', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>SCAFFOLD</span>
+            {selectedClaim && hasScaffoldFiles && (
+              <span style={{ ...mono(9), color: C.indigo, fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>{selectedClaim.claim_id}</span>
+            )}
+          </div>
+
+          {/* Panel body */}
+          {!selectedClaim ? (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ ...mono(11), color: C.muted }}>Select a testable claim to view its scaffold</span>
+            </div>
+          ) : selectedClaim.testability !== 'testable' ? (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ ...mono(11), color: C.muted }}>Theoretical claim — no scaffold</span>
+            </div>
+          ) : specLoading ? (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ ...mono(11), color: C.muted }}>⟳ Loading…</span>
+            </div>
+          ) : !hasScaffoldFiles ? (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8 }}>
+              {scaffoldStatus === 'generating' ? (
+                <span style={{ ...mono(11), color: C.indigo }}>⟳ Generating scaffold…</span>
+              ) : scaffoldStatus === 'ready' ? (
+                <span style={{ ...mono(11), color: '#EF4444' }}>Scaffold generation failed for this claim. Select it and click GENERATE SCAFFOLDS to retry.</span>
+              ) : (
+                <span style={{ ...mono(11), color: C.muted }}>Check this claim and click GENERATE SCAFFOLDS</span>
+              )}
+            </div>
+          ) : (
+            <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
+              {/* File list */}
+              <div style={{ width: 156, flexShrink: 0, borderRight: `1px solid ${C.border}`, overflowY: 'auto', background: 'rgba(0,0,0,0.18)' }}>
+                {Object.keys(scaffoldFiles).map(name => (
+                  <ScaffoldFileRow
+                    key={name}
+                    name={name}
+                    selected={codeTab === name}
+                    onClick={() => setCodeTab(name)}
+                  />
+                ))}
+              </div>
+              {/* Code pane */}
+              <div style={{ flex: 1, overflow: 'auto', background: C.bg }}>
+                {codeTab && scaffoldFiles[codeTab] ? (
+                  <div style={{ minWidth: 'max-content' }}>
+                    {scaffoldFiles[codeTab].split('\n').map((line, i) => (
+                      <div
+                        key={i}
+                        style={{ display: 'flex', alignItems: 'stretch', minHeight: '1.6em' }}
+                      >
+                        <span style={{
+                          ...mono(10),
+                          color: C.muted,
+                          minWidth: 44,
+                          paddingRight: 14,
+                          paddingLeft: 12,
+                          textAlign: 'right',
+                          userSelect: 'none',
+                          borderRight: `1px solid ${C.border}`,
+                          flexShrink: 0,
+                          lineHeight: '1.6em',
+                          background: 'rgba(0,0,0,0.25)',
+                        }}>{i + 1}</span>
+                        <span style={{
+                          ...mono(11),
+                          color: C.text,
+                          paddingLeft: 14,
+                          paddingRight: 20,
+                          whiteSpace: 'pre',
+                          lineHeight: '1.6em',
+                        }}>{line}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span style={{ ...mono(11), color: C.muted }}>Select a file</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
       {/* Bottom action bar */}
       <div style={{ background: C.surface, borderTop: `1px solid ${C.border}`, padding: '11px 18px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
         {(() => {
-          const canGenerate =
-            checkedIds.size > 0 &&
-            scaffoldStatus !== 'generating' &&
-            scaffoldStatus !== 'phase_1'
+          const canGenerate = checkedIds.size > 0 && scaffoldStatus !== 'generating' && scaffoldStatus !== 'phase_1'
           const generating = scaffoldStatus === 'generating'
           return (
             <button
@@ -527,10 +576,18 @@ export default function PocSession() {
           )
         })()}
         <div style={{ width: 1, height: 16, background: C.border }} />
-        <button onClick={() => window.open(`/api/poc/${sessionId}/scaffold.zip`, '_blank')} disabled={!zipReady} style={{ ...mono(11, 700), letterSpacing: '0.05em', padding: '5px 14px', borderRadius: 3, border: `1px solid ${zipReady ? C.indigo : C.border}`, background: zipReady ? 'rgba(91,91,214,0.15)' : 'rgba(255,255,255,0.03)', color: zipReady ? C.indigo : C.muted, cursor: zipReady ? 'pointer' : 'not-allowed' }}>↓ SCAFFOLD.ZIP</button>
+        <button
+          onClick={() => window.open(`/api/poc/${sessionId}/scaffold.zip`, '_blank')}
+          disabled={!zipReady}
+          style={{ ...mono(11, 700), letterSpacing: '0.05em', padding: '5px 14px', borderRadius: 3, border: `1px solid ${zipReady ? C.indigo : C.border}`, background: zipReady ? 'rgba(91,91,214,0.15)' : 'rgba(255,255,255,0.03)', color: zipReady ? C.indigo : C.muted, cursor: zipReady ? 'pointer' : 'not-allowed' }}
+        >↓ SCAFFOLD.ZIP</button>
         <div style={{ width: 1, height: 16, background: C.border }} />
         <input ref={fileInputRef} type="file" accept=".json" onChange={handleUpload} style={{ display: 'none' }} />
-        <button onClick={() => fileInputRef.current?.click()} disabled={!zipReady || uploading} style={{ ...mono(11, 700), letterSpacing: '0.05em', padding: '5px 14px', borderRadius: 3, border: `1px solid ${zipReady && !uploading ? C.cyan : C.border}`, background: zipReady && !uploading ? 'rgba(0,234,255,0.08)' : 'rgba(255,255,255,0.03)', color: zipReady && !uploading ? C.cyan : C.muted, cursor: zipReady && !uploading ? 'pointer' : 'not-allowed' }}>{uploading ? '⟳ UPLOADING…' : '↑ UPLOAD RESULTS.JSON'}</button>
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={!zipReady || uploading}
+          style={{ ...mono(11, 700), letterSpacing: '0.05em', padding: '5px 14px', borderRadius: 3, border: `1px solid ${zipReady && !uploading ? C.cyan : C.border}`, background: zipReady && !uploading ? 'rgba(0,234,255,0.08)' : 'rgba(255,255,255,0.03)', color: zipReady && !uploading ? C.cyan : C.muted, cursor: zipReady && !uploading ? 'pointer' : 'not-allowed' }}
+        >{uploading ? '⟳ UPLOADING…' : '↑ UPLOAD RESULTS.JSON'}</button>
         {analysisStatus === 'analyzing' && (<span style={{ ...mono(11), color: C.indigo }}>⟳ Analyzing results…</span>)}
         {analysisStatus === 'complete' && report && (<span style={{ ...mono(11), color: '#22C55E' }}>✓ Analysis complete — {report.results?.length ?? 0} results</span>)}
         {scaffoldError && (<span style={{ ...mono(11), color: '#EF4444' }}>scaffold error: {scaffoldError}</span>)}
