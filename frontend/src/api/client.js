@@ -16,6 +16,36 @@ async function postJson(url, body) {
   return r.json()
 }
 
+async function fetchResearchJson(url) {
+  const r = await fetch(url)
+  const text = await r.text()
+  let data = {}
+  if (text) {
+    try {
+      data = JSON.parse(text)
+    } catch (err) {
+      throw new Error(`Research API returned invalid JSON from ${url}`)
+    }
+  }
+  if (!r.ok) {
+    throw new Error(data.detail || data.error || `Research API request failed with ${r.status}`)
+  }
+  return data
+}
+
+async function postResearchJson(url, body) {
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) {
+    throw new Error(data.detail || data.error || `Research API request failed with ${r.status}`)
+  }
+  return data
+}
+
 export const api = {
   reader: {
     submit: (arxivUrl, level = 'undergraduate') => {
@@ -44,6 +74,19 @@ export const api = {
     stream: (jobId) => new EventSource(`${BASE}/review/${jobId}/stream`),
     report: (jobId) => fetch(`${BASE}/review/${jobId}/report`).then(r => r.json()),
     reportMarkdown: (jobId) => fetch(`${BASE}/review/${jobId}/report/markdown`).then(r => r.text()),
+  },
+  research: {
+    runs: () => fetchResearchJson(`${BASE}/research/runs`),
+    start: (req) => postResearchJson(`${BASE}/research/start`, req),
+    status: (runId) => fetchResearchJson(`${BASE}/research/${runId}/status`),
+    snapshot: (runId) => fetchResearchJson(`${BASE}/research/${runId}/snapshot`),
+    stream: (runId) => new EventSource(`${BASE}/research/${runId}/stream`),
+    artifact: (runId, path) =>
+      fetchResearchJson(`${BASE}/research/${runId}/artifacts/${encodeURI(path)}`),
+    report: (runId) => fetchResearchJson(`${BASE}/research/${runId}/report`),
+    reportMarkdown: (runId) => fetch(`${BASE}/research/${runId}/report/markdown`).then(r => r.text()),
+    shared: (runId, artifact) => fetchResearchJson(`${BASE}/research/${runId}/shared/${artifact}`),
+    critique: (runId, criticId) => fetchResearchJson(`${BASE}/research/${runId}/critique/${criticId}`),
   },
   poc: {
     submit: (file) => postFile(`${BASE}/poc`, file),

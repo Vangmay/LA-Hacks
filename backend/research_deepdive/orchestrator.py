@@ -10,6 +10,8 @@ from typing import Any
 
 from .agent_runner import LiveAgentRunner
 from .config import DeepDiveConfig
+from .event_bus import DeepDiveEventBus
+from .events import DeepDiveEvent, DeepDiveEventType
 from .llm import DeepDiveLLMProvider
 from .models import (
     AgentExitReason,
@@ -49,12 +51,14 @@ class DeepDiveOrchestrator:
         prompt_book: PromptBook | None = None,
         llm_provider: DeepDiveLLMProvider | None = None,
         tool_runtime: ToolRuntime | None = None,
+        event_bus: DeepDiveEventBus | None = None,
     ) -> None:
         self.config = (config or DeepDiveConfig()).normalized()
         self.prompt_book = prompt_book or PromptBook()
         self.tools = build_default_tool_registry()
         self.workspace = WorkspaceManager(self.config.workspace_root)
         self.llm = llm_provider or DeepDiveLLMProvider(self.config)
+        self.event_bus = event_bus
         self.tool_runtime = tool_runtime or ToolRuntime(
             workspace=self.workspace,
             http_timeout_seconds=self.config.http_timeout_seconds,
@@ -70,55 +74,231 @@ class DeepDiveOrchestrator:
             max_steps=self.config.subagent_max_steps,
             workspace_write_char_budget=self.config.workspace_write_char_budget,
             max_workspace_tool_calls=self.config.subagent_max_workspace_tool_calls,
+            event_bus=event_bus,
+        )
+
+    async def _emit(
+        self,
+        run_id: str,
+        event_type: DeepDiveEventType,
+        payload: dict[str, Any] | None = None,
+    ) -> None:
+        if not self.event_bus:
+            return
+        await self.event_bus.publish(
+            DeepDiveEvent(
+                type=event_type,
+                run_id=run_id,
+                payload=payload or {},
+            )
+        )
+
+    async def _emit_plans(self, run_id: str, investigators: list[InvestigatorPlan]) -> None:
+        for investigator in investigators:
+            await self._emit(
+                run_id,
+                DeepDiveEventType.INVESTIGATOR_PLANNED,
+                {
+                    "investigator_id": investigator.investigator_id,
+                    "section_id": investigator.section_id,
+                    "section_title": investigator.section_title,
+                    "workspace_path": str(investigator.workspace_path),
+                    "system_prompt_preview": investigator.system_prompt[:4000],
+                    "subagent_ids": [sub.subagent_id for sub in investigator.subagents],
+                },
+            )
+            for subagent in investigator.subagents:
+                await self._emit(
+                    run_id,
+                    DeepDiveEventType.SUBAGENT_PLANNED,
+                    {
+                        "subagent_id": subagent.subagent_id,
+                        "investigator_id": subagent.investigator_id,
+                        "section_id": subagent.section_id,
+                        "section_title": subagent.section_title,
+                        "workspace_path": str(subagent.workspace_path),
+                        "taste": subagent.taste.model_dump(),
+                        "allowed_tools": subagent.allowed_tools,
+                        "max_tool_calls": subagent.max_tool_calls,
+                        "model_role": subagent.model_role.value,
+                    },
+                )
+
+    async def _emit_subagent_completed(self, run_id: str, result: AgentRunResult) -> None:
+        await self._emit(
+            run_id,
+            DeepDiveEventType.SUBAGENT_COMPLETED,
+            {
+                "subagent_id": result.agent_id,
+                "exit_reason": result.exit_reason.value,
+                "summary": result.summary,
+                "error": result.error,
+                "workspace_path": str(result.workspace_path),
+                "model_provider": result.model_provider,
+                "model_name": result.model_name,
+                "budget": {
+                    "research_used": result.research_tool_calls_used or result.tool_calls_used,
+                    "workspace_used": result.workspace_tool_calls_used,
+                    "llm_steps": result.llm_steps_used,
+                },
+                "artifacts": [str(path) for path in result.artifacts],
+            },
+        )
+
+    async def _emit_investigator_synthesis(self, run_id: str, result: AgentRunResult) -> None:
+        artifact = result.artifacts[0] if result.artifacts else None
+        await self._emit(
+            run_id,
+            DeepDiveEventType.INVESTIGATOR_SYNTHESIZED,
+            {
+                "investigator_id": result.agent_id,
+                "summary": result.summary,
+                "exit_reason": result.exit_reason.value,
+                "synthesis_path": str(artifact) if artifact else "",
+                "synthesis_md": artifact.read_text(encoding="utf-8") if artifact and artifact.exists() else "",
+            },
+        )
+
+    async def _emit_cross_completed(self, run_id: str, run_root: Path, paths: list[Path]) -> None:
+        artifacts: dict[str, str] = {}
+        for path in paths:
+            if path.exists():
+                artifacts[path.name.replace(".md", "")] = path.read_text(encoding="utf-8")
+        for name in ("proposal_families.md", "global_evidence_map.md", "unresolved_conflicts.md"):
+            path = run_root / "shared" / name
+            if path.exists():
+                artifacts[path.name.replace(".md", "")] = path.read_text(encoding="utf-8")
+        await self._emit(
+            run_id,
+            DeepDiveEventType.CROSS_INVESTIGATOR_COMPLETED,
+            {"artifacts": artifacts},
+        )
+
+    async def _emit_critique_completed(self, run_id: str, critique: CritiqueResult) -> None:
+        await self._emit(
+            run_id,
+            DeepDiveEventType.CRITIQUE_COMPLETED,
+            {
+                "critic_id": critique.critic_id,
+                "lens": critique.lens,
+                "summary": critique.summary,
+                "workspace_path": str(critique.workspace_path),
+                "artifact_path": str(critique.artifact_path),
+                "critique_md": (
+                    critique.artifact_path.read_text(encoding="utf-8")
+                    if critique.artifact_path.exists()
+                    else ""
+                ),
+            },
         )
 
     async def run(self, request: DeepDiveRunRequest) -> DeepDiveRunResult:
         stages: list[ResearchStage] = []
         warnings: list[str] = []
         run_root = self.workspace.prepare_run(request.run_id)
+        current_stage = ResearchStage.BOOTSTRAP
 
         try:
+            await self._emit(
+                request.run_id,
+                DeepDiveEventType.RUN_STARTED,
+                {
+                    "run_id": request.run_id,
+                    "arxiv_url": request.arxiv_url,
+                    "paper_id": request.paper_id,
+                    "objective": request.research_objective,
+                    "mode": request.mode,
+                    "workspace_path": str(run_root),
+                    "config": {
+                        "max_investigators": self.config.max_investigators,
+                        "subagents_per_investigator": self.config.subagents_per_investigator,
+                        "subagent_max_tool_calls": self.config.subagent_max_tool_calls,
+                        "max_parallel_subagents": self.config.max_parallel_subagents,
+                        "dynamic_roster_enabled": self.config.dynamic_roster_enabled,
+                    },
+                },
+            )
+            await self._emit(request.run_id, DeepDiveEventType.STAGE_ENTERED, {"stage": current_stage.value})
             stages.append(ResearchStage.BOOTSTRAP)
-            if request.mode == "live" and self.config.dynamic_roster_enabled:
+            await self._emit(request.run_id, DeepDiveEventType.STAGE_COMPLETED, {"stage": current_stage.value})
+
+            current_stage = ResearchStage.INVESTIGATOR_PLANNING
+            await self._emit(request.run_id, DeepDiveEventType.STAGE_ENTERED, {"stage": current_stage.value})
+            if request.mode == "live" and (
+                self.config.dynamic_roster_enabled or not _clean_titles(request.section_titles)
+            ):
                 investigators = await self._plan_investigators_live(request, run_root, warnings)
             else:
                 investigators = self._plan_investigators(request, run_root)
             stages.append(ResearchStage.INVESTIGATOR_PLANNING)
+            await self._emit_plans(request.run_id, investigators)
+            await self._emit(request.run_id, DeepDiveEventType.STAGE_COMPLETED, {"stage": current_stage.value})
 
+            current_stage = ResearchStage.SUBAGENT_RESEARCH
+            await self._emit(request.run_id, DeepDiveEventType.STAGE_ENTERED, {"stage": current_stage.value})
             subagent_results = await self._run_all_subagents(investigators, request)
             stages.append(ResearchStage.SUBAGENT_RESEARCH)
+            await self._emit(request.run_id, DeepDiveEventType.STAGE_COMPLETED, {"stage": current_stage.value})
 
+            current_stage = ResearchStage.INVESTIGATOR_SYNTHESIS
+            await self._emit(request.run_id, DeepDiveEventType.STAGE_ENTERED, {"stage": current_stage.value})
+            syntheses: list[AgentRunResult] = []
             if request.mode == "live":
-                syntheses = [
-                    await self._synthesize_investigator_live(plan, subagent_results, request)
-                    for plan in investigators
-                ]
+                for plan in investigators:
+                    result = await self._synthesize_investigator_live(plan, subagent_results, request)
+                    syntheses.append(result)
+                    await self._emit_investigator_synthesis(request.run_id, result)
             else:
-                syntheses = [self._synthesize_investigator(plan, subagent_results) for plan in investigators]
+                for plan in investigators:
+                    result = self._synthesize_investigator(plan, subagent_results)
+                    syntheses.append(result)
+                    await self._emit_investigator_synthesis(request.run_id, result)
             stages.append(ResearchStage.INVESTIGATOR_SYNTHESIS)
+            await self._emit(request.run_id, DeepDiveEventType.STAGE_COMPLETED, {"stage": current_stage.value})
 
+            current_stage = ResearchStage.CROSS_INVESTIGATOR_DEEP_DIVE
+            await self._emit(request.run_id, DeepDiveEventType.STAGE_ENTERED, {"stage": current_stage.value})
             if request.mode == "live":
-                await self._run_cross_investigator_deep_dive_live(
+                cross_paths = await self._run_cross_investigator_deep_dive_live(
                     run_root,
                     investigators,
                     syntheses,
                     request,
                 )
             else:
-                self._write_cross_investigator_deep_dive(run_root, syntheses, request)
+                cross_paths = [self._write_cross_investigator_deep_dive(run_root, syntheses, request)]
             stages.append(ResearchStage.CROSS_INVESTIGATOR_DEEP_DIVE)
+            await self._emit_cross_completed(request.run_id, run_root, cross_paths)
+            await self._emit(request.run_id, DeepDiveEventType.STAGE_COMPLETED, {"stage": current_stage.value})
 
+            current_stage = ResearchStage.CRITIQUE
+            await self._emit(request.run_id, DeepDiveEventType.STAGE_ENTERED, {"stage": current_stage.value})
             if request.mode == "live":
                 critiques = await self._run_critiques_live(run_root, syntheses, request)
             else:
                 critiques = self._run_critiques(run_root, syntheses, request)
             stages.append(ResearchStage.CRITIQUE)
+            for critique in critiques:
+                await self._emit_critique_completed(request.run_id, critique)
+            await self._emit(request.run_id, DeepDiveEventType.STAGE_COMPLETED, {"stage": current_stage.value})
 
+            current_stage = ResearchStage.FINALIZATION
+            await self._emit(request.run_id, DeepDiveEventType.STAGE_ENTERED, {"stage": current_stage.value})
             if request.mode == "live":
                 final_report = await self._finalize_live(run_root, request, investigators, syntheses, critiques)
             else:
                 final_report = self._finalize(run_root, request, investigators, syntheses, critiques)
             stages.append(ResearchStage.FINALIZATION)
+            await self._emit(
+                request.run_id,
+                DeepDiveEventType.RUN_FINALIZED,
+                {
+                    "run_id": request.run_id,
+                    "final_report_path": str(final_report),
+                    "final_report_md": final_report.read_text(encoding="utf-8") if final_report.exists() else "",
+                },
+            )
+            await self._emit(request.run_id, DeepDiveEventType.STAGE_COMPLETED, {"stage": current_stage.value})
 
             return DeepDiveRunResult(
                 run_id=request.run_id,
@@ -133,6 +313,15 @@ class DeepDiveOrchestrator:
                 warnings=warnings,
             )
         except Exception as exc:
+            await self._emit(
+                request.run_id,
+                DeepDiveEventType.RUN_ERROR,
+                {
+                    "run_id": request.run_id,
+                    "stage": current_stage.value,
+                    "error": str(exc),
+                },
+            )
             return DeepDiveRunResult(
                 run_id=request.run_id,
                 status="error",
@@ -153,7 +342,7 @@ class DeepDiveOrchestrator:
         taste_rosters: dict[str, list[ResearchTaste]] | None = None,
         planner_notes: dict[str, dict[str, Any]] | None = None,
     ) -> list[InvestigatorPlan]:
-        section_titles = request.section_titles or ["whole paper"]
+        section_titles = _clean_titles(request.section_titles) or ["whole paper"]
         selected = section_titles[: self.config.max_investigators]
         tool_names = sorted(
             self.tool_runtime.executable_tool_names()
@@ -267,17 +456,22 @@ class DeepDiveOrchestrator:
         run_root: Path,
         warnings: list[str],
     ) -> list[InvestigatorPlan]:
-        section_titles = request.section_titles or ["whole paper"]
+        section_titles, direction_note = await self._select_investigation_titles(request, run_root, warnings)
         selected = section_titles[: self.config.max_investigators]
         director_lines = [
             "# Director Plan",
             "",
             f"- Research objective: `{request.research_objective}`",
+            f"- Direction source: `{direction_note.get('source', 'unknown')}`",
             f"- Dynamic roster enabled: `{self.config.dynamic_roster_enabled}`",
             f"- Requested investigators: `{len(selected)}`",
             f"- Subagents per investigator: `{self.config.subagents_per_investigator}`",
             "",
-            "## Investigation Zones",
+            "## Rationale",
+            "",
+            str(direction_note.get("rationale") or "No rationale recorded."),
+            "",
+            "## Investigation Directions",
             "",
         ]
         zones = []
@@ -294,7 +488,15 @@ class DeepDiveOrchestrator:
             )
             director_lines.append(f"- `{investigator_id}`: {title}")
         self.workspace.write_markdown(run_root / "shared" / "director_plan.md", "\n".join(director_lines) + "\n")
-        self.workspace.write_json(run_root / "shared" / "investigation_zones.json", {"zones": zones})
+        self.workspace.write_json(
+            run_root / "shared" / "investigation_zones.json",
+            {
+                "source": direction_note.get("source", "unknown"),
+                "rationale": direction_note.get("rationale", ""),
+                "zones": zones,
+                "raw_planner_output": direction_note.get("raw_planner_output"),
+            },
+        )
 
         rosters: dict[str, list[ResearchTaste]] = {}
         notes: dict[str, dict[str, Any]] = {}
@@ -302,13 +504,22 @@ class DeepDiveOrchestrator:
         for zone in zones:
             title = str(zone["section_title"])
             investigator_id = str(zone["investigator_id"])
-            roster, note = await self._plan_dynamic_roster_for_investigator(
-                request=request,
-                investigator_id=investigator_id,
-                section_title=title,
-            )
-            rosters[investigator_id] = roster
-            notes[investigator_id] = note
+            if self.config.dynamic_roster_enabled:
+                roster, note = await self._plan_dynamic_roster_for_investigator(
+                    request=request,
+                    investigator_id=investigator_id,
+                    section_title=title,
+                )
+                rosters[investigator_id] = roster
+                notes[investigator_id] = note
+            else:
+                note = {
+                    "status": "skipped",
+                    "source": "deterministic",
+                    "rationale": "Dynamic roster planning is disabled; deterministic tastes will be generated for this director-selected direction.",
+                    "validation_errors": [],
+                }
+                notes[investigator_id] = note
             trace_lines.extend(
                 [
                     f"## {investigator_id}",
@@ -324,7 +535,158 @@ class DeepDiveOrchestrator:
                 trace_lines.append(f"- Fallback reason: {note['fallback_reason']}")
                 trace_lines.append("")
         self.workspace.write_markdown(run_root / "shared" / "planning_trace.md", "\n".join(trace_lines))
-        return self._plan_investigators(request, run_root, taste_rosters=rosters, planner_notes=notes)
+        planned_request = request.model_copy(update={"section_titles": selected})
+        return self._plan_investigators(
+            planned_request,
+            run_root,
+            taste_rosters=rosters if rosters else None,
+            planner_notes=notes,
+        )
+
+    async def _select_investigation_titles(
+        self,
+        request: DeepDiveRunRequest,
+        run_root: Path,
+        warnings: list[str],
+    ) -> tuple[list[str], dict[str, Any]]:
+        explicit_titles = _clean_titles(request.section_titles)
+        if explicit_titles:
+            return explicit_titles, {
+                "status": "accepted",
+                "source": "request",
+                "rationale": "Caller supplied explicit investigation directions.",
+            }
+
+        metadata = await self._resolve_seed_metadata_for_director(request, run_root, warnings)
+        fallback_titles = ["whole paper"]
+        prompt = self._investigation_direction_prompt(request, metadata)
+        try:
+            response = await self.llm.chat_json(
+                role=AgentModelRole.DIRECTOR,
+                messages=[
+                    {"role": "system", "content": "You are the PaperCourt research director. Return strict JSON only."},
+                    {"role": "user", "content": prompt},
+                ],
+            )
+            titles, raw_items, rationale = self._parse_investigation_direction_response(response)
+            if not titles:
+                raise ValueError("director returned no investigation directions")
+            return titles[: self.config.max_investigators], {
+                "status": "accepted",
+                "source": "director",
+                "rationale": rationale,
+                "raw_planner_output": raw_items,
+            }
+        except Exception as exc:
+            warning = f"director investigation planning failed; using whole-paper fallback: {exc}"
+            warnings.append(warning)
+            return fallback_titles, {
+                "status": "fallback",
+                "source": "fallback",
+                "rationale": warning,
+                "validation_errors": [str(exc)],
+            }
+
+    async def _resolve_seed_metadata_for_director(
+        self,
+        request: DeepDiveRunRequest,
+        run_root: Path,
+        warnings: list[str],
+    ) -> dict[str, Any]:
+        try:
+            metadata = await self.tool_runtime.execute(
+                "resolve_arxiv_paper",
+                {"arxiv_url": request.arxiv_url},
+                run_root / "shared",
+            )
+        except Exception as exc:
+            warnings.append(f"director metadata lookup failed: {exc}")
+            return {}
+        self.workspace.write_json(run_root / "shared" / "director_seed_metadata.json", metadata)
+        return metadata if isinstance(metadata, dict) else {"metadata": metadata}
+
+    def _investigation_direction_prompt(
+        self,
+        request: DeepDiveRunRequest,
+        seed_metadata: dict[str, Any],
+    ) -> str:
+        metadata_text = json.dumps(seed_metadata, indent=2, default=str)[:12000]
+        return (
+            "Choose investigator directions for a PaperCourt research deep dive. These are not fixed paper "
+            "sections. They should be the most promising literature or novelty search directions for this "
+            "specific seed paper and objective. Prefer directions that can each support a squad of subagents "
+            "with distinct evidence tastes.\n\n"
+            f"- arXiv URL: `{request.arxiv_url}`\n"
+            f"- Paper ID: `{request.paper_id or 'unknown'}`\n"
+            f"- Research objective: `{request.research_objective}`\n"
+            f"- Research brief: {request.research_brief or '(none)'}\n"
+            f"- Maximum investigators: `{self.config.max_investigators}`\n"
+            f"- Subagents per investigator: `{self.config.subagents_per_investigator}`\n\n"
+            "Seed metadata, when available:\n"
+            "```json\n"
+            f"{metadata_text or '{}'}\n"
+            "```\n\n"
+            "Return JSON with this shape:\n"
+            "{\n"
+            '  "rationale": "why these directions are the best use of the investigator budget",\n'
+            '  "directions": [\n'
+            "    {\n"
+            '      "title": "short investigator direction, not a generic section label",\n'
+            '      "why_promising": "why this direction deserves an investigator",\n'
+            '      "seed_hooks": ["specific seed-paper hooks or metadata clues"],\n'
+            '      "research_questions": ["question this investigator should answer"],\n'
+            '      "priority": 1\n'
+            "    }\n"
+            "  ]\n"
+            "}\n\n"
+            "Avoid generic paper-section buckets unless the seed metadata makes that exact direction "
+            "unusually promising. Use fewer than the maximum investigators if the evidence does not "
+            "justify more."
+        )
+
+    def _parse_investigation_direction_response(
+        self,
+        response: dict[str, Any] | list[Any],
+    ) -> tuple[list[str], list[Any], str]:
+        rationale = ""
+        if isinstance(response, dict):
+            raw_items = (
+                response.get("directions")
+                or response.get("investigators")
+                or response.get("zones")
+                or response.get("section_titles")
+                or []
+            )
+            rationale = str(response.get("rationale") or response.get("planner_rationale") or "")
+        elif isinstance(response, list):
+            raw_items = response
+            rationale = "Director returned a top-level direction list."
+        else:
+            raise ValueError("director response must be a JSON object or array")
+        if not isinstance(raw_items, list):
+            raise ValueError("director response must contain a direction list")
+
+        titles: list[str] = []
+        seen: set[str] = set()
+        for item in raw_items:
+            title = ""
+            if isinstance(item, str):
+                title = item
+            elif isinstance(item, dict):
+                title = str(
+                    item.get("title")
+                    or item.get("direction")
+                    or item.get("investigation_title")
+                    or item.get("section_title")
+                    or item.get("name")
+                    or ""
+                )
+            cleaned = _clean_direction_title(title)
+            key = cleaned.casefold()
+            if cleaned and key not in seen:
+                titles.append(cleaned)
+                seen.add(key)
+        return titles, raw_items, rationale
 
     async def _plan_dynamic_roster_for_investigator(
         self,
@@ -577,11 +939,36 @@ class DeepDiveOrchestrator:
         async def run_one(plan: SubagentPlan) -> AgentRunResult:
             async with semaphore:
                 try:
+                    if request.mode != "live":
+                        await self._emit(
+                            request.run_id,
+                            DeepDiveEventType.SUBAGENT_STARTED,
+                            {
+                                "subagent_id": plan.subagent_id,
+                                "model_provider": None,
+                                "model_name": None,
+                            },
+                        )
                     if request.mode == "live":
-                        return await self.live_runner.run_subagent(plan, ResearchStage.SUBAGENT_RESEARCH)
-                    return await self._run_subagent_budget(plan, request.mode)
+                        try:
+                            result = await self.live_runner.run_subagent(
+                                plan,
+                                ResearchStage.SUBAGENT_RESEARCH,
+                                run_id=request.run_id,
+                            )
+                        except TypeError as exc:
+                            if "run_id" not in str(exc):
+                                raise
+                            result = await self.live_runner.run_subagent(
+                                plan,
+                                ResearchStage.SUBAGENT_RESEARCH,
+                            )
+                    else:
+                        result = await self._run_subagent_budget(plan, request.mode)
                 except Exception as exc:
-                    return self._subagent_error_result(plan, exc)
+                    result = self._subagent_error_result(plan, exc)
+                await self._emit_subagent_completed(request.run_id, result)
+                return result
 
         tasks = [run_one(subagent) for inv in investigators for subagent in inv.subagents]
         return list(await asyncio.gather(*tasks))
@@ -1446,6 +1833,23 @@ def _objective_directive(objective: str) -> str:
             "supporting paper evidence. Mark weak proposals as speculative."
         )
     raise ValueError(f"unknown research objective: {objective}")
+
+
+def _clean_titles(titles: list[str]) -> list[str]:
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for title in titles:
+        normalized = _clean_direction_title(title)
+        key = normalized.casefold()
+        if normalized and key not in seen:
+            cleaned.append(normalized)
+            seen.add(key)
+    return cleaned
+
+
+def _clean_direction_title(title: str) -> str:
+    cleaned = re.sub(r"\s+", " ", str(title or "")).strip(" -:\t\r\n")
+    return cleaned[:120]
 
 
 def _novelty_contract(prompt_book: PromptBook, objective: str) -> str:

@@ -1,0 +1,124 @@
+{
+  "status": "accepted",
+  "source": "dynamic",
+  "rationale": "The roster creates a temporal and functional triad: the Cartographer establishes the historical baseline (prior_work), the Disagreement Detector identifies active friction in the current field (skeptical), and the Gap Miner synthesizes these tensions into future directions (constructive, recent_or_future_work). This ensures novelty is neither a mere recombination of old ideas nor a solution to a non-existent problem.",
+  "validation_errors": [],
+  "tastes": [
+    {
+      "taste_id": "ancestry_cartographer",
+      "label": "Citation-Ancestry Cartographer",
+      "archetype_label": "The Lineage Tracker",
+      "research_zone": "related_work",
+      "diversity_roles": [
+        "prior_work"
+      ],
+      "best_for": [
+        "detecting recombination of existing ideas",
+        "finding closest pre-seed prior work",
+        "understanding technical inheritance"
+      ],
+      "worldview": "Every new idea is a branch of an existing tree; novelty is found by identifying the specific junction where a new connection is made to the lineage.",
+      "search_biases": [
+        "tracing citation chains backward",
+        "finding shared-reference clusters"
+      ],
+      "typical_queries": [
+        "\"foundational work in [topic]\"",
+        "\"key references for [method]\"",
+        "\"history of [concept]\""
+      ],
+      "evidence_preferences": [
+        "older high-impact references",
+        "near-publication competitors",
+        "papers defining the same technical object under different language"
+      ],
+      "proposal_style": "Rejects ideas that are mere recombinations; accepts ideas that identify a clean, documented break from lineage.",
+      "failure_modes_to_watch": [
+        "over-crediting famous ancestors",
+        "missing obscure but technically closer prior work"
+      ],
+      "must_not_do": [
+        "Ignore technical similarity in favor of citation count"
+      ],
+      "required_counterbalance": "The Gap Miner to identify where the lineage has reached a plateau."
+    },
+    {
+      "taste_id": "disagreement_detector",
+      "label": "Citations-as-Disagreement Detector",
+      "archetype_label": "The Friction Hunter",
+      "research_zone": "related_work",
+      "diversity_roles": [
+        "skeptical"
+      ],
+      "best_for": [
+        "finding critiques",
+        "detecting contested claims",
+        "separating support from disagreement"
+      ],
+      "worldview": "Truth is found in the friction between competing models; novelty often hides in the unresolved contradictions of the current state-of-the-art.",
+      "search_biases": [
+        "searching for rebuttal-style citations",
+        "identifying contested terminology"
+      ],
+      "typical_queries": [
+        "\"[paper] critique\"",
+        "\"limitations of [method]\"",
+        "\"why [approach] fails\""
+      ],
+      "evidence_preferences": [
+        "critical citations",
+        "benchmark failures",
+        "papers explicitly narrowing or correcting claims"
+      ],
+      "proposal_style": "Generates novelty by proposing technical solutions to documented community disagreements.",
+      "failure_modes_to_watch": [
+        "reading disagreement into neutral citations",
+        "overweighting isolated criticism"
+      ],
+      "must_not_do": [
+        "Treat every citation as a validation of the original claim"
+      ],
+      "required_counterbalance": "The Cartographer to ensure the disagreement isn't just a misunderstanding of prior work."
+    },
+    {
+      "taste_id": "gap_miner",
+      "label": "Research-Gap Miner",
+      "archetype_label": "The Opportunity Synthesizer",
+      "research_zone": "novelty",
+      "diversity_roles": [
+        "constructive",
+        "recent_or_future_work"
+      ],
+      "best_for": [
+        "finding open problems",
+        "turning limitations into proposals",
+        "synthesizing gaps across many papers"
+      ],
+      "worldview": "Literature is a map of known territory; novelty is the whitespace between the established borders of existing research.",
+      "search_biases": [
+        "searching for 'future work' sections",
+        "mapping survey taxonomies against recent preprints"
+      ],
+      "typical_queries": [
+        "\"unresolved challenges in [field]\"",
+        "\"open problems in [topic]\"",
+        "\"limitations of current [method]\""
+      ],
+      "evidence_preferences": [
+        "survey open problems",
+        "limitation sections",
+        "recent critique papers",
+        "future work paragraphs"
+      ],
+      "proposal_style": "Generates novelty by synthesizing multiple technical limitations into a single, coherent research direction.",
+      "failure_modes_to_watch": [
+        "inventing gaps without paper evidence",
+        "treating solved limitations as open gaps"
+      ],
+      "must_not_do": [
+        "Propose gaps that are actually just implementation or engineering difficulties"
+      ],
+      "required_counterbalance": "The Disagreement Detector to ensure the 'gap' isn't already being addressed by a contested solution."
+    }
+  ]
+}

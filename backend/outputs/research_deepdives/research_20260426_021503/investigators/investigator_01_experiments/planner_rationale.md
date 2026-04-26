@@ -1,0 +1,1 @@
+The Cartographer ensures novelty is not just repackaged history by deep-diving into the technical ancestry of ideas, while the Gap Miner focuses on the cutting edge, synthesizing current limitations and future trajectories into actionable research directions. This tension between 'what has been done' and 'what is missing' prevents both historical amnesia and blind optimism.

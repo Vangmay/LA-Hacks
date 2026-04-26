@@ -92,6 +92,16 @@ class FakeToolRuntime:
         self.workspace = workspace
         self.calls: list[tuple[str, dict]] = []
 
+    def executable_tool_names(self) -> set[str]:
+        return {
+            "append_workspace_markdown",
+            "paper_bulk_search",
+            "patch_workspace_file",
+            "read_workspace_markdown",
+            "resolve_arxiv_paper",
+            "write_workspace_markdown",
+        }
+
     async def execute(self, tool_name: str, arguments: dict, workspace_path: Path) -> dict:
         self.calls.append((tool_name, dict(arguments)))
         if tool_name == "read_workspace_markdown":
@@ -136,6 +146,19 @@ class FakeToolRuntime:
                     {"paperId": "TEST3", "title": "Test Paper Three", "year": 2022},
                 ],
                 "total": 3,
+                "warnings": [],
+            }
+        if tool_name == "resolve_arxiv_paper":
+            return {
+                "canonical_paper_id": "ARXIV:1706.03762",
+                "arxiv_id": "1706.03762",
+                "paper": {
+                    "paperId": "ARXIV:1706.03762",
+                    "title": "Attention Is All You Need",
+                    "abstract": "Transformer attention architecture fixture.",
+                    "year": 2017,
+                    "tldr": {"text": "Transformer architecture fixture."},
+                },
                 "warnings": [],
             }
         raise AssertionError(f"unexpected fake tool call: {tool_name}")
@@ -795,6 +818,73 @@ async def _exercise_dynamic_roster_contract(root: Path) -> None:
     _assert(len({taste.label for taste in fallback_roster}) == 3, "fallback roster should be deterministic and unique")
 
 
+async def _exercise_director_direction_contract(root: Path) -> None:
+    direction_response = {
+        "rationale": "Spend the budget on mechanism-level novelty risks rather than fixed paper sections.",
+        "directions": [
+            {
+                "title": "Attention scaling failure modes in descendants",
+                "why_promising": "Long-context follow-ups stress the seed mechanism.",
+                "seed_hooks": ["self-attention"],
+                "research_questions": ["Which later papers expose scaling limitations?"],
+                "priority": 1,
+            },
+            {
+                "title": "Sparse and linear attention collision space",
+                "why_promising": "Many adjacent methods may collide with novelty proposals.",
+                "seed_hooks": ["quadratic attention cost"],
+                "research_questions": ["Which prior or future work already solves the proposed direction?"],
+                "priority": 2,
+            },
+        ],
+    }
+    fake_llm = FakeActionLLM([direction_response])
+    config = DeepDiveConfig(
+        workspace_root=root,
+        max_investigators=2,
+        subagents_per_investigator=1,
+        min_personas_per_investigator=1,
+        max_personas_per_investigator=1,
+        require_persona_diversity=False,
+        dynamic_roster_enabled=False,
+        max_parallel_subagents=1,
+        thinking_profile=ModelProfile(provider="fake", model="thinking", api_key_env="FAKE"),
+        light_profile=ModelProfile(provider="fake", model="light", api_key_env="FAKE"),
+    )
+    orchestrator = DeepDiveOrchestrator(config=config, llm_provider=fake_llm)
+    orchestrator.tool_runtime = FakeToolRuntime(orchestrator.workspace)  # type: ignore[assignment]
+    request = DeepDiveRunRequest(
+        run_id="director directions",
+        arxiv_url="https://arxiv.org/abs/1706.03762",
+        paper_id="ARXIV:1706.03762",
+        research_objective="novelty_ideation",
+        mode="live",
+    )
+    run_root = orchestrator.workspace.prepare_run(request.run_id)
+    warnings: list[str] = []
+    investigators = await orchestrator._plan_investigators_live(request, run_root, warnings)
+
+    _assert(not warnings, f"director planning should not warn with valid fake metadata: {warnings}")
+    _assert(
+        [investigator.section_title for investigator in investigators]
+        == [
+            "Attention scaling failure modes in descendants",
+            "Sparse and linear attention collision space",
+        ],
+        "director-planned investigation directions should replace fixed sections",
+    )
+    _assert(
+        "not fixed paper sections" in fake_llm.messages[0][1]["content"],
+        "director prompt should ask for directions rather than hard-coded sections",
+    )
+    zones = json.loads((run_root / "shared" / "investigation_zones.json").read_text(encoding="utf-8"))
+    _assert(zones["source"] == "director", "investigation zones should record director source")
+    _assert(
+        "Core method" not in (run_root / "shared" / "director_plan.md").read_text(encoding="utf-8"),
+        "director plan should not contain the old fixed section default",
+    )
+
+
 async def main_async() -> None:
     prompt_book = PromptBook()
     _assert("Shared Tool Specification" in prompt_book.shared_tool_spec, "shared tool spec loads")
@@ -957,6 +1047,7 @@ async def main_async() -> None:
         await _exercise_live_runner_budget_contract(Path(tmp) / "runner")
         await _exercise_artifact_bundle_contract(Path(tmp) / "bundles")
         await _exercise_dynamic_roster_contract(Path(tmp) / "dynamic")
+        await _exercise_director_direction_contract(Path(tmp) / "director")
         await _exercise_subagent_failure_isolation(Path(tmp) / "failure-isolation")
         await _exercise_stage_failure_fallbacks(Path(tmp) / "stage-fallbacks")
         await _exercise_final_report_repair_contract(Path(tmp) / "final-repair")

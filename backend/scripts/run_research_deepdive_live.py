@@ -144,7 +144,7 @@ def require_key(name: str) -> None:
 async def main_async() -> None:
     args = parse_args()
 
-    sections = args.sections or ["Core method", "Experiments", "Related work and novelty"]
+    sections = args.sections or []
     run_id = args.run_id or "live_" + datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     base_config = DeepDiveConfig()
     thinking_profile = base_config.thinking_profile.model_copy(
