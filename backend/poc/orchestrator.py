@@ -160,7 +160,54 @@ class PoCOrchestrator:
             if result.status in ("success", "inconclusive"):
                 poc_specs[atom.atom_id] = result.output
 
-        # ── 5. Generate scaffolds (max N concurrent) for testable atoms ───────
+        # Phase 1 stops here. Scaffolds are generated on demand via
+        # ``generate_scaffolds`` once the user picks which atoms to test.
+        job_store.update(
+            job_id,
+            poc_specs=poc_specs,
+            claims={a.atom_id: _atom_to_claim_dict(a) for a in candidate_atoms},
+            dag=_build_dag(candidate_atoms),
+            scaffold_status="awaiting_selection",
+        )
+
+        job_store.set_status(job_id, "ready")
+
+    async def generate_scaffolds(self, job_id: str, claim_ids: list[str]) -> None:
+        """Phase 2: generate LLM scaffolds for the selected atoms and zip them.
+
+        Updates ``scaffold_status`` to ``generating`` while running and
+        ``ready`` once a zip exists. The zip only contains the selected atoms.
+        """
+        try:
+            await self._generate_scaffolds(job_id, claim_ids)
+        except Exception as exc:
+            logger.exception("PoC scaffold generation failed for %s", job_id)
+            job_store.update(
+                job_id,
+                scaffold_status="error",
+                scaffold_error=str(exc),
+            )
+
+    async def _generate_scaffolds(self, job_id: str, claim_ids: list[str]) -> None:
+        job = job_store.get(job_id)
+        if not job:
+            raise RuntimeError(f"job {job_id} not found")
+
+        poc_specs: dict = dict(job.get("poc_specs") or {})
+        atoms_raw: list = job.get("atoms") or []
+        atoms_by_id = {a["atom_id"]: ResearchAtom.model_validate(a) for a in atoms_raw}
+        paper_metadata: dict = job.get("paper_metadata") or {}
+
+        selected = [cid for cid in claim_ids if cid in poc_specs and cid in atoms_by_id]
+        if not selected:
+            raise RuntimeError("no selected claim_ids match testable atoms with metrics")
+
+        job_store.update(
+            job_id,
+            scaffold_status="generating",
+            selected_claim_ids=selected,
+        )
+
         semaphore = asyncio.Semaphore(settings.max_parallel_claims)
 
         async def _scaffold_one(atom: ResearchAtom, spec: dict) -> tuple:
@@ -168,7 +215,6 @@ class PoCOrchestrator:
                 result = await ScaffoldGeneratorAgent().run(
                     AgentContext(
                         job_id=job_id,
-                        parsed_paper=paper,
                         atom=atom,
                         extra={"poc_spec": spec, "paper_metadata": paper_metadata},
                     )
@@ -176,11 +222,7 @@ class PoCOrchestrator:
                 return atom.atom_id, result
 
         scaffold_results = await asyncio.gather(
-            *[
-                _scaffold_one(atom, poc_specs[atom.atom_id])
-                for atom in candidate_atoms
-                if atom.atom_id in poc_specs
-            ],
+            *[_scaffold_one(atoms_by_id[cid], poc_specs[cid]) for cid in selected],
             return_exceptions=True,
         )
 
@@ -200,26 +242,24 @@ class PoCOrchestrator:
                 timestamp=datetime.utcnow(),
             ))
 
+        # Zip only the selected atoms so the download matches the user's choice.
+        selected_specs = {cid: poc_specs[cid] for cid in selected if cid in poc_specs}
+        zip_path = await self._build_zip(job_id, selected_specs, paper_metadata)
+
         job_store.update(
             job_id,
             poc_specs=poc_specs,
-            claims={a.atom_id: _atom_to_claim_dict(a) for a in candidate_atoms},
-            dag=_build_dag(candidate_atoms),
+            zip_path=zip_path,
+            scaffold_status="ready",
         )
-
-        # ── 6. Package zip ────────────────────────────────────────────────────
-        zip_path = await self._build_zip(job_id, poc_specs, paper_metadata)
-        job_store.update(job_id, zip_path=zip_path)
 
         await event_bus.publish(job_id, DAGEvent(
             event_id=str(uuid.uuid4()),
             job_id=job_id,
             event_type=DAGEventType.REPORT_READY,
-            payload={"zip_path": zip_path, "testable_count": len(testable_ids)},
+            payload={"zip_path": zip_path, "selected_count": len(selected)},
             timestamp=datetime.utcnow(),
         ))
-
-        job_store.set_status(job_id, "complete")
 
     async def _build_zip(self, job_id: str, poc_specs: dict, paper_metadata: dict) -> str:
         _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)

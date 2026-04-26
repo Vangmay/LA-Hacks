@@ -192,6 +192,64 @@ async def get_spec(session_id: str, claim_id: str):
     return poc_specs[claim_id]
 
 
+# ── POST /poc/{session_id}/scaffold ───────────────────────────────────────────
+
+
+class ScaffoldSelection(BaseModel):
+    claim_ids: list[str]
+
+
+@router.post("/{session_id}/scaffold")
+async def generate_scaffolds(session_id: str, selection: ScaffoldSelection):
+    """Trigger scaffold generation for a user-chosen subset of testable claims.
+
+    Phase 1 (metrics) must already be complete; this returns 409 otherwise.
+    Generation runs in the background; clients poll ``scaffold_status`` on
+    the job or wait for the next report-ready SSE event before downloading
+    ``/scaffold.zip``.
+    """
+    if not job_store.exists(session_id):
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+    job = job_store.get(session_id)
+    if job.get("status") not in ("ready", "complete"):
+        raise HTTPException(status_code=409, detail="Phase 1 not complete; metrics not ready")
+
+    poc_specs: dict = job.get("poc_specs") or {}
+    requested = [cid for cid in selection.claim_ids if cid]
+    if not requested:
+        raise HTTPException(status_code=400, detail="claim_ids must be a non-empty list")
+
+    unknown = [cid for cid in requested if cid not in poc_specs]
+    if unknown:
+        raise HTTPException(
+            status_code=400,
+            detail=f"claim_ids not testable / no metrics extracted: {unknown}",
+        )
+
+    asyncio.create_task(_orchestrator.generate_scaffolds(session_id, requested))
+    return {
+        "status": "generating",
+        "selected_claim_ids": requested,
+    }
+
+
+# ── GET /poc/{session_id}/scaffold/status ─────────────────────────────────────
+
+
+@router.get("/{session_id}/scaffold/status")
+async def get_scaffold_status(session_id: str):
+    if not job_store.exists(session_id):
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+    job = job_store.get(session_id)
+    return {
+        "scaffold_status": job.get("scaffold_status", "awaiting_selection"),
+        "selected_claim_ids": job.get("selected_claim_ids", []),
+        "scaffold_error": job.get("scaffold_error"),
+        "zip_ready": bool(job.get("zip_path") and Path(job["zip_path"]).exists()),
+    }
+
+
 # ── GET /poc/{session_id}/scaffold.zip ────────────────────────────────────────
 
 
