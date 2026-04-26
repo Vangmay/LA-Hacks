@@ -134,6 +134,7 @@ async def list_sessions():
         sessions.append({
             "session_id": j.get("job_id"),
             "arxiv_id": j.get("arxiv_id", "unknown"),
+            "title": j.get("paper_metadata", {}).get("title"),
             "status": j.get("status"),
         })
     return {"sessions": sessions}

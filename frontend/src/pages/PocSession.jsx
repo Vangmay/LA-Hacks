@@ -349,16 +349,21 @@ export default function PocSession() {
         <select 
           value={sessionId} 
           onChange={(e) => navigate(`/poc/${e.target.value}`)}
-          style={{ ...mono(11, 600), color: C.cyan, background: 'rgba(0,234,255,0.08)', border: `1px solid rgba(0,234,255,0.2)`, borderRadius: 4, padding: '2px 6px', cursor: 'pointer', outline: 'none', appearance: 'none' }}
+          style={{ ...mono(11, 600), color: C.cyan, background: 'rgba(0,234,255,0.08)', border: `1px solid rgba(0,234,255,0.2)`, borderRadius: 4, padding: '2px 6px', cursor: 'pointer', outline: 'none' }}
         >
           {sessions.length === 0 ? (
             <option value={sessionId}>{sessionId.split('-')[0]}</option>
           ) : (
-            sessions.map(s => (
-              <option key={s.session_id} value={s.session_id} style={{ background: '#131720', color: C.text }}>
-                {s.arxiv_id !== 'unknown' ? s.arxiv_id : s.session_id.split('-')[0]} {s.status === 'error' ? '(error)' : ''}
-              </option>
-            ))
+            sessions.map(s => {
+              let label = s.title || (s.arxiv_id !== 'unknown' ? s.arxiv_id : s.session_id.split('-')[0]);
+              if (label.length > 50) label = label.substring(0, 47) + '...';
+              if (s.status === 'error') label += ' (error)';
+              return (
+                <option key={s.session_id} value={s.session_id} style={{ background: '#131720', color: C.text }}>
+                  {label}
+                </option>
+              );
+            })
           )}
         </select>
         <div style={{ flex: 1 }} />
