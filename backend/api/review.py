@@ -100,6 +100,7 @@ async def get_status(job_id: str):
         "status": job.get("status", "unknown"),
         "completed_atoms": job.get("completed_atoms", 0),
         "total_atoms": job.get("total_atoms", 0),
+        "review_stage": job.get("review_stage"),
         "paper_id": job.get("paper_id"),
         "paper_title": job.get("paper_title"),
         "error": job.get("error"),

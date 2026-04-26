@@ -107,6 +107,7 @@ async def get_status(session_id: str):
         "status": job.get("status"),
         "total_atoms": job.get("total_atoms", 0),
         "start_here": job.get("start_here", []),
+        "reader_stage": job.get("reader_stage"),
         "comprehension_level": job.get("comprehension_level"),
         "paper_metadata": job.get("paper_metadata"),
         "error": job.get("error"),
@@ -125,7 +126,7 @@ async def get_graph(session_id: str):
     if snapshot:
         # Freshen comprehension_status from live states (may have changed since last write).
         states = job.get("comprehension_states", {})
-        start_here = set(job.get("start_here", []))
+        start_here = set(snapshot.get("start_here") or job.get("start_here", []))
         for node in snapshot.get("nodes", []):
             node_id = node.get("id")
             if node_id:
@@ -305,7 +306,16 @@ async def update_status(session_id: str, atom_id: str, body: StatusUpdate):
         atoms = [ResearchAtom.model_validate(a) for a in atoms_raw]
         graph = ResearchGraph.model_validate(graph_raw)
         states = job.get("comprehension_states", {})
-        job_store.update(session_id, graph_snapshot=_graph_snapshot(atoms, graph, states))
+        job_store.update(
+            session_id,
+            graph_snapshot=_graph_snapshot(
+                atoms,
+                graph,
+                states,
+                start_here=job.get("start_here", []),
+                stage=job.get("reader_stage"),
+            ),
+        )
 
     return {"atom_id": atom_id, "status": body.status}
 
