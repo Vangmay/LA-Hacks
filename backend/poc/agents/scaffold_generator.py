@@ -42,7 +42,9 @@ class ScaffoldGeneratorAgent(BaseAgent):
                 error=str(exc),
             )
 
-        # Syntax-check generated Python files; attempt one correction pass on failure
+        # Syntax-check the generated Python files; attempt one LLM correction
+        # pass per broken file. Even if the fix doesn't land cleanly, surface
+        # the (best-effort) code so the user always gets something to edit.
         syntax_errors = self._check_syntax(scaffold_files)
         if syntax_errors:
             for fname, err in syntax_errors.items():
@@ -51,15 +53,7 @@ class ScaffoldGeneratorAgent(BaseAgent):
                 except Exception as exc:
                     logger.warning("Syntax fix LLM call failed for %s: %s", fname, exc)
 
-            still_broken = self._check_syntax(scaffold_files)
-            if still_broken:
-                return AgentResult(
-                    agent_id=self.agent_id,
-                    status="inconclusive",
-                    output={"scaffold_files": scaffold_files, "syntax_errors": still_broken},
-                    confidence=0.3,
-                    error=f"Syntax errors remain after correction attempt: {still_broken}",
-                )
+        still_broken = self._check_syntax(scaffold_files)
 
         updated_spec = dict(poc_spec)
         updated_spec["scaffold_files"] = scaffold_files
@@ -67,9 +61,14 @@ class ScaffoldGeneratorAgent(BaseAgent):
 
         return AgentResult(
             agent_id=self.agent_id,
-            status="success",
-            output={"scaffold_files": scaffold_files, "poc_spec": updated_spec},
-            confidence=0.8,
+            status="inconclusive" if still_broken else "success",
+            output={
+                "scaffold_files": scaffold_files,
+                "poc_spec": updated_spec,
+                "syntax_errors": still_broken,
+            },
+            confidence=0.3 if still_broken else 0.8,
+            error=(f"Syntax errors remain: {still_broken}" if still_broken else None),
         )
 
     # ── File generation ────────────────────────────────────────────────────────

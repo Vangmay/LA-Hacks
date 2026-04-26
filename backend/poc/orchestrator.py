@@ -231,8 +231,18 @@ class PoCOrchestrator:
                 logger.warning("ScaffoldGeneratorAgent raised: %s", item)
                 continue
             atom_id, result = item
-            if result.status in ("success", "inconclusive") and "poc_spec" in result.output:
-                poc_specs[atom_id] = result.output["poc_spec"]
+            # Always merge whatever scaffold_files we got (even when the LLM
+            # returned syntactically broken code) so the user gets the best
+            # available draft to edit.
+            spec_from_result = result.output.get("poc_spec")
+            scaffold_files = result.output.get("scaffold_files") or {}
+            if spec_from_result:
+                poc_specs[atom_id] = spec_from_result
+            elif scaffold_files:
+                merged = dict(poc_specs.get(atom_id) or {})
+                merged["scaffold_files"] = scaffold_files
+                merged["readme"] = scaffold_files.get("README.md", "")
+                poc_specs[atom_id] = merged
 
             await event_bus.publish(job_id, DAGEvent(
                 event_id=str(uuid.uuid4()),
