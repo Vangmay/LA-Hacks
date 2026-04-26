@@ -1,0 +1,19 @@
+{
+  "source": "request",
+  "rationale": "Caller supplied explicit investigation directions.",
+  "zones": [
+    {
+      "investigator_id": "investigator_01_core_method",
+      "section_id": "section_01_core_method",
+      "section_title": "Core method",
+      "requested_subagents": 2
+    },
+    {
+      "investigator_id": "investigator_02_experiments",
+      "section_id": "section_02_experiments",
+      "section_title": "Experiments",
+      "requested_subagents": 2
+    }
+  ],
+  "raw_planner_output": null
+}

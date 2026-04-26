@@ -205,7 +205,7 @@ async def _start_research(req: ResearchStartRequest):
         run_id=run_id,
         arxiv_url=req.arxiv_url,
         paper_id=req.paper_id or req.arxiv_url,
-        section_titles=req.section_titles or ["Core method", "Experiments", "Related work and novelty"],
+        section_titles=req.section_titles,
         research_brief=req.research_brief
         or (
             "Run a monitored literature deep dive. Search references, citations, recent work, "

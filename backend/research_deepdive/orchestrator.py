@@ -224,7 +224,9 @@ class DeepDiveOrchestrator:
 
             current_stage = ResearchStage.INVESTIGATOR_PLANNING
             await self._emit(request.run_id, DeepDiveEventType.STAGE_ENTERED, {"stage": current_stage.value})
-            if request.mode == "live" and self.config.dynamic_roster_enabled:
+            if request.mode == "live" and (
+                self.config.dynamic_roster_enabled or not _clean_titles(request.section_titles)
+            ):
                 investigators = await self._plan_investigators_live(request, run_root, warnings)
             else:
                 investigators = self._plan_investigators(request, run_root)
@@ -340,7 +342,7 @@ class DeepDiveOrchestrator:
         taste_rosters: dict[str, list[ResearchTaste]] | None = None,
         planner_notes: dict[str, dict[str, Any]] | None = None,
     ) -> list[InvestigatorPlan]:
-        section_titles = request.section_titles or ["whole paper"]
+        section_titles = _clean_titles(request.section_titles) or ["whole paper"]
         selected = section_titles[: self.config.max_investigators]
         tool_names = sorted(
             self.tool_runtime.executable_tool_names()
@@ -454,17 +456,22 @@ class DeepDiveOrchestrator:
         run_root: Path,
         warnings: list[str],
     ) -> list[InvestigatorPlan]:
-        section_titles = request.section_titles or ["whole paper"]
+        section_titles, direction_note = await self._select_investigation_titles(request, run_root, warnings)
         selected = section_titles[: self.config.max_investigators]
         director_lines = [
             "# Director Plan",
             "",
             f"- Research objective: `{request.research_objective}`",
+            f"- Direction source: `{direction_note.get('source', 'unknown')}`",
             f"- Dynamic roster enabled: `{self.config.dynamic_roster_enabled}`",
             f"- Requested investigators: `{len(selected)}`",
             f"- Subagents per investigator: `{self.config.subagents_per_investigator}`",
             "",
-            "## Investigation Zones",
+            "## Rationale",
+            "",
+            str(direction_note.get("rationale") or "No rationale recorded."),
+            "",
+            "## Investigation Directions",
             "",
         ]
         zones = []
@@ -481,7 +488,15 @@ class DeepDiveOrchestrator:
             )
             director_lines.append(f"- `{investigator_id}`: {title}")
         self.workspace.write_markdown(run_root / "shared" / "director_plan.md", "\n".join(director_lines) + "\n")
-        self.workspace.write_json(run_root / "shared" / "investigation_zones.json", {"zones": zones})
+        self.workspace.write_json(
+            run_root / "shared" / "investigation_zones.json",
+            {
+                "source": direction_note.get("source", "unknown"),
+                "rationale": direction_note.get("rationale", ""),
+                "zones": zones,
+                "raw_planner_output": direction_note.get("raw_planner_output"),
+            },
+        )
 
         rosters: dict[str, list[ResearchTaste]] = {}
         notes: dict[str, dict[str, Any]] = {}
@@ -489,13 +504,22 @@ class DeepDiveOrchestrator:
         for zone in zones:
             title = str(zone["section_title"])
             investigator_id = str(zone["investigator_id"])
-            roster, note = await self._plan_dynamic_roster_for_investigator(
-                request=request,
-                investigator_id=investigator_id,
-                section_title=title,
-            )
-            rosters[investigator_id] = roster
-            notes[investigator_id] = note
+            if self.config.dynamic_roster_enabled:
+                roster, note = await self._plan_dynamic_roster_for_investigator(
+                    request=request,
+                    investigator_id=investigator_id,
+                    section_title=title,
+                )
+                rosters[investigator_id] = roster
+                notes[investigator_id] = note
+            else:
+                note = {
+                    "status": "skipped",
+                    "source": "deterministic",
+                    "rationale": "Dynamic roster planning is disabled; deterministic tastes will be generated for this director-selected direction.",
+                    "validation_errors": [],
+                }
+                notes[investigator_id] = note
             trace_lines.extend(
                 [
                     f"## {investigator_id}",
@@ -511,7 +535,158 @@ class DeepDiveOrchestrator:
                 trace_lines.append(f"- Fallback reason: {note['fallback_reason']}")
                 trace_lines.append("")
         self.workspace.write_markdown(run_root / "shared" / "planning_trace.md", "\n".join(trace_lines))
-        return self._plan_investigators(request, run_root, taste_rosters=rosters, planner_notes=notes)
+        planned_request = request.model_copy(update={"section_titles": selected})
+        return self._plan_investigators(
+            planned_request,
+            run_root,
+            taste_rosters=rosters if rosters else None,
+            planner_notes=notes,
+        )
+
+    async def _select_investigation_titles(
+        self,
+        request: DeepDiveRunRequest,
+        run_root: Path,
+        warnings: list[str],
+    ) -> tuple[list[str], dict[str, Any]]:
+        explicit_titles = _clean_titles(request.section_titles)
+        if explicit_titles:
+            return explicit_titles, {
+                "status": "accepted",
+                "source": "request",
+                "rationale": "Caller supplied explicit investigation directions.",
+            }
+
+        metadata = await self._resolve_seed_metadata_for_director(request, run_root, warnings)
+        fallback_titles = ["whole paper"]
+        prompt = self._investigation_direction_prompt(request, metadata)
+        try:
+            response = await self.llm.chat_json(
+                role=AgentModelRole.DIRECTOR,
+                messages=[
+                    {"role": "system", "content": "You are the PaperCourt research director. Return strict JSON only."},
+                    {"role": "user", "content": prompt},
+                ],
+            )
+            titles, raw_items, rationale = self._parse_investigation_direction_response(response)
+            if not titles:
+                raise ValueError("director returned no investigation directions")
+            return titles[: self.config.max_investigators], {
+                "status": "accepted",
+                "source": "director",
+                "rationale": rationale,
+                "raw_planner_output": raw_items,
+            }
+        except Exception as exc:
+            warning = f"director investigation planning failed; using whole-paper fallback: {exc}"
+            warnings.append(warning)
+            return fallback_titles, {
+                "status": "fallback",
+                "source": "fallback",
+                "rationale": warning,
+                "validation_errors": [str(exc)],
+            }
+
+    async def _resolve_seed_metadata_for_director(
+        self,
+        request: DeepDiveRunRequest,
+        run_root: Path,
+        warnings: list[str],
+    ) -> dict[str, Any]:
+        try:
+            metadata = await self.tool_runtime.execute(
+                "resolve_arxiv_paper",
+                {"arxiv_url": request.arxiv_url},
+                run_root / "shared",
+            )
+        except Exception as exc:
+            warnings.append(f"director metadata lookup failed: {exc}")
+            return {}
+        self.workspace.write_json(run_root / "shared" / "director_seed_metadata.json", metadata)
+        return metadata if isinstance(metadata, dict) else {"metadata": metadata}
+
+    def _investigation_direction_prompt(
+        self,
+        request: DeepDiveRunRequest,
+        seed_metadata: dict[str, Any],
+    ) -> str:
+        metadata_text = json.dumps(seed_metadata, indent=2, default=str)[:12000]
+        return (
+            "Choose investigator directions for a PaperCourt research deep dive. These are not fixed paper "
+            "sections. They should be the most promising literature or novelty search directions for this "
+            "specific seed paper and objective. Prefer directions that can each support a squad of subagents "
+            "with distinct evidence tastes.\n\n"
+            f"- arXiv URL: `{request.arxiv_url}`\n"
+            f"- Paper ID: `{request.paper_id or 'unknown'}`\n"
+            f"- Research objective: `{request.research_objective}`\n"
+            f"- Research brief: {request.research_brief or '(none)'}\n"
+            f"- Maximum investigators: `{self.config.max_investigators}`\n"
+            f"- Subagents per investigator: `{self.config.subagents_per_investigator}`\n\n"
+            "Seed metadata, when available:\n"
+            "```json\n"
+            f"{metadata_text or '{}'}\n"
+            "```\n\n"
+            "Return JSON with this shape:\n"
+            "{\n"
+            '  "rationale": "why these directions are the best use of the investigator budget",\n'
+            '  "directions": [\n'
+            "    {\n"
+            '      "title": "short investigator direction, not a generic section label",\n'
+            '      "why_promising": "why this direction deserves an investigator",\n'
+            '      "seed_hooks": ["specific seed-paper hooks or metadata clues"],\n'
+            '      "research_questions": ["question this investigator should answer"],\n'
+            '      "priority": 1\n'
+            "    }\n"
+            "  ]\n"
+            "}\n\n"
+            "Avoid generic paper-section buckets unless the seed metadata makes that exact direction "
+            "unusually promising. Use fewer than the maximum investigators if the evidence does not "
+            "justify more."
+        )
+
+    def _parse_investigation_direction_response(
+        self,
+        response: dict[str, Any] | list[Any],
+    ) -> tuple[list[str], list[Any], str]:
+        rationale = ""
+        if isinstance(response, dict):
+            raw_items = (
+                response.get("directions")
+                or response.get("investigators")
+                or response.get("zones")
+                or response.get("section_titles")
+                or []
+            )
+            rationale = str(response.get("rationale") or response.get("planner_rationale") or "")
+        elif isinstance(response, list):
+            raw_items = response
+            rationale = "Director returned a top-level direction list."
+        else:
+            raise ValueError("director response must be a JSON object or array")
+        if not isinstance(raw_items, list):
+            raise ValueError("director response must contain a direction list")
+
+        titles: list[str] = []
+        seen: set[str] = set()
+        for item in raw_items:
+            title = ""
+            if isinstance(item, str):
+                title = item
+            elif isinstance(item, dict):
+                title = str(
+                    item.get("title")
+                    or item.get("direction")
+                    or item.get("investigation_title")
+                    or item.get("section_title")
+                    or item.get("name")
+                    or ""
+                )
+            cleaned = _clean_direction_title(title)
+            key = cleaned.casefold()
+            if cleaned and key not in seen:
+                titles.append(cleaned)
+                seen.add(key)
+        return titles, raw_items, rationale
 
     async def _plan_dynamic_roster_for_investigator(
         self,
@@ -1658,6 +1833,23 @@ def _objective_directive(objective: str) -> str:
             "supporting paper evidence. Mark weak proposals as speculative."
         )
     raise ValueError(f"unknown research objective: {objective}")
+
+
+def _clean_titles(titles: list[str]) -> list[str]:
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for title in titles:
+        normalized = _clean_direction_title(title)
+        key = normalized.casefold()
+        if normalized and key not in seen:
+            cleaned.append(normalized)
+            seen.add(key)
+    return cleaned
+
+
+def _clean_direction_title(title: str) -> str:
+    cleaned = re.sub(r"\s+", " ", str(title or "")).strip(" -:\t\r\n")
+    return cleaned[:120]
 
 
 def _novelty_contract(prompt_book: PromptBook, objective: str) -> str:
