@@ -81,6 +81,7 @@ async def stream(request: Request, run_id: str):
 
     async def event_gen():
         queue: asyncio.Queue = asyncio.Queue()
+        snapshot_cursor = last_event_id or formalization_event_bus.latest_event_id(run_id)
         run = formalization_store.get_run(run_id)
         snapshot_id = f"snapshot-{uuid.uuid4()}"
         yield {
@@ -101,7 +102,7 @@ async def stream(request: Request, run_id: str):
 
         async def drain():
             try:
-                async for event in formalization_event_bus.subscribe(run_id, last_event_id):
+                async for event in formalization_event_bus.subscribe(run_id, snapshot_cursor):
                     await queue.put(event)
                     if event.event_type in _TERMINAL_EVENT_TYPES:
                         break

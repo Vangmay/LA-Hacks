@@ -19,6 +19,10 @@ class FormalizationEventBus:
     def channel_exists(self, run_id: str) -> bool:
         return run_id in self._channels
 
+    def latest_event_id(self, run_id: str) -> Optional[str]:
+        history = self._history.get(run_id) or []
+        return history[-1].event_id if history else None
+
     async def publish(self, run_id: str, event: FormalizationEvent) -> None:
         if run_id not in self._channels:
             self.create_channel(run_id)

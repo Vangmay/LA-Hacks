@@ -126,18 +126,19 @@ function applyEvent(state, event) {
   ) {
     const atom = next.atoms[atomId] || emptyAtom(atomId)
     const toolCalls = upsertById(atom.tool_calls || [], event.payload, 'call_id')
-    const status = eventType === FORMALIZATION_EVENTS.TOOL_CALL_STARTED ? 'axle_running' : 'llm_thinking'
+    const isAxleTool = String(event.payload?.tool_name || '').startsWith('axle_')
+    let nextStatus = atom.status
+    if (!atom.label) {
+      if (eventType === FORMALIZATION_EVENTS.TOOL_CALL_STARTED) {
+        nextStatus = isAxleTool ? 'axle_running' : atom.status
+      } else {
+        nextStatus = 'llm_thinking'
+      }
+    }
     next = upsertAtom(next, atomId, {
-      status: atom.label ? atom.status : status,
+      status: nextStatus,
       active_tool: eventType === FORMALIZATION_EVENTS.TOOL_CALL_STARTED ? event.payload?.tool_name : '',
       tool_calls: toolCalls,
-    })
-  }
-
-  if ([FORMALIZATION_EVENTS.AXLE_CHECK_RESULT, FORMALIZATION_EVENTS.AXLE_VERIFY_RESULT].includes(eventType) && atomId) {
-    const atom = next.atoms[atomId] || emptyAtom(atomId)
-    next = upsertAtom(next, atomId, {
-      axle_results: [...(atom.axle_results || []), { type: eventType, ...event.payload }].slice(-80),
     })
   }
 
@@ -193,7 +194,6 @@ function emptyAtom(atomId) {
     artifacts: [],
     tool_calls: [],
     thoughts: [],
-    axle_results: [],
   }
 }
 
@@ -205,7 +205,6 @@ function hydrateAtom(atomId, atom = {}) {
     artifacts: atom.artifacts || [],
     tool_calls: atom.tool_calls || [],
     thoughts: atom.thoughts || [],
-    axle_results: atom.axle_results || [],
   }
 }
 
