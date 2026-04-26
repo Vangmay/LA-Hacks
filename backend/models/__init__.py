@@ -11,11 +11,14 @@ from .source import (
 from .atoms import (
     ResearchAtomType,
     AtomImportance,
+    AtomReviewability,
+    AtomCheckability,
     ResearchAtom,
     AtomExtractionResult,
     REVIEWABLE_ATOM_TYPES,
     is_reviewable,
 )
+from .atom_candidate import AtomCandidate
 from .graph import (
     ResearchGraphEdgeType,
     DEPENDENCY_EDGE_TYPES,
@@ -67,6 +70,9 @@ __all__ = [
     # atoms
     "ResearchAtomType",
     "AtomImportance",
+    "AtomReviewability",
+    "AtomCheckability",
+    "AtomCandidate",
     "ResearchAtom",
     "AtomExtractionResult",
     "REVIEWABLE_ATOM_TYPES",

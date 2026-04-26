@@ -24,13 +24,17 @@ import re
 from typing import Any, Awaitable, Callable, Optional
 
 from openai import AsyncOpenAI
+from json_repair import repair_json
 
 from config import settings
 from core.openai_client import make_async_openai
 from core.span_resolver import resolve_span
 from models import (
+    AtomCandidate,
+    AtomCheckability,
     AtomExtractionResult,
     AtomImportance,
+    AtomReviewability,
     ParsedPaper,
     ResearchAtom,
     ResearchAtomType,
@@ -89,17 +93,16 @@ _DEFAULT_IMPORTANCE = {
 
 
 _SYSTEM_PROMPT = (
-    "You are a precise extractor of source-grounded research atoms from a "
-    "theoretical paper. A research atom is a discrete unit such as a "
-    "definition, assumption, theorem, lemma, proposition, corollary, "
-    "construction, algorithm, limitation, open problem, technique, or "
-    "load-bearing assertion stated in prose. Every atom MUST quote the "
-    "paper verbatim. Do not invent claims. Output JSON only."
+    "You extract source-grounded candidates for a review dependency DAG. "
+    "You are not summarizing the paper. A valid candidate is one discrete "
+    "claim, concept, definition, assumption, theorem, construction, algorithm, "
+    "limitation, open problem, technique, or load-bearing assertion that can "
+    "be grounded by a verbatim quote. Do not invent claims. Output JSON only."
 )
 
-_USER_PROMPT_TMPL = """Extract research atoms from the paper sections below.
+_USER_PROMPT_TMPL = """Extract review-DAG atom candidates from the paper sections below.
 
-Already-detected environment-based atoms (do NOT duplicate these):
+Already-detected TeX-environment candidates (do NOT duplicate these):
 {seen_block}
 
 Sections (heading + body):
@@ -109,19 +112,26 @@ Sections (heading + body):
 
 Return a JSON object:
 {{
-  "atoms": [
+  "candidates": [
     {{
       "atom_type": "definition|assumption|theorem|lemma|corollary|proposition|conjecture|proof_step|construction|algorithm|bound|example|counterexample|limitation|open_problem|related_work_claim|technique|assertion",
       "source_quote": "<verbatim excerpt from the section text>",
-      "text": "<atom statement, can be cleaned but must preserve meaning>",
-      "normalized_text": "<one-sentence paraphrase, optional>",
+      "text": "<complete clean English atom statement with no raw LaTeX macros>",
+      "normalized_text": "<one-sentence clean English paraphrase, optional>",
       "section_heading": "<which section heading this came from>",
       "importance": "low|medium|high|core",
+      "reviewability": "reviewable|learning_only|background|drop",
+      "checkability": "symbolic|numeric|citation|proof_only|conceptual|not_checkable",
+      "claim_scope": "<what assumptions/context bound this candidate>",
+      "why_this_is_an_atom": "<why this is a standalone review-DAG atom>",
       "role_in_paper": "<one short phrase>",
       "assumptions": ["..."],
       "conclusions": ["..."],
       "key_terms": ["..."],
       "symbols": ["..."],
+      "dependency_hints": ["Uses the definition of ...", "Depends on ..."],
+      "equation_refs": ["eq:label or visible equation reference"],
+      "citation_refs": ["citation keys or bracket labels mentioned in the quote"],
       "confidence": 0.0
     }}
   ],
@@ -129,6 +139,23 @@ Return a JSON object:
 }}
 
 Rules:
+- You are not summarizing the paper. You are extracting candidates for a
+  review dependency DAG.
+- A candidate must be source-grounded by a verbatim quote, self-contained
+  enough to review or teach, one claim/concept only, and not merely section
+  narration or an equation-neighbor fragment.
+- Do not collapse a technical section into one summary node. Preserve the
+  central definitions, mechanisms, assumptions, guarantees, limitations,
+  algorithms, and evaluation claims as separate candidates.
+- For a dense technical batch, returning 6-18 candidates is normal. Return fewer
+  only when the text is mostly background, logistics, captions, or bibliography.
+- Keep central architecture, training, optimization, and evaluation claims when
+  they are important to the paper; use `learning_only` or `conceptual` rather
+  than dropping them just because they are not symbolic theorems.
+- If one sentence contains three separable claims, split it into separate
+  candidates with the same or overlapping source quote.
+- If a candidate requires too much missing context, mark it
+  `learning_only` or `drop`.
 - Prefer definitions stated in prose, key assumptions, limitations, and
   central techniques. Skip generic background prose, motivation, and
   acknowledgements.
@@ -139,6 +166,19 @@ Rules:
   the statement makes them explicit; otherwise leave them empty.
 - `source_quote` must appear verbatim (modulo whitespace) in the section
   body. Do not paraphrase the quote.
+- JSON strings must escape LaTeX backslashes correctly. For example, write
+  `\\\\alpha` in JSON, not `\\alpha`.
+- `text` and `normalized_text` are display statements. They must be complete
+  clean English, and they must translate notation into words instead of copying
+  raw LaTeX. Prefer "the latent variable has a standard normal prior" over
+  "$z \\sim \\mathcal{{N}}(0,I)$".
+- Display text may be longer than a graph label when needed. Do not truncate a
+  sentence to fit the UI.
+- Use `reviewability=background` for generic prior work or motivation.
+- Use `reviewability=learning_only` for definitions, examples, techniques, or
+  explanations useful to a reader but not themselves adversarially checkable.
+- Use `reviewability=drop` for fragments, captions, generic logistics, and
+  ungrounded or overly broad summary claims.
 - `confidence` is 0.0–1.0. Be conservative.
 - Return ONLY the JSON object. No prose. No markdown.
 
@@ -196,10 +236,13 @@ Return a JSON object:
 
 Rules:
 - `header` must be a complete standalone claim/title, not a dangling fragment.
+- `header` must be clean English with no raw LaTeX macros. Translate notation
+  into words instead of copying formula text.
 - Headers should name the concept or claim being reviewed, not copy the first words near an equation.
 - Never end a header with a dangling word such as at, to, of, by, with, for, and, or, but, less, more, using, because.
 - Examples of invalid fragments: "Research goal make sequence generation less"; "Transformer decoder has six layers and".
-- Keep headers concise: normally 5-24 words, maximum 160 characters.
+- Keep headers readable: normally 5-35 words. Do not truncate a sentence just
+  to fit a graph node; the UI can show full text in the detail panel.
 - Preserve the atom's meaning and type. Do not add claims not present in the source excerpt.
 - Prefer a clear noun phrase or short sentence over copied surrounding prose.
 - Drop atoms that are just equation-neighbor fragments, citations, captions, section transitions, or incomplete clauses.
@@ -228,11 +271,115 @@ Header examples:
   reason: section transition.
 """
 
+_CRITIC_SYSTEM_PROMPT = (
+    "You are a strict critic for source-grounded review-DAG atom candidates. "
+    "You remove fragments, duplicates, background-only statements, overly broad "
+    "summary nodes, and candidates that are not faithful to their source quote. "
+    "You may rewrite headers, but you never invent claims. Output JSON only."
+)
+
+_CRITIC_PROMPT_TMPL = """Review these atom candidates before they become final ResearchAtom objects.
+
+Candidates:
+{candidates_json}
+
+Return a JSON object:
+{{
+  "decisions": [
+    {{
+      "candidate_id": "cand_001",
+      "action": "keep|drop|rewrite|split|merge",
+      "new_text": "<required for rewrite; complete clean English atom statement with no raw LaTeX>",
+      "drop_reason": "<required for drop>",
+      "merge_with": null,
+      "reviewability": "reviewable|learning_only|background|drop",
+      "checkability": "symbolic|numeric|citation|proof_only|conceptual|not_checkable"
+    }}
+  ],
+  "warnings": []
+}}
+
+Rules:
+- Return exactly one decision for every candidate_id.
+- Drop dangling fragments, equation-neighbor snippets, captions, section
+  transitions, generic background, and claims that are too broad to review.
+- Rewrite only when the source quote clearly supports the new text.
+- `new_text` must be complete clean English and must not contain raw LaTeX
+  macros. Translate notation into words; do not copy formula fragments into
+  display text.
+- Mark definitions/examples/reader-helpful concepts as `learning_only` unless
+  they are explicit assumptions or load-bearing review claims.
+- Keep reviewable candidates specific: one claim/concept only.
+- Do not optimize for the smallest possible graph. Preserve grounded central
+  paper content even when it is conceptual or reader-facing.
+- If two candidates are duplicates, keep the better grounded candidate and
+  set `action=merge` with `merge_with` pointing at the kept candidate.
+- Prefer dropping over keeping a questionable review-DAG node.
+- Return ONLY the JSON object. No prose. No markdown.
+"""
+
+_QUOTE_REPAIR_SYSTEM_PROMPT = (
+    "You repair atom candidate source quotes by returning shorter exact quotes "
+    "from the provided section text. Do not paraphrase. Output JSON only."
+)
+
+_QUOTE_REPAIR_PROMPT_TMPL = """Repair low-confidence source quotes for these candidates.
+
+Section text:
+\"\"\"
+{sections_text}
+\"\"\"
+
+Candidates:
+{candidates_json}
+
+Return a JSON object:
+{{
+  "quotes": [
+    {{
+      "candidate_id": "cand_001",
+      "source_quote": "<shorter exact quote copied verbatim from section text>"
+    }}
+  ],
+  "warnings": []
+}}
+
+Rules:
+- Return one quote entry for every candidate_id.
+- The replacement `source_quote` must appear verbatim in the section text.
+- Prefer the shortest quote that still grounds the candidate.
+- If no exact quote exists, return an empty string for that candidate.
+- Return ONLY the JSON object. No prose. No markdown.
+"""
+
 _DANGLING_HEADER_ENDINGS = {
     "a",
     "an",
     "the",
     "at",
+    "am",
+    "is",
+    "are",
+    "was",
+    "were",
+    "be",
+    "been",
+    "being",
+    "can",
+    "could",
+    "should",
+    "would",
+    "may",
+    "might",
+    "must",
+    "will",
+    "shall",
+    "do",
+    "does",
+    "did",
+    "has",
+    "have",
+    "had",
     "to",
     "of",
     "by",
@@ -263,6 +410,8 @@ _DANGLING_HEADER_ENDINGS = {
 }
 
 _MAX_HEADER_BATCH_ATOMS = 50
+_MAIN_DAG_MIN_SPAN_CONFIDENCE = 0.70
+_REPAIRABLE_SPAN_MIN_CONFIDENCE = 0.40
 
 
 class AtomExtractorAgent(BaseAgent):
@@ -298,32 +447,60 @@ class AtomExtractorAgent(BaseAgent):
                 error="parsed_paper missing from context",
             )
 
-        deterministic = self._extract_environments(paper)
+        deterministic = self._extract_environment_candidates(paper)
         warnings: list[str] = []
+        batch_count = len(_section_batches(paper, self._max_section_chars))
         await self._emit_progress(
-            _merge_atoms(deterministic, []),
+            _candidates_to_research_atoms(paper, deterministic),
             {
-                "stage": "Extracting atoms",
+                "stage": "Extracting deterministic atoms",
                 "batches_completed": 0,
-                "batches_total": len(_section_batches(paper, self._max_section_chars)),
+                "batches_total": batch_count,
             },
         )
 
         try:
-            llm_atoms, llm_warnings = await self._extract_with_llm(paper, deterministic)
+            llm_candidates, llm_warnings = await self._extract_with_llm(paper, deterministic)
             warnings.extend(llm_warnings)
         except Exception as exc:
             logger.exception("LLM atom extraction failed")
             warnings.append(f"llm_extraction_failed: {exc}")
-            llm_atoms = []
+            llm_candidates = []
 
-        merged = _merge_atoms(deterministic, llm_atoms)
-        if self._normalize_headers and merged:
+        candidates = _merge_candidate_lists(deterministic, llm_candidates)
+        candidates, resolve_warnings = _resolve_candidate_spans(paper, candidates)
+        warnings.extend(resolve_warnings)
+        if _repairable_span_candidates(candidates):
             try:
-                merged, normalization_warnings = await self._normalize_headers_with_llm(merged)
+                candidates, repair_warnings = await self._repair_candidate_quotes_with_llm(
+                    paper,
+                    candidates,
+                )
+                warnings.extend(repair_warnings)
+            except Exception as exc:
+                logger.exception("LLM atom quote repair failed")
+                warnings.append(f"llm_atom_quote_repair_failed: {exc}")
+        candidates, grounding_warnings = _filter_grounded_candidates(candidates)
+        warnings.extend(grounding_warnings)
+
+        if candidates:
+            try:
+                candidates, critic_warnings = await self._critic_repair_candidates(candidates)
+                warnings.extend(critic_warnings)
+            except Exception as exc:
+                logger.exception("LLM atom critic failed")
+                warnings.append(f"llm_atom_critic_failed: {exc}")
+                candidates = _local_candidate_filter(candidates, warnings)
+
+        candidates = _dedupe_candidates(candidates, warnings)
+        atoms = _candidates_to_research_atoms(paper, candidates)
+
+        if self._normalize_headers and atoms:
+            try:
+                atoms, normalization_warnings = await self._normalize_headers_with_llm(atoms)
                 warnings.extend(normalization_warnings)
                 await self._emit_progress(
-                    merged,
+                    atoms,
                     {
                         "stage": "Normalizing atom headers",
                         "batches_completed": 1,
@@ -333,27 +510,29 @@ class AtomExtractorAgent(BaseAgent):
             except Exception as exc:
                 logger.exception("LLM atom header normalization failed")
                 warnings.append(f"llm_header_normalization_failed: {exc}")
+        atoms, final_header_warnings = _finalize_atom_headers(atoms)
+        warnings.extend(final_header_warnings)
         result = AtomExtractionResult(
             paper_id=paper.paper_id,
-            atoms=merged,
+            atoms=atoms,
             warnings=warnings,
         )
 
-        confidence = 0.85 if merged else 0.2
+        confidence = 0.85 if atoms else 0.2
         return AgentResult(
             agent_id=self.agent_id,
-            status="success" if merged else "inconclusive",
+            status="success" if atoms else "inconclusive",
             output=result.model_dump(),
             confidence=confidence,
         )
 
     # --------------------------------------------------------------- pass A
 
-    def _extract_environments(self, paper: ParsedPaper) -> list[ResearchAtom]:
-        atoms: list[ResearchAtom] = []
+    def _extract_environment_candidates(self, paper: ParsedPaper) -> list[AtomCandidate]:
+        candidates: list[AtomCandidate] = []
         assembled = paper.assembled_tex or ""
         if not assembled:
-            return atoms
+            return candidates
 
         counter = 0
         for match in _iter_research_env_matches(assembled):
@@ -376,52 +555,57 @@ class AtomExtractorAgent(BaseAgent):
             section_heading = _section_heading_for_id(paper, section_id)
 
             cleaned = _strip_tex(body)
-            atom_id = f"atom_env_{counter:03d}"
+            candidate_id = f"cand_env_{counter:03d}"
             importance = _DEFAULT_IMPORTANCE.get(atom_type, AtomImportance.MEDIUM)
+            reviewability = _default_reviewability(atom_type, importance)
+            checkability = _default_checkability(atom_type)
+            span = SourceSpan(
+                paper_id=paper.paper_id,
+                section_id=section_id,
+                tex_start=tex_start,
+                tex_end=tex_end,
+                raw_excerpt=cleaned[:1000],
+                match_confidence=1.0,
+            )
 
-            atoms.append(
-                ResearchAtom(
-                    atom_id=atom_id,
+            candidates.append(
+                AtomCandidate(
+                    candidate_id=candidate_id,
                     paper_id=paper.paper_id,
                     atom_type=atom_type,
+                    source_quote=cleaned[:2000],
                     text=cleaned[:2000],
-                    section_id=section_id,
                     section_heading=section_heading,
-                    source_span=SourceSpan(
-                        paper_id=paper.paper_id,
-                        section_id=section_id,
-                        tex_start=tex_start,
-                        tex_end=tex_end,
-                        raw_excerpt=cleaned[:1000],
-                        match_confidence=1.0,
-                    ),
-                    extraction_confidence=0.95,
                     importance=importance,
+                    reviewability=reviewability,
+                    checkability=checkability,
+                    confidence=0.95,
                     role_in_paper=f"{atom_type.value} from \\begin{{{raw_env}}} environment"
                     + (f" (label {label})" if label else ""),
+                    source_span=span,
                 )
             )
 
-        return atoms
+        return candidates
 
     # --------------------------------------------------------------- pass B
 
     async def _extract_with_llm(
         self,
         paper: ParsedPaper,
-        seen: list[ResearchAtom],
-    ) -> tuple[list[ResearchAtom], list[str]]:
+        seen: list[AtomCandidate],
+    ) -> tuple[list[AtomCandidate], list[str]]:
         batches = _section_batches(paper, self._max_section_chars)
         if not batches:
             return [], ["llm_skipped: empty section text"]
 
         client = self._get_client()
-        atoms: list[ResearchAtom] = []
+        candidates: list[AtomCandidate] = []
         warnings: list[str] = []
         counter = 0
 
         for batch_idx, sections_text in enumerate(batches, start=1):
-            seen_block = _format_seen_block([*seen, *atoms]) or "(none)"
+            seen_block = _format_seen_block([*seen, *candidates]) or "(none)"
             prompt = _USER_PROMPT_TMPL.format(
                 seen_block=seen_block,
                 sections_text=sections_text,
@@ -434,43 +618,260 @@ class AtomExtractorAgent(BaseAgent):
                     {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
-                max_tokens=4500,
+                max_tokens=7000,
             )
             raw = response.choices[0].message.content or ""
-            try:
-                data = json.loads(raw)
-            except json.JSONDecodeError as exc:
-                warnings.append(f"llm_json_parse_failed_batch_{batch_idx}: {exc}")
+            data, parse_warning = _loads_json_object(raw)
+            if data is None:
+                warnings.append(f"llm_json_parse_failed_batch_{batch_idx}: {parse_warning}")
                 continue
+            if parse_warning:
+                warnings.append(f"llm_json_repaired_batch_{batch_idx}: {parse_warning}")
 
-            atoms_data = data.get("atoms") if isinstance(data, dict) else None
-            if not isinstance(atoms_data, list):
-                warnings.append(f"llm_response_missing_atoms_array_batch_{batch_idx}")
+            entries = _candidate_entries_from_response(data)
+            if not isinstance(entries, list):
+                warnings.append(f"llm_response_missing_candidates_array_batch_{batch_idx}")
                 continue
 
             batch_warnings = data.get("warnings") if isinstance(data, dict) else None
             if isinstance(batch_warnings, list):
                 warnings.extend(str(w) for w in batch_warnings if str(w).strip())
 
-            for entry in atoms_data:
+            for entry in entries:
                 if not isinstance(entry, dict):
                     continue
-                atom = _atom_from_llm_entry(entry, paper, counter)
-                if atom is None:
+                candidate = _candidate_from_llm_entry(entry, paper, counter)
+                if candidate is None:
                     continue
-                atoms.append(atom)
+                candidates.append(candidate)
                 counter += 1
 
             await self._emit_progress(
-                _merge_atoms(seen, atoms),
+                _candidates_to_research_atoms(
+                    paper,
+                    _dedupe_candidates(
+                        _merge_candidate_lists(seen, candidates),
+                        warnings=[],
+                    ),
+                ),
                 {
-                    "stage": f"Extracting atoms ({batch_idx}/{len(batches)})",
+                    "stage": f"Extracting atom candidates ({batch_idx}/{len(batches)})",
                     "batches_completed": batch_idx,
                     "batches_total": len(batches),
                 },
             )
 
-        return atoms, warnings
+        return candidates, warnings
+
+    async def _critic_repair_candidates(
+        self,
+        candidates: list[AtomCandidate],
+    ) -> tuple[list[AtomCandidate], list[str]]:
+        client = self._get_client()
+        warnings: list[str] = []
+        decisions: dict[str, dict[str, Any]] = {}
+
+        for batch_idx, batch in enumerate(_candidate_batches(candidates, _MAX_HEADER_BATCH_ATOMS), start=1):
+            payload = [
+                {
+                    "candidate_id": candidate.candidate_id,
+                    "atom_type": candidate.atom_type.value,
+                    "section_heading": candidate.section_heading,
+                    "source_quote": candidate.source_quote[:900],
+                    "text": candidate.text[:600],
+                    "reviewability": candidate.reviewability.value,
+                    "checkability": candidate.checkability.value,
+                    "claim_scope": candidate.claim_scope,
+                    "why_this_is_an_atom": candidate.why_this_is_an_atom,
+                    "confidence": candidate.confidence,
+                    "span_confidence": (
+                        candidate.source_span.match_confidence
+                        if candidate.source_span is not None
+                        else None
+                    ),
+                }
+                for candidate in batch
+            ]
+            prompt = _CRITIC_PROMPT_TMPL.format(
+                candidates_json=json.dumps(payload, ensure_ascii=False, indent=2)
+            )
+            response = await client.chat.completions.create(
+                model=settings.openai_model,
+                messages=[
+                    {"role": "system", "content": _CRITIC_SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
+                ],
+                response_format={"type": "json_object"},
+                max_tokens=7000,
+            )
+            raw = response.choices[0].message.content or ""
+            data, parse_warning = _loads_json_object(raw)
+            if data is None:
+                warnings.append(f"llm_critic_json_parse_failed_batch_{batch_idx}: {parse_warning}")
+                continue
+            if parse_warning:
+                warnings.append(f"llm_critic_json_repaired_batch_{batch_idx}: {parse_warning}")
+
+            entries = data.get("decisions") if isinstance(data, dict) else None
+            if not isinstance(entries, list):
+                warnings.append(f"llm_critic_response_missing_decisions_batch_{batch_idx}")
+                continue
+
+            batch_warnings = data.get("warnings") if isinstance(data, dict) else None
+            if isinstance(batch_warnings, list):
+                warnings.extend(str(w) for w in batch_warnings if str(w).strip())
+
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                candidate_id = str(entry.get("candidate_id") or "").strip()
+                if candidate_id:
+                    decisions[candidate_id] = entry
+
+        if not decisions:
+            warnings.append("llm_critic_returned_no_decisions")
+            return _local_candidate_filter(candidates, warnings), warnings
+
+        cleaned: list[AtomCandidate] = []
+        kept_ids: set[str] = set()
+        for candidate in candidates:
+            decision = decisions.get(candidate.candidate_id)
+            if decision is None:
+                warnings.append(f"llm_critic_missing_decision: {candidate.candidate_id}")
+                if _locally_keep_candidate(candidate):
+                    cleaned.append(candidate)
+                    kept_ids.add(candidate.candidate_id)
+                continue
+
+            action = str(decision.get("action") or "keep").strip().lower()
+            if action in {"drop", "dropped"}:
+                reason = str(decision.get("drop_reason") or "").strip()
+                warnings.append(f"critic_dropped_candidate: {candidate.candidate_id} {reason}".strip())
+                continue
+            if action == "merge":
+                target = str(decision.get("merge_with") or "").strip()
+                if target and target in kept_ids:
+                    warnings.append(f"critic_merged_candidate: {candidate.candidate_id} -> {target}")
+                    continue
+                # If the merge target is not already kept, keep this candidate
+                # and let deterministic dedupe make the final call.
+
+            update: dict[str, Any] = {}
+            reviewability = _coerce_reviewability(decision.get("reviewability"))
+            checkability = _coerce_checkability(decision.get("checkability"))
+            if reviewability is not None:
+                update["reviewability"] = reviewability
+            if checkability is not None:
+                update["checkability"] = checkability
+
+            new_text = _compact_header(str(decision.get("new_text") or ""))
+            if action in {"rewrite", "split"} and _valid_atom_header(new_text):
+                update["text"] = new_text
+                update["normalized_text"] = new_text
+
+            updated = candidate.model_copy(update=update) if update else candidate
+            if _locally_keep_candidate(updated):
+                cleaned.append(updated)
+                kept_ids.add(updated.candidate_id)
+            else:
+                warnings.append(f"critic_local_drop_after_decision: {candidate.candidate_id}")
+
+        return cleaned, warnings
+
+    async def _repair_candidate_quotes_with_llm(
+        self,
+        paper: ParsedPaper,
+        candidates: list[AtomCandidate],
+    ) -> tuple[list[AtomCandidate], list[str]]:
+        repairable = _repairable_span_candidates(candidates)
+        if not repairable:
+            return candidates, []
+
+        client = self._get_client()
+        warnings: list[str] = []
+        payload = [
+            {
+                "candidate_id": candidate.candidate_id,
+                "atom_type": candidate.atom_type.value,
+                "section_heading": candidate.section_heading,
+                "current_source_quote": candidate.source_quote[:800],
+                "text": candidate.text[:500],
+                "span_confidence": (
+                    candidate.source_span.match_confidence
+                    if candidate.source_span is not None
+                    else 0.0
+                ),
+            }
+            for candidate in repairable
+        ]
+        prompt = _QUOTE_REPAIR_PROMPT_TMPL.format(
+            sections_text=_sections_text_for_candidates(paper, repairable),
+            candidates_json=json.dumps(payload, ensure_ascii=False, indent=2),
+        )
+        response = await client.chat.completions.create(
+            model=settings.openai_model,
+            messages=[
+                {"role": "system", "content": _QUOTE_REPAIR_SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            response_format={"type": "json_object"},
+            max_tokens=2500,
+        )
+        raw = response.choices[0].message.content or ""
+        data, parse_warning = _loads_json_object(raw)
+        if data is None:
+            return candidates, [f"llm_quote_repair_json_parse_failed: {parse_warning}"]
+        if parse_warning:
+            warnings.append(f"llm_quote_repair_json_repaired: {parse_warning}")
+
+        quote_entries = data.get("quotes") if isinstance(data, dict) else None
+        if not isinstance(quote_entries, list):
+            return candidates, ["llm_quote_repair_missing_quotes_array"]
+
+        batch_warnings = data.get("warnings") if isinstance(data, dict) else None
+        if isinstance(batch_warnings, list):
+            warnings.extend(str(w) for w in batch_warnings if str(w).strip())
+
+        quote_by_id: dict[str, str] = {}
+        for entry in quote_entries:
+            if not isinstance(entry, dict):
+                continue
+            candidate_id = str(entry.get("candidate_id") or "").strip()
+            quote = str(entry.get("source_quote") or "").strip()
+            if candidate_id:
+                quote_by_id[candidate_id] = quote
+
+        repaired: list[AtomCandidate] = []
+        repairable_ids = {candidate.candidate_id for candidate in repairable}
+        for candidate in candidates:
+            if candidate.candidate_id not in repairable_ids:
+                repaired.append(candidate)
+                continue
+            old_conf = candidate.source_span.match_confidence if candidate.source_span else 0.0
+            quote = quote_by_id.get(candidate.candidate_id, "")
+            if not quote:
+                repaired.append(candidate)
+                continue
+            span = resolve_span(paper, quote, candidate.section_heading)
+            if span.match_confidence > old_conf:
+                warnings.append(
+                    f"repaired_span_quote: {candidate.candidate_id} "
+                    f"old={old_conf:.2f} new={span.match_confidence:.2f}"
+                )
+                repaired.append(
+                    candidate.model_copy(
+                        update={
+                            "source_quote": quote,
+                            "source_span": span,
+                            "section_heading": candidate.section_heading
+                            or _section_heading_for_id(paper, span.section_id),
+                        }
+                    )
+                )
+            else:
+                repaired.append(candidate)
+
+        return repaired, warnings
 
     async def _normalize_headers_with_llm(
         self,
@@ -506,11 +907,12 @@ class AtomExtractorAgent(BaseAgent):
                 max_tokens=4500,
             )
             raw = response.choices[0].message.content or ""
-            try:
-                data = json.loads(raw)
-            except json.JSONDecodeError as exc:
-                warnings.append(f"llm_header_json_parse_failed_batch_{batch_idx}: {exc}")
+            data, parse_warning = _loads_json_object(raw)
+            if data is None:
+                warnings.append(f"llm_header_json_parse_failed_batch_{batch_idx}: {parse_warning}")
                 continue
+            if parse_warning:
+                warnings.append(f"llm_header_json_repaired_batch_{batch_idx}: {parse_warning}")
 
             atom_entries = data.get("atoms") if isinstance(data, dict) else None
             if not isinstance(atom_entries, list):
@@ -661,23 +1063,68 @@ def _section_batches(paper: ParsedPaper, max_chars: int) -> list[str]:
     return [batch for batch in batches if batch]
 
 
-def _format_seen_block(seen: list[ResearchAtom]) -> str:
+def _format_seen_block(seen: list[AtomCandidate]) -> str:
     if not seen:
         return ""
     lines: list[str] = []
-    for atom in seen[:30]:
-        snippet = atom.text[:140].replace("\n", " ")
-        lines.append(f"- {atom.atom_type.value} ({atom.section_heading or '?'}): {snippet}")
+    for candidate in seen[:30]:
+        snippet = candidate.text[:140].replace("\n", " ")
+        lines.append(
+            f"- {candidate.atom_type.value} ({candidate.section_heading or '?'}): {snippet}"
+        )
     if len(seen) > 30:
-        lines.append(f"- ... ({len(seen) - 30} more deterministic atoms)")
+        lines.append(f"- ... ({len(seen) - 30} more candidates)")
     return "\n".join(lines)
 
 
-def _atom_from_llm_entry(
+def _candidate_entries_from_response(data: Any) -> Optional[list[Any]]:
+    if not isinstance(data, dict):
+        return None
+    entries = data.get("candidates")
+    if isinstance(entries, list):
+        return entries
+    # Tolerate the older mocked shape in offline tests.
+    entries = data.get("atoms")
+    return entries if isinstance(entries, list) else None
+
+
+def _loads_json_object(raw: str) -> tuple[Optional[dict[str, Any]], Optional[str]]:
+    try:
+        data = json.loads(raw)
+        return (data if isinstance(data, dict) else None), None
+    except json.JSONDecodeError as first_exc:
+        repaired = _repair_json_backslashes(raw)
+        if repaired == raw:
+            return None, str(first_exc)
+        try:
+            data = json.loads(repaired)
+        except json.JSONDecodeError as second_exc:
+            if repair_json is None:
+                return None, f"{first_exc}; repair_failed={second_exc}"
+            try:
+                repair_output = repair_json(raw)
+                data = json.loads(repair_output)
+            except Exception as repair_exc:  # noqa: BLE001
+                return None, f"{first_exc}; repair_failed={second_exc}; json_repair_failed={repair_exc}"
+        if not isinstance(data, dict):
+            return None, "json root was not an object"
+        return data, str(first_exc)
+
+
+def _repair_json_backslashes(raw: str) -> str:
+    # Model outputs that include LaTeX often contain JSON-invalid escapes such
+    # as `\dmodel` or malformed `\u` fragments. Preserve the literal backslash
+    # by escaping only sequences JSON cannot legally decode.
+    text = re.sub(r"\\u(?![0-9a-fA-F]{4})", r"\\\\u", raw)
+    text = re.sub(r"\\(?![\"\\/bfnrtu])", r"\\\\", text)
+    return text
+
+
+def _candidate_from_llm_entry(
     entry: dict[str, Any],
     paper: ParsedPaper,
     index: int,
-) -> Optional[ResearchAtom]:
+) -> Optional[AtomCandidate]:
     atom_type = _coerce_atom_type(entry.get("atom_type"))
     if atom_type is None:
         return None
@@ -689,28 +1136,39 @@ def _atom_from_llm_entry(
     if not source_quote:
         source_quote = text
 
-    span = resolve_span(paper, source_quote, entry.get("section_heading"))
-
     importance = _coerce_importance(entry.get("importance"))
     confidence = _coerce_confidence(entry.get("confidence"), default=0.6)
+    reviewability = _coerce_reviewability(entry.get("reviewability")) or _default_reviewability(
+        atom_type,
+        importance,
+    )
+    checkability = _coerce_checkability(entry.get("checkability")) or _default_checkability(
+        atom_type,
+    )
 
-    atom_id = f"atom_llm_{index + 1:03d}"
-    return ResearchAtom(
-        atom_id=atom_id,
+    candidate_id = f"cand_llm_{index + 1:03d}"
+    return AtomCandidate(
+        candidate_id=candidate_id,
         paper_id=paper.paper_id,
         atom_type=atom_type,
+        source_quote=source_quote[:2000],
         text=text[:2000],
         normalized_text=(entry.get("normalized_text") or None),
-        section_id=span.section_id,
-        section_heading=entry.get("section_heading") or _section_heading_for_id(paper, span.section_id),
-        source_span=span,
-        extraction_confidence=confidence,
+        section_heading=(entry.get("section_heading") or None),
         importance=importance,
+        reviewability=reviewability,
+        checkability=checkability,
+        claim_scope=(entry.get("claim_scope") or None),
+        why_this_is_an_atom=(entry.get("why_this_is_an_atom") or None),
         role_in_paper=(entry.get("role_in_paper") or None),
         assumptions=_coerce_str_list(entry.get("assumptions")),
         conclusions=_coerce_str_list(entry.get("conclusions")),
         key_terms=_coerce_str_list(entry.get("key_terms")),
         symbols=_coerce_str_list(entry.get("symbols")),
+        dependency_hints=_coerce_str_list(entry.get("dependency_hints")),
+        equation_refs=_coerce_str_list(entry.get("equation_refs")),
+        citation_refs=_coerce_str_list(entry.get("citation_refs")),
+        confidence=confidence,
     )
 
 
@@ -742,6 +1200,80 @@ def _coerce_importance(value: Any) -> AtomImportance:
         except ValueError:
             pass
     return AtomImportance.MEDIUM
+
+
+def _coerce_reviewability(value: Any) -> Optional[AtomReviewability]:
+    if isinstance(value, AtomReviewability):
+        return value
+    if isinstance(value, str):
+        key = value.strip().lower().replace(" ", "_").replace("-", "_")
+        try:
+            return AtomReviewability(key)
+        except ValueError:
+            synonyms = {
+                "reader_only": AtomReviewability.LEARNING_ONLY,
+                "learning": AtomReviewability.LEARNING_ONLY,
+                "teaching": AtomReviewability.LEARNING_ONLY,
+                "not_reviewable": AtomReviewability.LEARNING_ONLY,
+                "ignore": AtomReviewability.DROP,
+            }
+            return synonyms.get(key)
+    return None
+
+
+def _coerce_checkability(value: Any) -> Optional[AtomCheckability]:
+    if isinstance(value, AtomCheckability):
+        return value
+    if isinstance(value, str):
+        key = value.strip().lower().replace(" ", "_").replace("-", "_")
+        try:
+            return AtomCheckability(key)
+        except ValueError:
+            synonyms = {
+                "proof": AtomCheckability.PROOF_ONLY,
+                "math": AtomCheckability.SYMBOLIC,
+                "empirical": AtomCheckability.NUMERIC,
+                "citation_context": AtomCheckability.CITATION,
+                "uncheckable": AtomCheckability.NOT_CHECKABLE,
+            }
+            return synonyms.get(key)
+    return None
+
+
+def _default_reviewability(
+    atom_type: ResearchAtomType,
+    importance: AtomImportance,
+) -> AtomReviewability:
+    if atom_type in {
+        ResearchAtomType.DEFINITION,
+        ResearchAtomType.EXAMPLE,
+        ResearchAtomType.COUNTEREXAMPLE,
+        ResearchAtomType.PROOF_STEP,
+        ResearchAtomType.TECHNIQUE,
+        ResearchAtomType.RELATED_WORK_CLAIM,
+    }:
+        return AtomReviewability.LEARNING_ONLY
+    if importance == AtomImportance.LOW:
+        return AtomReviewability.LEARNING_ONLY
+    return AtomReviewability.REVIEWABLE
+
+
+def _default_checkability(atom_type: ResearchAtomType) -> AtomCheckability:
+    if atom_type in {
+        ResearchAtomType.THEOREM,
+        ResearchAtomType.LEMMA,
+        ResearchAtomType.COROLLARY,
+        ResearchAtomType.PROPOSITION,
+        ResearchAtomType.PROOF_STEP,
+    }:
+        return AtomCheckability.PROOF_ONLY
+    if atom_type in {ResearchAtomType.BOUND, ResearchAtomType.ASSERTION}:
+        return AtomCheckability.CONCEPTUAL
+    if atom_type == ResearchAtomType.RELATED_WORK_CLAIM:
+        return AtomCheckability.CITATION
+    if atom_type in {ResearchAtomType.ALGORITHM, ResearchAtomType.CONSTRUCTION}:
+        return AtomCheckability.CONCEPTUAL
+    return AtomCheckability.NOT_CHECKABLE
 
 
 def _coerce_confidence(value: Any, default: float) -> float:
@@ -781,11 +1313,7 @@ def _coerce_bool(value: Any, default: bool) -> bool:
 
 def _compact_header(value: str) -> str:
     text = re.sub(r"\s+", " ", str(value or "")).strip()
-    text = text.strip(" -:;,.")
-    if len(text) <= 160:
-        return text
-    clipped = text[:160].rsplit(" ", 1)[0].strip(" -:;,.")
-    return clipped or text[:160].strip(" -:;,.")
+    return text.strip(" -:;,.")
 
 
 def _valid_atom_header(value: str) -> bool:
@@ -795,7 +1323,9 @@ def _valid_atom_header(value: str) -> bool:
     words = re.findall(r"[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)?", text)
     if len(words) < 3:
         return False
-    if len(text) > 180:
+    if len(text) > 500:
+        return False
+    if _contains_raw_latex(text):
         return False
     last = words[-1].lower()
     if last in _DANGLING_HEADER_ENDINGS:
@@ -803,6 +1333,10 @@ def _valid_atom_header(value: str) -> bool:
     if re.search(r"(?:\bat\b|\bto\b|\band\b|\bby\b)\s*$", text, flags=re.IGNORECASE):
         return False
     if text.count("$") % 2 == 1:
+        return False
+    if _ends_with_symbol_like_fragment(words[-1]):
+        return False
+    if _looks_like_unfinished_clause(text):
         return False
     return True
 
@@ -812,26 +1346,144 @@ def _locally_keepable_header(value: str) -> bool:
     if _valid_atom_header(text):
         return True
     words = re.findall(r"[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)?", text)
-    return len(words) >= 6 and (words[-1].lower() not in _DANGLING_HEADER_ENDINGS)
+    return (
+        len(words) >= 6
+        and (words[-1].lower() not in _DANGLING_HEADER_ENDINGS)
+        and not _contains_raw_latex(text)
+        and not _ends_with_symbol_like_fragment(words[-1])
+        and not _looks_like_unfinished_clause(text)
+    )
 
 
-def _merge_atoms(
-    deterministic: list[ResearchAtom],
-    llm_atoms: list[ResearchAtom],
-) -> list[ResearchAtom]:
-    """Drop LLM atoms that overlap a deterministic atom's TeX span."""
-    merged: list[ResearchAtom] = list(deterministic)
+def _finalize_atom_headers(atoms: list[ResearchAtom]) -> tuple[list[ResearchAtom], list[str]]:
+    cleaned: list[ResearchAtom] = []
+    warnings: list[str] = []
+    for atom in atoms:
+        header = _compact_header(atom.text)
+        if _valid_atom_header(header):
+            cleaned.append(atom.model_copy(update={"text": header}))
+            continue
+        repaired = _header_from_source_excerpt(atom)
+        if repaired and _valid_atom_header(repaired):
+            warnings.append(f"final_header_repaired: {atom.atom_id}")
+            cleaned.append(
+                atom.model_copy(
+                    update={
+                        "text": repaired,
+                        "normalized_text": repaired,
+                    }
+                )
+            )
+            continue
+        warnings.append(f"final_header_dropped: {atom.atom_id} {header[:80]}")
+    return _renumber_atoms(cleaned), warnings
+
+
+def _header_from_source_excerpt(atom: ResearchAtom) -> str:
+    excerpt = re.sub(r"\s+", " ", atom.source_span.raw_excerpt or "").strip()
+    if not excerpt:
+        return ""
+    if _math_heavy_excerpt(excerpt):
+        return ""
+    sentences = re.split(r"(?<=[.!?])\s+", excerpt)
+    for sentence in sentences:
+        header = _compact_header(_strip_inline_tex_noise(sentence))
+        if 24 <= len(header) <= 180:
+            return header
+    return _compact_header(_strip_inline_tex_noise(excerpt))
+
+
+def _strip_inline_tex_noise(value: str) -> str:
+    text = str(value or "")
+    replacements = {
+        r"\mathbb{R}": "real numbers",
+        r"\mathbb{N}": "natural numbers",
+        r"\mathbb{Z}": "integers",
+        r"\mathcal{N}": "normal distribution",
+        r"\in": " in ",
+        r"\geq": " is at least ",
+        r"\ge": " is at least ",
+        r"\leq": " is at most ",
+        r"\le": " is at most ",
+        r"\to": " to ",
+        r"\rightarrow": " to ",
+        r"\sim": " is distributed as ",
+    }
+    for needle, replacement in replacements.items():
+        text = text.replace(needle, replacement)
+    text = text.replace("$", " ")
+    text = re.sub(r"\\[A-Za-z@]+\*?", "", text)
+    text = text.replace("{", "").replace("}", "")
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _math_heavy_excerpt(value: str) -> bool:
+    text = value.strip()
+    if text.startswith("$") and text.endswith("$"):
+        return True
+    math_chars = sum(1 for ch in text if ch in "\\{}_^=|")
+    return len(text) > 0 and (math_chars / max(len(text), 1)) > 0.12
+
+
+def _contains_raw_latex(value: str) -> bool:
+    text = str(value or "")
+    if "$" in text:
+        return True
+    if re.search(r"\\[A-Za-z@]+", text):
+        return True
+    if re.search(r"\b(?:mathcal|mathrm|mathbf|frac|sqrt|qPhi|pT|pA|bphi|bT|bz|bx)\b", text):
+        return True
+    return False
+
+
+def _ends_with_symbol_like_fragment(word: str) -> bool:
+    if len(word) <= 2:
+        return False
+    if re.search(r"[a-z][A-Z]", word):
+        return True
+    if re.fullmatch(r"[A-Za-z]+(?:Phi|Theta|Sigma|phi|theta|sigma|T|X|Z)", word):
+        return True
+    return False
+
+
+def _looks_like_unfinished_clause(text: str) -> bool:
+    return bool(
+        re.search(
+            r"\b(?:because|since|where|when|if|given|with respect to|over|for|under)\s*$",
+            text,
+            flags=re.IGNORECASE,
+        )
+    )
+
+
+def _candidate_batches(
+    candidates: list[AtomCandidate],
+    batch_size: int,
+) -> list[list[AtomCandidate]]:
+    size = max(1, batch_size)
+    return [candidates[idx : idx + size] for idx in range(0, len(candidates), size)]
+
+
+def _merge_candidate_lists(
+    deterministic: list[AtomCandidate],
+    llm_candidates: list[AtomCandidate],
+) -> list[AtomCandidate]:
+    """Drop LLM candidates that overlap deterministic TeX environment spans."""
+    merged: list[AtomCandidate] = list(deterministic)
 
     det_ranges: list[tuple[int, int]] = []
-    for atom in deterministic:
-        s = atom.source_span.tex_start
-        e = atom.source_span.tex_end
+    for candidate in deterministic:
+        if candidate.source_span is None:
+            continue
+        s = candidate.source_span.tex_start
+        e = candidate.source_span.tex_end
         if s is not None and e is not None:
             det_ranges.append((s, e))
 
-    for atom in llm_atoms:
-        s = atom.source_span.tex_start
-        e = atom.source_span.tex_end
+    for candidate in llm_candidates:
+        span = candidate.source_span
+        s = span.tex_start if span is not None else None
+        e = span.tex_end if span is not None else None
         overlap = False
         if s is not None and e is not None:
             for ds, de in det_ranges:
@@ -842,12 +1494,209 @@ def _merge_atoms(
             continue
 
         # Also drop near-duplicate text bodies.
-        if any(_text_overlap(atom.text, d.text) for d in deterministic):
+        if any(_text_overlap(candidate.text, d.text) for d in deterministic):
             continue
 
-        merged.append(atom)
+        merged.append(candidate)
 
-    return _renumber_atoms(merged)
+    return _renumber_candidates(merged)
+
+
+def _resolve_candidate_spans(
+    paper: ParsedPaper,
+    candidates: list[AtomCandidate],
+) -> tuple[list[AtomCandidate], list[str]]:
+    resolved: list[AtomCandidate] = []
+    warnings: list[str] = []
+
+    for candidate in candidates:
+        span = candidate.source_span or resolve_span(
+            paper,
+            candidate.source_quote,
+            candidate.section_heading,
+        )
+        resolved.append(
+            candidate.model_copy(
+                update={
+                    "source_span": span,
+                    "section_heading": candidate.section_heading
+                    or _section_heading_for_id(paper, span.section_id),
+                }
+            )
+        )
+        if _REPAIRABLE_SPAN_MIN_CONFIDENCE <= span.match_confidence < _MAIN_DAG_MIN_SPAN_CONFIDENCE:
+            warnings.append(
+                f"span_needs_quote_repair: {candidate.candidate_id} confidence={span.match_confidence:.2f}"
+            )
+
+    return resolved, warnings
+
+
+def _repairable_span_candidates(candidates: list[AtomCandidate]) -> list[AtomCandidate]:
+    return [
+        candidate
+        for candidate in candidates
+        if candidate.source_span is not None
+        and _REPAIRABLE_SPAN_MIN_CONFIDENCE
+        <= candidate.source_span.match_confidence
+        < _MAIN_DAG_MIN_SPAN_CONFIDENCE
+    ]
+
+
+def _filter_grounded_candidates(
+    candidates: list[AtomCandidate],
+) -> tuple[list[AtomCandidate], list[str]]:
+    grounded: list[AtomCandidate] = []
+    warnings: list[str] = []
+
+    for candidate in candidates:
+        span = candidate.source_span
+        confidence = span.match_confidence if span is not None else 0.0
+        if confidence >= _MAIN_DAG_MIN_SPAN_CONFIDENCE:
+            grounded.append(candidate)
+        else:
+            warnings.append(
+                f"dropped_low_confidence_span: {candidate.candidate_id} confidence={confidence:.2f}"
+            )
+
+    return grounded, warnings
+
+
+def _ground_candidates(
+    paper: ParsedPaper,
+    candidates: list[AtomCandidate],
+) -> tuple[list[AtomCandidate], list[str]]:
+    resolved, resolve_warnings = _resolve_candidate_spans(paper, candidates)
+    grounded, grounding_warnings = _filter_grounded_candidates(resolved)
+    return grounded, [*resolve_warnings, *grounding_warnings]
+
+
+def _sections_text_for_candidates(
+    paper: ParsedPaper,
+    candidates: list[AtomCandidate],
+) -> str:
+    section_ids = {
+        candidate.source_span.section_id
+        for candidate in candidates
+        if candidate.source_span is not None and candidate.source_span.section_id
+    }
+    chunks: list[str] = []
+    for section in paper.sections:
+        if section_ids and section.section_id not in section_ids:
+            continue
+        if not section.content.strip():
+            continue
+        chunks.append(f"## {section.heading} [{section.section_id}]\n{section.content.strip()}")
+    return "\n\n".join(chunks)[:18000]
+
+
+def _local_candidate_filter(
+    candidates: list[AtomCandidate],
+    warnings: list[str],
+) -> list[AtomCandidate]:
+    kept: list[AtomCandidate] = []
+    for candidate in candidates:
+        if _locally_keep_candidate(candidate):
+            kept.append(candidate)
+        else:
+            warnings.append(f"local_candidate_filter_dropped: {candidate.candidate_id}")
+    return kept
+
+
+def _locally_keep_candidate(candidate: AtomCandidate) -> bool:
+    if candidate.reviewability in {
+        AtomReviewability.DROP,
+        AtomReviewability.BACKGROUND,
+    }:
+        return False
+    if candidate.source_span is None:
+        return False
+    if candidate.source_span.match_confidence < _MAIN_DAG_MIN_SPAN_CONFIDENCE:
+        return False
+    text = _compact_header(candidate.text)
+    if _valid_atom_header(text):
+        return True
+    words = re.findall(r"[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)?", text)
+    return len(words) >= 6 and (words[-1].lower() not in _DANGLING_HEADER_ENDINGS)
+
+
+def _dedupe_candidates(
+    candidates: list[AtomCandidate],
+    warnings: list[str],
+) -> list[AtomCandidate]:
+    deduped: list[AtomCandidate] = []
+    for candidate in candidates:
+        duplicate_of: Optional[AtomCandidate] = None
+        for existing in deduped:
+            if _candidate_duplicate(candidate, existing):
+                duplicate_of = existing
+                break
+        if duplicate_of is not None:
+            warnings.append(
+                f"deduped_candidate: {candidate.candidate_id} -> {duplicate_of.candidate_id}"
+            )
+            continue
+        deduped.append(candidate)
+    return _renumber_candidates(deduped)
+
+
+def _candidate_duplicate(a: AtomCandidate, b: AtomCandidate) -> bool:
+    if a.atom_type == b.atom_type and _text_overlap(a.text, b.text):
+        return True
+    if a.source_quote and b.source_quote and _text_overlap(a.source_quote, b.source_quote):
+        return True
+    return False
+
+
+def _renumber_candidates(candidates: list[AtomCandidate]) -> list[AtomCandidate]:
+    renumbered: list[AtomCandidate] = []
+    for idx, candidate in enumerate(candidates, start=1):
+        prefix = "cand_env" if candidate.candidate_id.startswith("cand_env") else "cand_llm"
+        renumbered.append(
+            candidate.model_copy(update={"candidate_id": f"{prefix}_{idx:03d}"})
+        )
+    return renumbered
+
+
+def _candidates_to_research_atoms(
+    paper: ParsedPaper,
+    candidates: list[AtomCandidate],
+) -> list[ResearchAtom]:
+    atoms: list[ResearchAtom] = []
+    for idx, candidate in enumerate(candidates, start=1):
+        span = candidate.source_span or resolve_span(
+            paper,
+            candidate.source_quote,
+            candidate.section_heading,
+        )
+        atoms.append(
+            ResearchAtom(
+                atom_id=f"atom_{idx:03d}",
+                paper_id=paper.paper_id,
+                atom_type=candidate.atom_type,
+                text=_compact_header(candidate.text) or candidate.text[:2000],
+                normalized_text=candidate.normalized_text,
+                section_id=span.section_id,
+                section_heading=candidate.section_heading
+                or _section_heading_for_id(paper, span.section_id),
+                source_span=span,
+                extraction_confidence=candidate.confidence,
+                importance=candidate.importance,
+                reviewability=candidate.reviewability,
+                checkability=candidate.checkability,
+                claim_scope=candidate.claim_scope,
+                why_this_is_an_atom=candidate.why_this_is_an_atom,
+                role_in_paper=candidate.role_in_paper,
+                assumptions=candidate.assumptions,
+                conclusions=candidate.conclusions,
+                key_terms=candidate.key_terms,
+                symbols=candidate.symbols,
+                dependency_hints=candidate.dependency_hints,
+                equation_refs=candidate.equation_refs,
+                citation_refs=candidate.citation_refs,
+            )
+        )
+    return atoms
 
 
 def _renumber_atoms(atoms: list[ResearchAtom]) -> list[ResearchAtom]:

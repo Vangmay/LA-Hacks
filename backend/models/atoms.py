@@ -47,6 +47,22 @@ class AtomImportance(str, Enum):
     CORE = "core"
 
 
+class AtomReviewability(str, Enum):
+    REVIEWABLE = "reviewable"
+    LEARNING_ONLY = "learning_only"
+    BACKGROUND = "background"
+    DROP = "drop"
+
+
+class AtomCheckability(str, Enum):
+    SYMBOLIC = "symbolic"
+    NUMERIC = "numeric"
+    CITATION = "citation"
+    PROOF_ONLY = "proof_only"
+    CONCEPTUAL = "conceptual"
+    NOT_CHECKABLE = "not_checkable"
+
+
 class ResearchAtom(BaseModel):
     atom_id: str
     paper_id: str
@@ -66,6 +82,10 @@ class ResearchAtom(BaseModel):
 
     extraction_confidence: float = Field(ge=0.0, le=1.0)
     importance: AtomImportance = AtomImportance.MEDIUM
+    reviewability: AtomReviewability = AtomReviewability.REVIEWABLE
+    checkability: AtomCheckability = AtomCheckability.CONCEPTUAL
+    claim_scope: Optional[str] = None
+    why_this_is_an_atom: Optional[str] = None
     role_in_paper: Optional[str] = None
 
     assumptions: list[str] = Field(default_factory=list)
@@ -74,6 +94,9 @@ class ResearchAtom(BaseModel):
 
     key_terms: list[str] = Field(default_factory=list)
     symbols: list[str] = Field(default_factory=list)
+    dependency_hints: list[str] = Field(default_factory=list)
+    equation_refs: list[str] = Field(default_factory=list)
+    citation_refs: list[str] = Field(default_factory=list)
 
 
 class AtomExtractionResult(BaseModel):
@@ -101,8 +124,13 @@ REVIEWABLE_ATOM_TYPES: frozenset[ResearchAtomType] = frozenset(
 
 def is_reviewable(atom: "ResearchAtom") -> bool:
     """Atoms that should run through checks + adversarial loop."""
-    return atom.atom_type in REVIEWABLE_ATOM_TYPES and atom.importance in {
-        AtomImportance.MEDIUM,
-        AtomImportance.HIGH,
-        AtomImportance.CORE,
-    }
+    return (
+        atom.reviewability == AtomReviewability.REVIEWABLE
+        and atom.atom_type in REVIEWABLE_ATOM_TYPES
+        and atom.importance
+        in {
+            AtomImportance.MEDIUM,
+            AtomImportance.HIGH,
+            AtomImportance.CORE,
+        }
+    )
