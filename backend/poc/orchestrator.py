@@ -231,7 +231,7 @@ class PoCOrchestrator:
             for atom_id, spec in poc_specs.items():
                 scaffold_files = spec.get("scaffold_files", {})
                 for filename in _SCAFFOLD_FILES:
-                    content = scaffold_files.get(filename, f"# {filename} not generated\n")
+                    content = scaffold_files.get(filename, "")
                     zf.writestr(f"poc_scaffold/{atom_id}/{filename}", content)
 
         with open(zip_path, "wb") as f:
