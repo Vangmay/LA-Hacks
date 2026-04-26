@@ -6,6 +6,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkBreaks from 'remark-breaks'
 import dagre from 'dagre'
 import { api } from '../api/client'
+import FormalizationPanel from '../features/formalization/components/FormalizationPanel'
 
 const STATUS_COLORS = {
   pending: '#6b7280',
@@ -434,6 +435,8 @@ export default function Review() {
                   <div className="text-[11px] font-mono whitespace-pre-wrap opacity-80">{selected.source_excerpt}</div>
                 </div>
               )}
+
+              <FormalizationPanel jobId={jobId} atom={selected} />
 
               {(state.checks[selected.id] || []).length > 0 && (
                 <div className="mt-4">
