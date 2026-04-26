@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o"
     openai_base_url: str = ""
     openai_timeout_seconds: float = 300.0
+    cors_origins: str = "http://localhost:5173,https://la-hacks-two.vercel.app"
     backend_port: int = 8000
     frontend_port: int = 5173
     max_parallel_claims: int = 5
