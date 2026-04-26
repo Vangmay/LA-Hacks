@@ -14,6 +14,12 @@ class Settings(BaseSettings):
     frontend_port: int = 5173
     max_parallel_claims: int = 5
     attacker_challenge_cap: int = 3
+    poc_scaffold_model: str = "gemma-4-26b-a4b-it"
+    poc_scaffold_api_key_env: str = "GEMMA_API_KEY"
+    poc_scaffold_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    poc_scaffold_reasoning_effort: str = "high"
+    poc_scaffold_max_output_tokens: int = 32768
+    poc_scaffold_timeout_seconds: float = 300.0
     log_level: str = "INFO"
     deepdive_workspace_root: str = "backend/outputs/research_deepdives"
     deepdive_max_investigators: int = 4
