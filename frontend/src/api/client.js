@@ -17,6 +17,25 @@ async function postJson(url, body) {
 }
 
 export const api = {
+  reader: {
+    submit: (arxivUrl, level = 'undergraduate') => {
+      const fd = new FormData()
+      fd.append('arxiv_url', arxivUrl)
+      fd.append('level', level)
+      return fetch(`${BASE}/read`, { method: 'POST', body: fd }).then(r => r.json())
+    },
+    status: (sessionId) => fetch(`${BASE}/read/${sessionId}/status`).then(r => r.json()),
+    graph: (sessionId) => fetch(`${BASE}/read/${sessionId}/graph`).then(r => r.json()),
+    atom: (sessionId, atomId, level) => {
+      const query = level ? `?level=${encodeURIComponent(level)}` : ''
+      return fetch(`${BASE}/read/${sessionId}/atom/${atomId}${query}`).then(r => r.json())
+    },
+    tutor: (sessionId, atomId, message, history = []) =>
+      postJson(`${BASE}/read/${sessionId}/atom/${atomId}/tutor`, { message, history }),
+    grade: (sessionId, atomId, exerciseId, answer) =>
+      postJson(`${BASE}/read/${sessionId}/atom/${atomId}/grade`, { exercise_id: exerciseId, answer }),
+    studyGuide: (sessionId) => fetch(`${BASE}/read/${sessionId}/study-guide`).then(r => r.text()),
+  },
   review: {
     submit: (arxivUrl) => postJson(`${BASE}/review/arxiv`, { arxiv_url: arxivUrl }),
     status: (jobId) => fetch(`${BASE}/review/${jobId}/status`).then(r => r.json()),
