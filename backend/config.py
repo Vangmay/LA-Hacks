@@ -1,8 +1,15 @@
+import os
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     openai_api_key: str = ""
+    openrouter_api_key: str = ""
+    openrouter_model: str = "google/gemini-3-flash-preview"
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_http_referer: str = "http://localhost:3000"
+    openrouter_title: str = "PaperCourt"
     gemini_api_key: str = ""
     gemma_api_key: str = ""
     semantic_scholar_api_key: str = ""
@@ -10,10 +17,17 @@ class Settings(BaseSettings):
     serp_api_key: str = ""
     openai_model: str = "gpt-4o"
     openai_base_url: str = ""
+    openai_timeout_seconds: float = 300.0
     backend_port: int = 8000
     frontend_port: int = 5173
     max_parallel_claims: int = 5
     attacker_challenge_cap: int = 3
+    poc_scaffold_model: str = "gemma-4-26b-a4b-it"
+    poc_scaffold_api_key_env: str = "GEMMA_API_KEY"
+    poc_scaffold_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    poc_scaffold_reasoning_effort: str = "high"
+    poc_scaffold_max_output_tokens: int = 32768
+    poc_scaffold_timeout_seconds: float = 300.0
     log_level: str = "INFO"
     deepdive_workspace_root: str = "backend/outputs/research_deepdives"
     deepdive_max_investigators: int = 4
@@ -67,6 +81,10 @@ class Settings(BaseSettings):
     deepdive_max_output_tokens_light: int = 32768
 
     model_config = SettingsConfigDict(env_file=(".env", "backend/.env"), extra="ignore")
+
+    def model_post_init(self, __context) -> None:  # noqa: ANN001
+        if self.openrouter_api_key and not os.getenv("OPENAI_MODEL"):
+            self.openai_model = self.openrouter_model
 
 
 settings = Settings()

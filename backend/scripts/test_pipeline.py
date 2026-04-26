@@ -65,7 +65,12 @@ from models import (  # noqa: E402
 )
 
 
-async def run_one(arxiv_value: str, max_review_atoms: Optional[int]) -> int:
+async def run_one(
+    arxiv_value: str,
+    max_review_atoms: Optional[int],
+    *,
+    skip_reader_probe: bool,
+) -> int:
     if not settings.openai_api_key:
         print("OPENAI_API_KEY not set. Add it to backend/.env and re-run.")
         return 1
@@ -125,14 +130,19 @@ async def run_one(arxiv_value: str, max_review_atoms: Optional[int]) -> int:
         print(f"  sections={len(paper.sections)} equations={len(paper.equations)} bibliography={len(paper.bibliography)}")
 
         print("=== extract atoms ===")
-        atoms = await _extract_atoms(job_id, paper)
+        atoms, atom_warnings = await _extract_atoms(job_id, paper)
         atoms = link_equations_to_atoms(paper, atoms)
         atoms = link_citations_to_atoms(paper, atoms)
         pipeline["atoms"] = [a.model_dump() for a in atoms]
+        pipeline["atom_extraction_warnings"] = atom_warnings
         by_type: dict[str, int] = {}
         for atom in atoms:
             by_type[atom.atom_type.value] = by_type.get(atom.atom_type.value, 0) + 1
         print(f"  atoms: {len(atoms)}")
+        if atom_warnings:
+            print(f"  atom warnings: {len(atom_warnings)}")
+            for warning in atom_warnings[:5]:
+                print(f"    warning: {warning}")
         for atom_type, count in sorted(by_type.items()):
             print(f"    {atom_type}: {count}")
         _print_atom_samples(atoms)
@@ -142,8 +152,12 @@ async def run_one(arxiv_value: str, max_review_atoms: Optional[int]) -> int:
         pipeline["graph"] = graph.model_dump()
         print(f"  edges={len(graph.edges)} roots={len(graph.roots)} warnings={len(graph.warnings)}")
 
-        print("=== reader mode probe (one atom) ===")
-        reader_annotation = await _run_reader_probe(job_id, atoms)
+        if skip_reader_probe:
+            print("=== reader mode probe skipped ===")
+            reader_annotation = {}
+        else:
+            print("=== reader mode probe (one atom) ===")
+            reader_annotation = await _run_reader_probe(job_id, atoms)
         pipeline["reader_probe"] = reader_annotation
 
         review_atoms = [a for a in atoms if is_reviewable(a)]
@@ -184,14 +198,15 @@ async def run_one(arxiv_value: str, max_review_atoms: Optional[int]) -> int:
     return 0
 
 
-async def _extract_atoms(job_id: str, paper: ParsedPaper) -> list[ResearchAtom]:
+async def _extract_atoms(job_id: str, paper: ParsedPaper) -> tuple[list[ResearchAtom], list[str]]:
     result = await AtomExtractorAgent().run(AgentContext(job_id=job_id, parsed_paper=paper))
     if result.status == "error":
         raise RuntimeError(f"atom extraction failed: {result.error}")
     atoms = [ResearchAtom.model_validate(a) for a in result.output.get("atoms", [])]
     if not atoms:
         raise RuntimeError("atom extraction produced zero atoms")
-    return atoms
+    warnings = [str(w) for w in result.output.get("warnings", [])]
+    return atoms, warnings
 
 
 async def _build_graph(job_id: str, atoms: list[ResearchAtom]) -> ResearchGraph:
@@ -381,7 +396,14 @@ async def main_async(args: argparse.Namespace) -> int:
     exit_code = 0
     for paper in papers:
         try:
-            exit_code = max(exit_code, await run_one(paper, args.max_review_atoms))
+            exit_code = max(
+                exit_code,
+                await run_one(
+                    paper,
+                    args.max_review_atoms,
+                    skip_reader_probe=args.skip_reader_probe,
+                ),
+            )
         except Exception as exc:  # noqa: BLE001
             print(f"\n{paper}: pipeline failed: {exc}")
             exit_code = 1
@@ -397,6 +419,11 @@ def main() -> int:
         type=int,
         default=None,
         help="Optional cap for the expensive check/challenge/defense stage.",
+    )
+    parser.add_argument(
+        "--skip-reader-probe",
+        action="store_true",
+        help="Skip the reader-mode LLM probe during extraction/graph smoke tests.",
     )
     return asyncio.run(main_async(parser.parse_args()))
 

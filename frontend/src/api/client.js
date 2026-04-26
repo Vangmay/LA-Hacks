@@ -90,6 +90,7 @@ export const api = {
   },
   poc: {
     submit: (arxivUrl) => postJson(`${BASE}/poc`, { arxiv_url: arxivUrl }),
+    sessions: () => fetch(`${BASE}/poc/sessions`).then(r => r.json()),
     claims: (sessionId) => fetch(`${BASE}/poc/${sessionId}/claims`).then(r => r.json()),
     spec: (sessionId, claimId) => fetch(`${BASE}/poc/${sessionId}/claim/${claimId}/spec`).then(r => r.json()),
     generateScaffolds: (sessionId, claimIds) =>
