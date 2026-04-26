@@ -13,13 +13,12 @@ Sections
 8. End-to-end flow         — submit → orchestrate → upload results → report
 
 No real OpenAI calls are made; all LLM clients are patched.
-Run from backend/ with:  pytest tests/test_poc_e2e.py -v
+Run from backend/ with:  pytest poc/test_poc_e2e.py -v
 """
 
 import ast
 import io
 import json
-import sys
 import zipfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -27,24 +26,20 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-HERE = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(HERE))
-
-from agents.base import AgentContext, AgentResult
-from agents.claim_extractor import ClaimExtractorAgent
-from poc.agents.claim_filter import ClaimFilterAgent
-from agents.dag_builder import DAGBuilderAgent
-from poc.agents.metric_extractor import MetricExtractorAgent
-from agents.parser import ParserAgent
-from poc.agents.reproducibility_report import ReproducibilityReportAgent
-from poc.agents.results_analyzer import ResultsAnalyzerAgent
-from poc.agents.scaffold_generator import ScaffoldGeneratorAgent
-from core.dag import DAG
-from core.event_bus import event_bus
-from core.job_store import job_store
-from poc.orchestrator import PoCOrchestrator
-from main import app
-from models import (
+from backend.agents.base import AgentContext, AgentResult
+from backend.agents.claim_extractor import ClaimExtractorAgent
+from backend.agents.parser import ParserAgent
+from backend.poc.agents.claim_filter import ClaimFilterAgent
+from backend.poc.agents.metric_extractor import MetricExtractorAgent
+from backend.poc.agents.reproducibility_report import ReproducibilityReportAgent
+from backend.poc.agents.results_analyzer import ResultsAnalyzerAgent
+from backend.poc.agents.scaffold_generator import ScaffoldGeneratorAgent
+from backend.core.dag import DAG
+from backend.core.event_bus import event_bus
+from backend.core.job_store import job_store
+from backend.poc.orchestrator import PoCOrchestrator
+from backend.main import app
+from backend.models import (
     ClaimTestability,
     ClaimUnit,
     DAGEventType,
@@ -137,12 +132,6 @@ _REPORT_DICT = {
 
 _PARSER_OUT = _PAPER_META
 _EXTRACTOR_OUT = {"claims": [_CLAIM.model_dump(), _CLAIM2.model_dump()]}
-_DAG_OUT = {
-    "edges": [],
-    "adjacency": {},
-    "roots": ["c1", "c2"],
-    "topological_order": ["c1", "c2"],
-}
 _FILTER_OUT = {
     "testable": ["c1"],
     "theoretical": ["c2"],
@@ -199,7 +188,6 @@ def _new_job(pdf_path: str = "/fake/paper.pdf") -> str:
 
 
 def _complete_session() -> str:
-    """Pre-populated session with claims, specs, and a complete report."""
     sid = job_store.create_job(
         mode="poc",
         pdf_path="/fake/paper.pdf",
@@ -331,14 +319,13 @@ def _metric_llm_resp(success_criteria: list, failure_criteria: list | None = Non
 async def test_metric_extracts_success_criteria():
     criteria = [{"metric_name": "bleu", "paper_reported_value": "28.4", "numeric_threshold": 28.4, "tolerance": 0.02, "comparison": "gte", "experimental_conditions": {}}]
     agent = MetricExtractorAgent()
-    ctx = AgentContext(job_id="t", claim=_CLAIM)
+    ctx = AgentContext(job_id="t", extra={"claim": _CLAIM})
     with patch.object(
         agent._client.chat.completions, "create",
         new=AsyncMock(return_value=_metric_llm_resp(criteria))
     ):
         result = await agent.run(ctx)
     assert result.status == "success"
-    assert result.claim_id == "c1"
     assert len(result.output["success_criteria"]) == 1
     assert result.output["success_criteria"][0]["metric_name"] == "bleu"
 
@@ -353,7 +340,7 @@ async def test_metric_no_claim_returns_error():
 @pytest.mark.asyncio
 async def test_metric_llm_exception_returns_error():
     agent = MetricExtractorAgent()
-    ctx = AgentContext(job_id="t", claim=_CLAIM)
+    ctx = AgentContext(job_id="t", extra={"claim": _CLAIM})
     with patch.object(
         agent._client.chat.completions, "create",
         new=AsyncMock(side_effect=RuntimeError("timeout"))
@@ -361,7 +348,6 @@ async def test_metric_llm_exception_returns_error():
         result = await agent.run(ctx)
     assert result.status == "error"
     assert "timeout" in result.error
-    assert result.claim_id == "c1"
 
 
 @pytest.mark.asyncio
@@ -369,7 +355,7 @@ async def test_metric_null_threshold_tolerated():
     """numeric_threshold=null in LLM output should still build a valid PoCSpec."""
     criteria = [{"metric_name": "bleu", "paper_reported_value": "28.4", "numeric_threshold": None, "tolerance": 0.02, "comparison": "gte", "experimental_conditions": {}}]
     agent = MetricExtractorAgent()
-    ctx = AgentContext(job_id="t", claim=_CLAIM)
+    ctx = AgentContext(job_id="t", extra={"claim": _CLAIM})
     with patch.object(
         agent._client.chat.completions, "create",
         new=AsyncMock(return_value=_metric_llm_resp(criteria))
@@ -384,7 +370,7 @@ async def test_metric_unknown_comparison_normalized():
     """Non-standard comparison string must be normalized to 'within_tolerance'."""
     criteria = [{"metric_name": "acc", "paper_reported_value": "95%", "numeric_threshold": 95.0, "tolerance": 0.01, "comparison": "approximately", "experimental_conditions": {}}]
     agent = MetricExtractorAgent()
-    ctx = AgentContext(job_id="t", claim=_CLAIM)
+    ctx = AgentContext(job_id="t", extra={"claim": _CLAIM})
     with patch.object(
         agent._client.chat.completions, "create",
         new=AsyncMock(return_value=_metric_llm_resp(criteria))
@@ -475,8 +461,8 @@ def _scaffold_llm_side_effect(*_args, **kwargs):
 async def test_scaffold_generates_all_five_files():
     agent = ScaffoldGeneratorAgent()
     ctx = AgentContext(
-        job_id="t", claim=_SCAFFOLD_CLAIM,
-        extra={"poc_spec": _SCAFFOLD_SPEC, "paper_metadata": _PAPER_META},
+        job_id="t",
+        extra={"claim": _SCAFFOLD_CLAIM, "poc_spec": _SCAFFOLD_SPEC, "paper_metadata": _PAPER_META},
     )
     with patch.object(agent._client.chat.completions, "create", new=AsyncMock(side_effect=_scaffold_llm_side_effect)):
         result = await agent.run(ctx)
@@ -489,8 +475,8 @@ async def test_scaffold_generates_all_five_files():
 async def test_scaffold_poc_spec_updated():
     agent = ScaffoldGeneratorAgent()
     ctx = AgentContext(
-        job_id="t", claim=_SCAFFOLD_CLAIM,
-        extra={"poc_spec": _SCAFFOLD_SPEC, "paper_metadata": _PAPER_META},
+        job_id="t",
+        extra={"claim": _SCAFFOLD_CLAIM, "poc_spec": _SCAFFOLD_SPEC, "paper_metadata": _PAPER_META},
     )
     with patch.object(agent._client.chat.completions, "create", new=AsyncMock(side_effect=_scaffold_llm_side_effect)):
         result = await agent.run(ctx)
@@ -534,8 +520,8 @@ async def test_scaffold_syntax_error_triggers_correction():
 
     agent = ScaffoldGeneratorAgent()
     ctx = AgentContext(
-        job_id="t", claim=_SCAFFOLD_CLAIM,
-        extra={"poc_spec": _SCAFFOLD_SPEC, "paper_metadata": _PAPER_META},
+        job_id="t",
+        extra={"claim": _SCAFFOLD_CLAIM, "poc_spec": _SCAFFOLD_SPEC, "paper_metadata": _PAPER_META},
     )
     with patch.object(agent._client.chat.completions, "create", new=AsyncMock(side_effect=side_effect)):
         result = await agent.run(ctx)
@@ -557,8 +543,8 @@ async def test_scaffold_persistent_syntax_error_is_inconclusive():
 
     agent = ScaffoldGeneratorAgent()
     ctx = AgentContext(
-        job_id="t", claim=_SCAFFOLD_CLAIM,
-        extra={"poc_spec": _SCAFFOLD_SPEC, "paper_metadata": _PAPER_META},
+        job_id="t",
+        extra={"claim": _SCAFFOLD_CLAIM, "poc_spec": _SCAFFOLD_SPEC, "paper_metadata": _PAPER_META},
     )
     with patch.object(agent._client.chat.completions, "create", new=AsyncMock(side_effect=always_broken)):
         result = await agent.run(ctx)
@@ -577,8 +563,8 @@ async def test_scaffold_no_claim_returns_error():
 async def test_scaffold_llm_exception_returns_error():
     agent = ScaffoldGeneratorAgent()
     ctx = AgentContext(
-        job_id="t", claim=_SCAFFOLD_CLAIM,
-        extra={"poc_spec": _SCAFFOLD_SPEC, "paper_metadata": _PAPER_META},
+        job_id="t",
+        extra={"claim": _SCAFFOLD_CLAIM, "poc_spec": _SCAFFOLD_SPEC, "paper_metadata": _PAPER_META},
     )
     with patch.object(agent._client.chat.completions, "create", new=AsyncMock(side_effect=RuntimeError("OpenAI timeout"))):
         result = await agent.run(ctx)
@@ -876,14 +862,6 @@ async def test_report_mixed_statuses():
 
 @pytest.mark.asyncio
 async def test_report_gap_analysis_for_failures():
-    call_log = []
-
-    async def tracking(*_args, **kwargs):
-        messages = kwargs.get("messages", [])
-        system = messages[0]["content"] if messages else ""
-        call_log.append(system[:60])
-        return (await AsyncMock(side_effect=_report_llm_side_effect)(*_args, **kwargs))
-
     agent = ReproducibilityReportAgent()
     ctx = AgentContext(job_id="t", extra={
         "session_id": "sess-1",
@@ -1019,18 +997,17 @@ def _all_agent_patches(tmp_path):
     return (
         patch.object(ParserAgent, "run", new=AsyncMock(return_value=_ok(_PARSER_OUT))),
         patch.object(ClaimExtractorAgent, "run", new=AsyncMock(return_value=_ok(_EXTRACTOR_OUT))),
-        patch.object(DAGBuilderAgent, "run", new=AsyncMock(return_value=_ok(_DAG_OUT))),
         patch.object(ClaimFilterAgent, "run", new=AsyncMock(return_value=_ok(_FILTER_OUT))),
         patch.object(MetricExtractorAgent, "run", new=AsyncMock(return_value=_ok(_METRIC_OUT))),
         patch.object(ScaffoldGeneratorAgent, "run", new=AsyncMock(return_value=_ok(_SCAFFOLD_OUT))),
-        patch("poc.orchestrator._OUTPUTS_DIR", tmp_path),
+        patch("backend.poc.orchestrator._OUTPUTS_DIR", tmp_path),
     )
 
 
 @pytest.mark.asyncio
 async def test_orchestrator_happy_path(tmp_path):
     jid = _new_job()
-    with _all_agent_patches(tmp_path)[0], _all_agent_patches(tmp_path)[1], _all_agent_patches(tmp_path)[2], _all_agent_patches(tmp_path)[3], _all_agent_patches(tmp_path)[4], _all_agent_patches(tmp_path)[5], _all_agent_patches(tmp_path)[6]:
+    with _all_agent_patches(tmp_path)[0], _all_agent_patches(tmp_path)[1], _all_agent_patches(tmp_path)[2], _all_agent_patches(tmp_path)[3], _all_agent_patches(tmp_path)[4], _all_agent_patches(tmp_path)[5]:
         await PoCOrchestrator().run(jid)
     assert job_store.get(jid)["status"] == "complete"
 
@@ -1041,11 +1018,10 @@ async def test_orchestrator_poc_specs_stored(tmp_path):
     with (
         patch.object(ParserAgent, "run", new=AsyncMock(return_value=_ok(_PARSER_OUT))),
         patch.object(ClaimExtractorAgent, "run", new=AsyncMock(return_value=_ok(_EXTRACTOR_OUT))),
-        patch.object(DAGBuilderAgent, "run", new=AsyncMock(return_value=_ok(_DAG_OUT))),
         patch.object(ClaimFilterAgent, "run", new=AsyncMock(return_value=_ok(_FILTER_OUT))),
         patch.object(MetricExtractorAgent, "run", new=AsyncMock(return_value=_ok(_METRIC_OUT))),
         patch.object(ScaffoldGeneratorAgent, "run", new=AsyncMock(return_value=_ok(_SCAFFOLD_OUT))),
-        patch("poc.orchestrator._OUTPUTS_DIR", tmp_path),
+        patch("backend.poc.orchestrator._OUTPUTS_DIR", tmp_path),
     ):
         await PoCOrchestrator().run(jid)
     job = job_store.get(jid)
@@ -1059,17 +1035,16 @@ async def test_orchestrator_only_testable_claims_get_scaffold(tmp_path):
     scaffold_calls = []
 
     async def capture(ctx):
-        scaffold_calls.append(ctx.claim.claim_id)
+        scaffold_calls.append(ctx.extra["claim"].claim_id)
         return _ok(_SCAFFOLD_OUT)
 
     with (
         patch.object(ParserAgent, "run", new=AsyncMock(return_value=_ok(_PARSER_OUT))),
         patch.object(ClaimExtractorAgent, "run", new=AsyncMock(return_value=_ok(_EXTRACTOR_OUT))),
-        patch.object(DAGBuilderAgent, "run", new=AsyncMock(return_value=_ok(_DAG_OUT))),
         patch.object(ClaimFilterAgent, "run", new=AsyncMock(return_value=_ok(_FILTER_OUT))),
         patch.object(MetricExtractorAgent, "run", new=AsyncMock(return_value=_ok(_METRIC_OUT))),
         patch.object(ScaffoldGeneratorAgent, "run", new=AsyncMock(side_effect=capture)),
-        patch("poc.orchestrator._OUTPUTS_DIR", tmp_path),
+        patch("backend.poc.orchestrator._OUTPUTS_DIR", tmp_path),
     ):
         await PoCOrchestrator().run(jid)
 
@@ -1090,21 +1065,20 @@ async def test_orchestrator_node_classified_events(tmp_path):
     with (
         patch.object(ParserAgent, "run", new=AsyncMock(return_value=_ok(_PARSER_OUT))),
         patch.object(ClaimExtractorAgent, "run", new=AsyncMock(return_value=_ok(_EXTRACTOR_OUT))),
-        patch.object(DAGBuilderAgent, "run", new=AsyncMock(return_value=_ok(_DAG_OUT))),
         patch.object(ClaimFilterAgent, "run", new=AsyncMock(return_value=_ok(_FILTER_OUT))),
         patch.object(MetricExtractorAgent, "run", new=AsyncMock(return_value=_ok(_METRIC_OUT))),
         patch.object(ScaffoldGeneratorAgent, "run", new=AsyncMock(return_value=_ok(_SCAFFOLD_OUT))),
         patch.object(event_bus, "publish", side_effect=capture),
-        patch("poc.orchestrator._OUTPUTS_DIR", tmp_path),
+        patch("backend.poc.orchestrator._OUTPUTS_DIR", tmp_path),
     ):
         await PoCOrchestrator().run(jid)
 
-    classified = [e for e in events if e.event_type == DAGEventType.NODE_CLASSIFIED]
-    ids = {e.claim_id for e in classified}
+    classified = [e for e in events if e.event_type == DAGEventType.ATOM_CREATED]
+    ids = {e.payload["claim_id"] for e in classified}
     assert "c1" in ids and "c2" in ids
-    c1_ev = next(e for e in classified if e.claim_id == "c1")
+    c1_ev = next(e for e in classified if e.payload["claim_id"] == "c1")
     assert c1_ev.payload["testability"] == "testable"
-    c2_ev = next(e for e in classified if e.claim_id == "c2")
+    c2_ev = next(e for e in classified if e.payload["claim_id"] == "c2")
     assert c2_ev.payload["testability"] == "theoretical"
 
 
@@ -1119,16 +1093,15 @@ async def test_orchestrator_poc_ready_event(tmp_path):
     with (
         patch.object(ParserAgent, "run", new=AsyncMock(return_value=_ok(_PARSER_OUT))),
         patch.object(ClaimExtractorAgent, "run", new=AsyncMock(return_value=_ok(_EXTRACTOR_OUT))),
-        patch.object(DAGBuilderAgent, "run", new=AsyncMock(return_value=_ok(_DAG_OUT))),
         patch.object(ClaimFilterAgent, "run", new=AsyncMock(return_value=_ok(_FILTER_OUT))),
         patch.object(MetricExtractorAgent, "run", new=AsyncMock(return_value=_ok(_METRIC_OUT))),
         patch.object(ScaffoldGeneratorAgent, "run", new=AsyncMock(return_value=_ok(_SCAFFOLD_OUT))),
         patch.object(event_bus, "publish", side_effect=capture),
-        patch("poc.orchestrator._OUTPUTS_DIR", tmp_path),
+        patch("backend.poc.orchestrator._OUTPUTS_DIR", tmp_path),
     ):
         await PoCOrchestrator().run(jid)
 
-    ready = [e for e in events if e.event_type == DAGEventType.POC_READY]
+    ready = [e for e in events if e.event_type == DAGEventType.REPORT_READY]
     assert len(ready) == 1
     assert ready[0].payload["testable_count"] == 1
 
@@ -1140,11 +1113,10 @@ async def test_orchestrator_zip_structure(tmp_path):
     with (
         patch.object(ParserAgent, "run", new=AsyncMock(return_value=_ok(_PARSER_OUT))),
         patch.object(ClaimExtractorAgent, "run", new=AsyncMock(return_value=_ok(_EXTRACTOR_OUT))),
-        patch.object(DAGBuilderAgent, "run", new=AsyncMock(return_value=_ok(_DAG_OUT))),
         patch.object(ClaimFilterAgent, "run", new=AsyncMock(return_value=_ok(_FILTER_OUT))),
         patch.object(MetricExtractorAgent, "run", new=AsyncMock(return_value=_ok(_METRIC_OUT))),
         patch.object(ScaffoldGeneratorAgent, "run", new=AsyncMock(return_value=_ok(_SCAFFOLD_OUT))),
-        patch("poc.orchestrator._OUTPUTS_DIR", tmp_path),
+        patch("backend.poc.orchestrator._OUTPUTS_DIR", tmp_path),
     ):
         await PoCOrchestrator().run(jid)
 
@@ -1165,11 +1137,10 @@ async def test_orchestrator_metric_extractor_exception_skipped(tmp_path):
     with (
         patch.object(ParserAgent, "run", new=AsyncMock(return_value=_ok(_PARSER_OUT))),
         patch.object(ClaimExtractorAgent, "run", new=AsyncMock(return_value=_ok(_EXTRACTOR_OUT))),
-        patch.object(DAGBuilderAgent, "run", new=AsyncMock(return_value=_ok(_DAG_OUT))),
         patch.object(ClaimFilterAgent, "run", new=AsyncMock(return_value=_ok(_FILTER_OUT))),
         patch.object(MetricExtractorAgent, "run", new=AsyncMock(side_effect=RuntimeError("LLM timeout"))),
         patch.object(ScaffoldGeneratorAgent, "run", new=AsyncMock(return_value=_ok(_SCAFFOLD_OUT))),
-        patch("poc.orchestrator._OUTPUTS_DIR", tmp_path),
+        patch("backend.poc.orchestrator._OUTPUTS_DIR", tmp_path),
     ):
         await PoCOrchestrator().run(jid)
 
@@ -1185,11 +1156,10 @@ async def test_orchestrator_scaffold_exception_job_completes(tmp_path):
     with (
         patch.object(ParserAgent, "run", new=AsyncMock(return_value=_ok(_PARSER_OUT))),
         patch.object(ClaimExtractorAgent, "run", new=AsyncMock(return_value=_ok(_EXTRACTOR_OUT))),
-        patch.object(DAGBuilderAgent, "run", new=AsyncMock(return_value=_ok(_DAG_OUT))),
         patch.object(ClaimFilterAgent, "run", new=AsyncMock(return_value=_ok(_FILTER_OUT))),
         patch.object(MetricExtractorAgent, "run", new=AsyncMock(return_value=_ok(_METRIC_OUT))),
         patch.object(ScaffoldGeneratorAgent, "run", new=AsyncMock(side_effect=RuntimeError("codegen failed"))),
-        patch("poc.orchestrator._OUTPUTS_DIR", tmp_path),
+        patch("backend.poc.orchestrator._OUTPUTS_DIR", tmp_path),
     ):
         await PoCOrchestrator().run(jid)
 
@@ -1202,7 +1172,7 @@ async def test_orchestrator_parser_failure_sets_error(tmp_path):
 
     with (
         patch.object(ParserAgent, "run", new=AsyncMock(side_effect=RuntimeError("PDF corrupt"))),
-        patch("poc.orchestrator._OUTPUTS_DIR", tmp_path),
+        patch("backend.poc.orchestrator._OUTPUTS_DIR", tmp_path),
     ):
         await PoCOrchestrator().run(jid)
 
@@ -1218,9 +1188,8 @@ async def test_orchestrator_no_claims_completes_gracefully(tmp_path):
     with (
         patch.object(ParserAgent, "run", new=AsyncMock(return_value=_ok(_PARSER_OUT))),
         patch.object(ClaimExtractorAgent, "run", new=AsyncMock(return_value=_ok({"claims": []}))),
-        patch.object(DAGBuilderAgent, "run", new=AsyncMock(return_value=_ok({"edges": []}))),
         patch.object(ClaimFilterAgent, "run", new=AsyncMock(return_value=_ok({"testable": [], "theoretical": [], "classifications": {}}))),
-        patch("poc.orchestrator._OUTPUTS_DIR", tmp_path),
+        patch("backend.poc.orchestrator._OUTPUTS_DIR", tmp_path),
     ):
         await PoCOrchestrator().run(jid)
 
@@ -1236,7 +1205,7 @@ async def test_orchestrator_no_claims_completes_gracefully(tmp_path):
 
 def test_api_submit_creates_session():
     dummy_pdf = b"%PDF-1.4 dummy"
-    with patch("poc.orchestrator.PoCOrchestrator.run", new=AsyncMock(return_value=None)):
+    with patch("backend.poc.orchestrator.PoCOrchestrator.run", new=AsyncMock(return_value=None)):
         resp = client.post("/poc", files={"file": ("paper.pdf", io.BytesIO(dummy_pdf), "application/pdf")})
     assert resp.status_code == 200
     body = resp.json()
@@ -1246,7 +1215,7 @@ def test_api_submit_creates_session():
 
 
 def test_api_submit_no_file():
-    with patch("poc.orchestrator.PoCOrchestrator.run", new=AsyncMock(return_value=None)):
+    with patch("backend.poc.orchestrator.PoCOrchestrator.run", new=AsyncMock(return_value=None)):
         resp = client.post("/poc")
     assert resp.status_code == 200
     assert "session_id" in resp.json()
@@ -1341,8 +1310,8 @@ def test_api_upload_results_returns_analyzing():
         output={"report": _REPORT_DICT}, confidence=0.85,
     ))
     with (
-        patch("poc.api.ResultsAnalyzerAgent.run", new=mock_analyzer),
-        patch("poc.api.ReproducibilityReportAgent.run", new=mock_reporter),
+        patch("backend.poc.api.ResultsAnalyzerAgent.run", new=mock_analyzer),
+        patch("backend.poc.api.ReproducibilityReportAgent.run", new=mock_reporter),
     ):
         resp = client.post(f"/poc/{sid}/results", json={"claim_id": "c1", "metrics": {"bleu": 29.0}})
     assert resp.status_code == 200
@@ -1361,8 +1330,8 @@ def test_api_upload_results_accepts_file_upload():
         output={"report": _REPORT_DICT}, confidence=0.85,
     ))
     with (
-        patch("poc.api.ResultsAnalyzerAgent.run", new=mock_analyzer),
-        patch("poc.api.ReproducibilityReportAgent.run", new=mock_reporter),
+        patch("backend.poc.api.ResultsAnalyzerAgent.run", new=mock_analyzer),
+        patch("backend.poc.api.ReproducibilityReportAgent.run", new=mock_reporter),
     ):
         resp = client.post(
             f"/poc/{sid}/results",
@@ -1472,11 +1441,10 @@ async def test_full_poc_pipeline_end_to_end(tmp_path):
     with (
         patch.object(ParserAgent, "run", new=AsyncMock(return_value=_ok(_PARSER_OUT))),
         patch.object(ClaimExtractorAgent, "run", new=AsyncMock(return_value=_ok(_EXTRACTOR_OUT))),
-        patch.object(DAGBuilderAgent, "run", new=AsyncMock(return_value=_ok(_DAG_OUT))),
         patch.object(ClaimFilterAgent, "run", new=AsyncMock(return_value=_ok(_FILTER_OUT))),
         patch.object(MetricExtractorAgent, "run", new=AsyncMock(return_value=_ok(_METRIC_OUT))),
         patch.object(ScaffoldGeneratorAgent, "run", new=AsyncMock(return_value=_ok(_SCAFFOLD_OUT))),
-        patch("poc.orchestrator._OUTPUTS_DIR", tmp_path),
+        patch("backend.poc.orchestrator._OUTPUTS_DIR", tmp_path),
     ):
         await PoCOrchestrator().run(sid)
 
@@ -1496,15 +1464,10 @@ async def test_full_poc_pipeline_end_to_end(tmp_path):
         if c["testability"] == "testable":
             assert "scaffold_files" not in (c.get("spec_summary") or {})
 
-    # ── Step 3b: GET /dag ─────────────────────────────────────────────────────
+    # ── Step 3b: GET /dag (no DAG built by orchestrator) ─────────────────────
     resp = client.get(f"/poc/{sid}/dag")
     assert resp.status_code == 200
-    dag_body = resp.json()
-    node_ids = {n["id"] for n in dag_body["nodes"]}
-    assert "c1" in node_ids and "c2" in node_ids
-    c1_node = next(n for n in dag_body["nodes"] if n["id"] == "c1")
-    assert c1_node["testability"] == "testable"
-    assert c1_node["reproduction_status"] == "PENDING"  # no results yet
+    assert resp.json() == {"nodes": [], "edges": []}
 
     # ── Step 3c: GET /claim/{id}/spec ─────────────────────────────────────────
     resp = client.get(f"/poc/{sid}/claim/c1/spec")
@@ -1515,7 +1478,6 @@ async def test_full_poc_pipeline_end_to_end(tmp_path):
     assert len(spec["success_criteria"]) == 1
     assert spec["success_criteria"][0]["metric_name"] == "bleu"
 
-    # theoretical claim must 404
     assert client.get(f"/poc/{sid}/claim/c2/spec").status_code == 404
 
     # ── Step 3d: GET /scaffold.zip ────────────────────────────────────────────
@@ -1543,18 +1505,16 @@ async def test_full_poc_pipeline_end_to_end(tmp_path):
         confidence=0.85,
     ))
     with (
-        patch("poc.api.ResultsAnalyzerAgent.run", new=mock_analyzer),
-        patch("poc.api.ReproducibilityReportAgent.run", new=mock_reporter),
+        patch("backend.poc.api.ResultsAnalyzerAgent.run", new=mock_analyzer),
+        patch("backend.poc.api.ReproducibilityReportAgent.run", new=mock_reporter),
     ):
         resp = client.post(f"/poc/{sid}/results", json=results_payload)
     assert resp.status_code == 200
     assert resp.json()["status"] == "analyzing"
 
-    # Wait for the background _analyze() task to finish (TestClient runs it synchronously)
     import asyncio
     await asyncio.sleep(0)
 
-    # Manually mark analysis complete (background task runs outside TestClient's event loop)
     job_store.update(sid, analysis_status="complete", report={**_REPORT_DICT, "session_id": sid})
 
     # ── Step 5a: GET /report ──────────────────────────────────────────────────
@@ -1572,7 +1532,7 @@ async def test_full_poc_pipeline_end_to_end(tmp_path):
     assert "markdown" in resp.headers["content-type"]
     assert len(resp.text.strip()) > 0
 
-    # ── Step 5c: DAG now shows reproduction status ────────────────────────────
+    # ── Step 5c: DAG endpoint returns empty (no DAG built by orchestrator) ────
     resp = client.get(f"/poc/{sid}/dag")
-    nodes = {n["id"]: n for n in resp.json()["nodes"]}
-    assert nodes["c1"]["reproduction_status"] == "REPRODUCED"
+    assert resp.status_code == 200
+    assert resp.json() == {"nodes": [], "edges": []}

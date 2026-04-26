@@ -46,14 +46,25 @@ class ReaderOrchestrator:
             return
 
         try:
-            job_store.set_status(session_id, "processing")
+            job_store.update(
+                session_id,
+                status="processing",
+                reader_stage="Preparing source",
+                graph_snapshot=_graph_snapshot([], stage="Preparing source"),
+            )
 
             paper_source = _build_source(job)
             tex_text = _read_tex(job)
+            job_store.update(
+                session_id,
+                reader_stage="Parsing TeX",
+                graph_snapshot=_graph_snapshot([], stage="Parsing TeX"),
+            )
             paper = parse_tex(tex_text, paper_source)
 
             job_store.update(
                 session_id,
+                reader_stage="Extracting atoms",
                 paper_id=paper.paper_id,
                 paper_metadata={
                     "title": paper.title,
@@ -63,25 +74,54 @@ class ReaderOrchestrator:
                 },
             )
 
-            atoms = await _extract_atoms(session_id, paper)
+            async def on_atom_progress(partial_atoms: list[ResearchAtom], progress: dict[str, Any]) -> None:
+                current_job = job_store.get(session_id) or {}
+                job_store.update(
+                    session_id,
+                    total_atoms=max(len(partial_atoms), current_job.get("total_atoms", 0)),
+                    reader_stage=progress.get("stage", "Extracting atoms"),
+                    graph_snapshot=_graph_snapshot(
+                        partial_atoms,
+                        stage=progress.get("stage", "Extracting atoms"),
+                        extraction_batches_completed=progress.get("batches_completed"),
+                        extraction_batches_total=progress.get("batches_total"),
+                    ),
+                )
+
+            atoms = await _extract_atoms(session_id, paper, on_atom_progress)
             atoms = link_equations_to_atoms(paper, atoms)
             atoms = link_citations_to_atoms(paper, atoms)
+            comprehension_states = {a.atom_id: "unvisited" for a in atoms}
+            job_store.update(
+                session_id,
+                atoms=[a.model_dump() for a in atoms],
+                annotations={},
+                comprehension_states=comprehension_states,
+                total_atoms=len(atoms),
+                reader_stage="Building dependency graph",
+                graph_snapshot=_graph_snapshot(
+                    atoms,
+                    comprehension_states=comprehension_states,
+                    stage="Building dependency graph",
+                ),
+            )
 
             graph = await _build_graph(session_id, atoms)
 
             start_here = _select_start_here(atoms, graph)
 
-            comprehension_states = {a.atom_id: "unvisited" for a in atoms}
-
             job_store.update(
                 session_id,
-                atoms=[a.model_dump() for a in atoms],
                 graph=graph.model_dump(),
-                graph_snapshot=_graph_snapshot(atoms, graph, comprehension_states),
-                annotations={},
-                comprehension_states=comprehension_states,
+                graph_snapshot=_graph_snapshot(
+                    atoms,
+                    graph,
+                    comprehension_states,
+                    start_here=start_here,
+                    stage="Ready",
+                ),
                 start_here=start_here,
-                total_atoms=len(atoms),
+                reader_stage="Ready",
                 status="complete",
             )
             logger.info(
@@ -100,8 +140,12 @@ class ReaderOrchestrator:
 # Stage helpers
 
 
-async def _extract_atoms(session_id: str, paper: ParsedPaper) -> list[ResearchAtom]:
-    result = await AtomExtractorAgent().run(
+async def _extract_atoms(
+    session_id: str,
+    paper: ParsedPaper,
+    progress_callback=None,
+) -> list[ResearchAtom]:
+    result = await AtomExtractorAgent(progress_callback=progress_callback).run(
         AgentContext(job_id=session_id, parsed_paper=paper)
     )
     if result.status == "error":
@@ -153,9 +197,15 @@ def _select_start_here(
 
 def _graph_snapshot(
     atoms: list[ResearchAtom],
-    graph: ResearchGraph,
-    comprehension_states: dict[str, str],
+    graph: ResearchGraph | None = None,
+    comprehension_states: dict[str, str] | None = None,
+    start_here: list[str] | None = None,
+    stage: str | None = None,
+    extraction_batches_completed: int | None = None,
+    extraction_batches_total: int | None = None,
 ) -> dict[str, Any]:
+    comprehension_states = comprehension_states or {}
+    start_set = set(start_here or [])
     nodes = [
         {
             "id": atom.atom_id,
@@ -163,11 +213,13 @@ def _graph_snapshot(
             "atom_type": atom.atom_type.value,
             "section": atom.section_heading,
             "label": _node_label(atom),
+            "parsed_order": idx + 1,
             "comprehension_status": comprehension_states.get(atom.atom_id, "unvisited"),
             "importance": atom.importance.value,
             "source_excerpt": atom.source_span.raw_excerpt[:200],
+            "start_here": atom.atom_id in start_set,
         }
-        for atom in atoms
+        for idx, atom in enumerate(atoms)
     ]
     edges = [
         {
@@ -178,9 +230,26 @@ def _graph_snapshot(
             "confidence": edge.confidence,
             "rationale": edge.rationale,
         }
-        for edge in graph.edges
+        for edge in (graph.edges if graph is not None else [])
     ]
-    return {"nodes": nodes, "edges": edges}
+    return {
+        "nodes": nodes,
+        "edges": edges,
+        "start_here": start_here or [],
+        "stage": stage or "Building learner graph",
+        "parsed_atoms": len(nodes),
+        "total_atoms": len(nodes),
+        "extraction_batches_completed": extraction_batches_completed,
+        "extraction_batches_total": extraction_batches_total,
+        "recent_atoms": [
+            {
+                "id": node["id"],
+                "label": node["label"],
+                "parsed_order": node["parsed_order"],
+            }
+            for node in nodes[-5:]
+        ],
+    }
 
 
 def _node_label(atom: ResearchAtom) -> str:

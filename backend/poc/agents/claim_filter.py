@@ -5,9 +5,9 @@ from typing import List
 
 from openai import AsyncOpenAI
 
-from config import settings
-from models import ClaimUnit
-from agents.base import BaseAgent, AgentContext, AgentResult
+from backend.config import settings
+from backend.models import ClaimUnit
+from backend.agents.base import BaseAgent, AgentContext, AgentResult
 
 logger = logging.getLogger(__name__)
 

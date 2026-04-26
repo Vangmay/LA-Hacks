@@ -1,0 +1,50 @@
+{
+  "source": "director",
+  "rationale": "Given the foundational status of 'Attention is All you Need', a standard literature review would be insufficient. The research must be bifurcated into two distinct trajectories: the 'Architectural Genealogy' (how the Transformer's core components evolved into the BERT/GPT paradigms) and the 'Constraint-Driven Innovation' (how researchers are actively attempting to solve the quadratic complexity and memory bottlenecks inherent in the original design). This allows one squad to focus on structural lineage and another to focus on the current frontier of replacing or augmenting attention.",
+  "zones": [
+    {
+      "investigator_id": "investigator_01_architectural_genealogy_divergence_and_paradigm_shifts",
+      "section_id": "section_01_architectural_genealogy_divergence_and_paradigm_shifts",
+      "section_title": "Architectural Genealogy: Divergence and Paradigm Shifts",
+      "requested_subagents": 2
+    },
+    {
+      "investigator_id": "investigator_02_the_complexity_frontier_efficiency_and_post_transformer_alternatives",
+      "section_id": "section_02_the_complexity_frontier_efficiency_and_post_transformer_alternatives",
+      "section_title": "The Complexity Frontier: Efficiency and Post-Transformer Alternatives",
+      "requested_subagents": 2
+    }
+  ],
+  "raw_planner_output": [
+    {
+      "title": "Architectural Genealogy: Divergence and Paradigm Shifts",
+      "why_promising": "The seed paper proposed a unified encoder-decoder architecture. Modern NLP has since fractured into specialized encoder-only (BERT), decoder-only (GPT), and encoder-decoder (T5) paradigms. Mapping this divergence is essential to understanding the current LLM landscape.",
+      "seed_hooks": [
+        "encoder-decoder configuration",
+        "multi-head attention",
+        "sequence transduction"
+      ],
+      "research_questions": [
+        "How did the modification of the original Transformer blocks lead to the distinct NLU (Encoder) and NLG (Decoder) specialization paths?",
+        "What specific evolutions in positional encoding (e.g., from absolute to RoPE or ALiBi) have been necessary to support modern long-context scaling?",
+        "To what extent has the original 'attention is all you need' mantra been modified to include hybrid inductive biases in Vision Transformers (ViT) or Multimodal models?"
+      ],
+      "priority": 1
+    },
+    {
+      "title": "The Complexity Frontier: Efficiency and Post-Transformer Alternatives",
+      "why_promising": "The $O(n^2)$ complexity of the self-attention mechanism is the primary limiting factor of the Transformer. This direction targets the 'critiques' and 'novelty' aspect of the brief by investigating models designed to bypass the attention bottleneck.",
+      "seed_hooks": [
+        "dispensing with recurrence and convolutions entirely",
+        "more parallelizable",
+        "attention mechanisms"
+      ],
+      "research_questions": [
+        "What are the most effective linear-complexity attention approximations (e.g., Performer, Linformer) and where do they fail compared to the original mechanism?",
+        "How do State Space Models (SSMs) like Mamba or Hyena attempt to recover the sequence modeling capabilities of Transformers without the quadratic cost?",
+        "What hardware-aware optimizations (e.g., FlashAttention) have fundamentally changed the feasibility of training the massive scales enabled by this paper?"
+      ],
+      "priority": 2
+    }
+  ]
+}

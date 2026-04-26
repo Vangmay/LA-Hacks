@@ -1,0 +1,10 @@
+{
+  "zones": [
+    {
+      "investigator_id": "investigator_01_experiments",
+      "section_id": "section_01_experiments",
+      "section_title": "Experiments",
+      "requested_subagents": 2
+    }
+  ]
+}

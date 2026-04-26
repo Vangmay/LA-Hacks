@@ -1,0 +1,1 @@
+The triad creates a complete lifecycle for novelty validation: the Cartographer ensures historical grounding to avoid redundant 're-discoveries'; the Skeptic identifies empirical fragility to prevent building on sand; and the Miner synthesizes these historical foundations and current failures into actionable, forward-looking research directions.

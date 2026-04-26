@@ -1,0 +1,13 @@
+{
+  "source": "fallback",
+  "rationale": "director investigation planning failed; using whole-paper fallback: director returned no investigation directions",
+  "zones": [
+    {
+      "investigator_id": "investigator_01_whole_paper",
+      "section_id": "section_01_whole_paper",
+      "section_title": "whole paper",
+      "requested_subagents": 2
+    }
+  ],
+  "raw_planner_output": null
+}

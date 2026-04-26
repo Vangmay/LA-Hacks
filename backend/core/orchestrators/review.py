@@ -62,7 +62,12 @@ class ReviewOrchestrator:
 
         await _publish(job_id, DAGEventType.JOB_CREATED, payload={"job_id": job_id})
         try:
-            job_store.set_status(job_id, "processing")
+            job_store.update(
+                job_id,
+                status="processing",
+                review_stage="Preparing source",
+                graph_snapshot=_graph_snapshot([], stage="Preparing source"),
+            )
 
             paper_source = _build_source(job)
             await _publish(job_id, DAGEventType.SOURCE_FETCH_COMPLETE, payload={
@@ -70,11 +75,17 @@ class ReviewOrchestrator:
                 "source_url": paper_source.source_url,
             })
 
+            job_store.update(
+                job_id,
+                review_stage="Parsing TeX",
+                graph_snapshot=_graph_snapshot([], stage="Parsing TeX"),
+            )
             await _publish(job_id, DAGEventType.PARSE_STARTED, payload={})
             tex_text = _read_tex(job)
             paper = parse_tex(tex_text, paper_source)
             job_store.update(
                 job_id,
+                review_stage="Extracting atoms",
                 paper_id=paper.paper_id,
                 parsed_paper=paper.model_dump(),
                 paper_title=paper.title,
@@ -87,7 +98,33 @@ class ReviewOrchestrator:
                 "warnings": paper.parser_warnings,
             })
 
-            atoms = await _extract_atoms(job_id, paper)
+            emitted_atoms: set[str] = set()
+
+            async def on_atom_progress(partial_atoms: list[ResearchAtom], progress: dict[str, Any]) -> None:
+                current_job = job_store.get(job_id) or {}
+                job_store.update(
+                    job_id,
+                    total_atoms=max(len(partial_atoms), current_job.get("total_atoms", 0)),
+                    review_stage=progress.get("stage", "Extracting atoms"),
+                    graph_snapshot=_graph_snapshot(
+                        partial_atoms,
+                        stage=progress.get("stage", "Extracting atoms"),
+                        extraction_batches_completed=progress.get("batches_completed"),
+                        extraction_batches_total=progress.get("batches_total"),
+                    ),
+                )
+                for idx, atom in enumerate(partial_atoms, start=1):
+                    if atom.atom_id in emitted_atoms:
+                        continue
+                    emitted_atoms.add(atom.atom_id)
+                    await _publish(
+                        job_id,
+                        DAGEventType.ATOM_CREATED,
+                        atom_id=atom.atom_id,
+                        payload=_atom_payload(atom, parsed_order=idx),
+                    )
+
+            atoms = await _extract_atoms(job_id, paper, on_atom_progress)
             atoms = link_equations_to_atoms(paper, atoms)
             atoms = link_citations_to_atoms(paper, atoms)
 
@@ -96,20 +133,28 @@ class ReviewOrchestrator:
                 atoms=[a.model_dump() for a in atoms],
                 total_atoms=len(atoms),
                 completed_atoms=0,
+                review_stage="Building dependency graph",
+                graph_snapshot=_graph_snapshot(
+                    atoms,
+                    stage="Building dependency graph",
+                ),
             )
-            for atom in atoms:
+            for idx, atom in enumerate(atoms):
+                if atom.atom_id in emitted_atoms:
+                    continue
+                emitted_atoms.add(atom.atom_id)
                 await _publish(
                     job_id,
                     DAGEventType.ATOM_CREATED,
                     atom_id=atom.atom_id,
-                    payload=_atom_payload(atom),
+                    payload=_atom_payload(atom, parsed_order=idx + 1),
                 )
             await _publish(job_id, DAGEventType.ATOM_EXTRACTION_COMPLETE, payload={
                 "total_atoms": len(atoms),
             })
 
             graph = await _build_graph(job_id, atoms)
-            job_store.update(job_id, graph=graph.model_dump())
+            job_store.update(job_id, graph=graph.model_dump(), review_stage="Reviewing atoms")
             for edge in graph.edges:
                 await _publish(
                     job_id,
@@ -120,7 +165,10 @@ class ReviewOrchestrator:
                 "edges": len(graph.edges),
                 "roots": graph.roots,
             })
-            job_store.update(job_id, graph_snapshot=_graph_snapshot(atoms, graph))
+            job_store.update(
+                job_id,
+                graph_snapshot=_graph_snapshot(atoms, graph, stage="Reviewing atoms"),
+            )
 
             verdicts = await _review_atoms(job_id, paper, atoms, graph)
 
@@ -162,8 +210,9 @@ class ReviewOrchestrator:
                 job_id,
                 verdicts=[v.model_dump() for v in verdicts],
                 report=report.model_dump(),
-                graph_snapshot=_graph_snapshot(atoms, graph, verdicts=verdicts),
+                graph_snapshot=_graph_snapshot(atoms, graph, verdicts=verdicts, stage="Ready"),
                 completed_atoms=len(atoms),
+                review_stage="Ready",
                 status="complete",
             )
             await _publish(
@@ -185,9 +234,13 @@ class ReviewOrchestrator:
 # Stage helpers
 
 
-async def _extract_atoms(job_id: str, paper: ParsedPaper) -> list[ResearchAtom]:
+async def _extract_atoms(
+    job_id: str,
+    paper: ParsedPaper,
+    progress_callback=None,
+) -> list[ResearchAtom]:
     await _publish(job_id, DAGEventType.ATOM_EXTRACTION_STARTED, payload={})
-    agent = AtomExtractorAgent()
+    agent = AtomExtractorAgent(progress_callback=progress_callback)
     result = await agent.run(AgentContext(job_id=job_id, parsed_paper=paper))
     if result.status == "error":
         raise RuntimeError(f"atom extraction failed: {result.error}")
@@ -375,14 +428,19 @@ def _read_tex(job: dict[str, Any]) -> str:
     return Path(tex_path).read_text(encoding="utf-8", errors="replace")
 
 
-def _atom_payload(atom: ResearchAtom) -> dict[str, Any]:
+def _atom_payload(atom: ResearchAtom, parsed_order: int | None = None) -> dict[str, Any]:
     return {
         "atom_id": atom.atom_id,
+        "id": atom.atom_id,
         "atom_type": atom.atom_type.value,
         "section_heading": atom.section_heading,
+        "section": atom.section_heading,
+        "label": _node_label(atom),
+        "parsed_order": parsed_order,
         "importance": atom.importance.value,
         "text": atom.text[:500],
         "source_excerpt": atom.source_span.raw_excerpt[:500],
+        "status": "pending",
         "equations": [eq.equation_id for eq in atom.equations],
         "citations": [c.citation_id for c in atom.citations],
     }
@@ -390,9 +448,12 @@ def _atom_payload(atom: ResearchAtom) -> dict[str, Any]:
 
 def _graph_snapshot(
     atoms: list[ResearchAtom],
-    graph: ResearchGraph,
+    graph: ResearchGraph | None = None,
     *,
     verdicts: Optional[list[AtomVerdict]] = None,
+    stage: str | None = None,
+    extraction_batches_completed: int | None = None,
+    extraction_batches_total: int | None = None,
 ) -> dict[str, Any]:
     verdict_label = {v.atom_id: v.label.value for v in (verdicts or [])}
     nodes = [
@@ -402,11 +463,12 @@ def _graph_snapshot(
             "atom_type": atom.atom_type.value,
             "section": atom.section_heading,
             "label": _node_label(atom),
+            "parsed_order": idx + 1,
             "status": verdict_label.get(atom.atom_id, "pending"),
             "importance": atom.importance.value,
             "source_excerpt": atom.source_span.raw_excerpt[:200],
         }
-        for atom in atoms
+        for idx, atom in enumerate(atoms)
     ]
     edges = [
         {
@@ -417,16 +479,67 @@ def _graph_snapshot(
             "confidence": edge.confidence,
             "rationale": edge.rationale,
         }
-        for edge in graph.edges
+        for edge in (graph.edges if graph is not None else [])
     ]
-    return {"nodes": nodes, "edges": edges}
+    return {
+        "nodes": nodes,
+        "edges": edges,
+        "stage": stage or "Building DAG",
+        "parsed_atoms": len(nodes),
+        "total_atoms": len(nodes),
+        "extraction_batches_completed": extraction_batches_completed,
+        "extraction_batches_total": extraction_batches_total,
+        "recent_atoms": [
+            {
+                "id": node["id"],
+                "label": node["label"],
+                "parsed_order": node["parsed_order"],
+            }
+            for node in nodes[-5:]
+        ],
+    }
 
 
 def _node_label(atom: ResearchAtom) -> str:
-    base = atom.atom_type.value.replace("_", " ").title()
-    if atom.section_heading:
-        return f"{base} ({atom.section_heading[:30]})"
-    return base
+    text = _clean_label_text(atom.text or atom.source_span.raw_excerpt or "")
+    if not text:
+        return atom.atom_id
+
+    lowered = text.lower()
+    for prefix in (
+        "we introduce ",
+        "we propose ",
+        "we present ",
+        "we construct ",
+        "we define ",
+        "we prove ",
+        "we show ",
+        "this paper introduces ",
+        "this paper presents ",
+        "the paper introduces ",
+        "the paper presents ",
+    ):
+        if lowered.startswith(prefix):
+            text = text[len(prefix):]
+            break
+
+    stops = {
+        "a", "an", "the", "this", "that", "these", "those", "we", "our",
+        "there", "exists", "is", "are", "was", "were", "for", "every",
+    }
+    words = [word.strip(" ,.;:()[]{}") for word in text.split()]
+    words = [word for word in words if word]
+    while words and words[0].lower() in stops:
+        words.pop(0)
+    phrase = " ".join(words[:6]).strip(" ,.;:")
+    return phrase or atom.atom_id
+
+
+def _clean_label_text(text: str) -> str:
+    text = text.replace("$", " ")
+    for char in "\\{}[]()":
+        text = text.replace(char, " ")
+    return " ".join(text.split())
 
 
 async def _publish(

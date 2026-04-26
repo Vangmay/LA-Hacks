@@ -258,8 +258,9 @@ async def test_exercise_generator() -> None:
     payload = {
         "exercises": [
             {
-                "prompt": "Which of the following is the spectral radius of A = diag(1, 3, 2)? (A) 1  (B) 2  (C) 3",
+                "prompt": "Which of the following is the spectral radius of A = diag(1, 3, 2)?",
                 "exercise_type": "counterexample_mcq",
+                "options": ["1", "2", "3", "6"],
                 "answer_key": "C — the spectral radius is the largest eigenvalue, which is 3.",
             },
             {
@@ -277,6 +278,7 @@ async def test_exercise_generator() -> None:
     _assert(len(exercises) == 2, f"expected 2 exercises, got {len(exercises)}")
     _assert("exercise_id" in exercises[0], "exercise_id not assigned")
     _assert(exercises[0]["exercise_type"] == "counterexample_mcq", "wrong exercise type")
+    _assert(exercises[0]["options"] == ["1", "2", "3", "6"], "MCQ options should be preserved")
     _assert(exercises[1]["exercise_type"] == "computational", "wrong exercise type")
 
 

@@ -21,7 +21,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any, Optional
+from typing import Any, Awaitable, Callable, Optional
 
 from openai import AsyncOpenAI
 
@@ -148,9 +148,13 @@ class AtomExtractorAgent(BaseAgent):
         self,
         client: Optional[AsyncOpenAI] = None,
         max_section_chars: int = 14000,
+        progress_callback: Optional[
+            Callable[[list[ResearchAtom], dict[str, Any]], Awaitable[None]]
+        ] = None,
     ) -> None:
         self._client = client
         self._max_section_chars = max_section_chars
+        self._progress_callback = progress_callback
 
     def _get_client(self) -> AsyncOpenAI:
         if self._client is None:
@@ -170,6 +174,14 @@ class AtomExtractorAgent(BaseAgent):
 
         deterministic = self._extract_environments(paper)
         warnings: list[str] = []
+        await self._emit_progress(
+            _merge_atoms(deterministic, []),
+            {
+                "stage": "Extracting atoms",
+                "batches_completed": 0,
+                "batches_total": len(_section_batches(paper, self._max_section_chars)),
+            },
+        )
 
         try:
             llm_atoms, llm_warnings = await self._extract_with_llm(paper, deterministic)
@@ -308,7 +320,24 @@ class AtomExtractorAgent(BaseAgent):
                 atoms.append(atom)
                 counter += 1
 
+            await self._emit_progress(
+                _merge_atoms(seen, atoms),
+                {
+                    "stage": f"Extracting atoms ({batch_idx}/{len(batches)})",
+                    "batches_completed": batch_idx,
+                    "batches_total": len(batches),
+                },
+            )
+
         return atoms, warnings
+
+    async def _emit_progress(self, atoms: list[ResearchAtom], progress: dict[str, Any]) -> None:
+        if self._progress_callback is None:
+            return
+        try:
+            await self._progress_callback(atoms, progress)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("atom extraction progress callback failed: %s", exc)
 
 
 # ---------------------------------------------------------------------------

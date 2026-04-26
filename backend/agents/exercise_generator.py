@@ -1,4 +1,4 @@
-"""ExerciseGeneratorAgent — generate comprehension exercises for a ResearchAtom."""
+"""ExerciseGeneratorAgent - generate comprehension exercises for a ResearchAtom."""
 from __future__ import annotations
 
 import json
@@ -18,13 +18,14 @@ logger = logging.getLogger(__name__)
 _SYSTEM_PROMPT = (
     "Generate 2-3 exercises to test understanding of the given research atom at "
     "the specified comprehension level. Generate one exercise of each applicable type:\n"
-    "- counterexample_mcq: 'Which of the following correctly interprets this atom? "
-    "(A)... (B)... (C)...' — one correct option, two plausible distractors\n"
+    "- counterexample_mcq: a direct multiple-choice question with exactly four "
+    "options: one correct option and three plausible distractors\n"
     "- computational: a numerical or algebraic calculation that tests the atom\n"
     "- proof_fill: 'Fill in the missing step: Given X, we know Y because ___'\n\n"
     "Return a JSON object with key 'exercises' containing an array of objects, each with: "
     "prompt (str), exercise_type (counterexample_mcq|computational|proof_fill), "
-    "answer_key (str). Return ONLY the JSON object."
+    "answer_key (str), and for counterexample_mcq only, options ([str]) with exactly "
+    "four answer choices. Return ONLY the JSON object."
 )
 
 _VALID_TYPES = {"conceptual", "computational", "counterexample_mcq", "proof_fill"}
@@ -102,18 +103,28 @@ class ExerciseGeneratorAgent(BaseAgent):
             prompt = str(ex.get("prompt", "")).strip()
             ex_type = str(ex.get("exercise_type", "")).strip()
             answer_key = str(ex.get("answer_key", "")).strip()
+            raw_options = ex.get("options") or []
             if not prompt or not answer_key:
                 continue
             if ex_type not in _VALID_TYPES:
                 ex_type = "computational"
-            exercises.append(
-                {
-                    "exercise_id": str(uuid.uuid4()),
-                    "prompt": prompt,
-                    "exercise_type": ex_type,
-                    "answer_key": answer_key,
-                }
-            )
+
+            clean_exercise = {
+                "exercise_id": str(uuid.uuid4()),
+                "prompt": prompt,
+                "exercise_type": ex_type,
+                "answer_key": answer_key,
+            }
+            if ex_type == "counterexample_mcq" and isinstance(raw_options, list):
+                options = [
+                    str(option).strip()
+                    for option in raw_options
+                    if str(option).strip()
+                ][:4]
+                if len(options) == 4:
+                    clean_exercise["options"] = options
+
+            exercises.append(clean_exercise)
 
         return AgentResult(
             agent_id=self.agent_id,
