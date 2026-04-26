@@ -1,6 +1,7 @@
 """Monitored JSON-action loop for live deep-dive agents."""
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from dataclasses import dataclass
@@ -8,6 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .event_bus import DeepDiveEventBus
+from .events import DeepDiveEvent, DeepDiveEventType
 from .llm import DeepDiveLLMProvider
 from .llm import LLMJSONParseError
 from .llm import normalize_model_content
@@ -256,6 +259,7 @@ class LiveAgentRunner:
         max_steps: int,
         workspace_write_char_budget: int,
         max_workspace_tool_calls: int,
+        event_bus: DeepDiveEventBus | None = None,
     ) -> None:
         self.llm = llm
         self.tools = tools
@@ -263,8 +267,26 @@ class LiveAgentRunner:
         self.max_steps = max_steps
         self.workspace_write_char_budget = workspace_write_char_budget
         self.max_workspace_tool_calls = max_workspace_tool_calls
+        self.event_bus = event_bus
 
-    async def run_subagent(self, plan: SubagentPlan, stage: ResearchStage) -> AgentRunResult:
+    async def run_subagent(
+        self,
+        plan: SubagentPlan,
+        stage: ResearchStage,
+        *,
+        run_id: str | None = None,
+    ) -> AgentRunResult:
+        profile = self.llm.profile_for(plan.model_role)
+        self._publish_event(
+            run_id,
+            DeepDiveEventType.SUBAGENT_STARTED,
+            {
+                "subagent_id": plan.subagent_id,
+                "model_provider": profile.provider,
+                "model_name": profile.model,
+                "model_role": plan.model_role.value,
+            },
+        )
         messages: list[dict[str, str]] = [
             {"role": "system", "content": plan.system_prompt},
             {
@@ -302,6 +324,8 @@ class LiveAgentRunner:
                     llm_steps=llm_steps,
                     research_tool_calls_used=research_tool_calls_used,
                     workspace_tool_calls_used=workspace_tool_calls_used,
+                    run_id=run_id,
+                    plan=plan,
                 )
                 continue
             if not isinstance(action, dict):
@@ -312,9 +336,16 @@ class LiveAgentRunner:
                     llm_steps=llm_steps,
                     research_tool_calls_used=research_tool_calls_used,
                     workspace_tool_calls_used=workspace_tool_calls_used,
+                    run_id=run_id,
+                    plan=plan,
                 )
                 continue
-            self._write_trace(trace_path, {"type": "llm_action", "step": llm_steps, "action": action})
+            self._write_trace(
+                trace_path,
+                {"type": "llm_action", "step": llm_steps, "action": action},
+                run_id=run_id,
+                plan=plan,
+            )
 
             action_type = action.get("action")
             if action_type == "final":
@@ -357,6 +388,7 @@ class LiveAgentRunner:
                 if not handoff:
                     raise RuntimeError(f"{plan.subagent_id} final action omitted handoff_markdown")
                 self.workspace.write_owned_markdown(plan.workspace_path, "handoff.md", handoff)
+                self._publish_artifact_update(run_id, plan, "handoff.md")
                 summary = action.get("summary") or "Live subagent completed."
                 exit_reason = AgentExitReason.COMPLETED
                 break
@@ -370,6 +402,8 @@ class LiveAgentRunner:
                     llm_steps=llm_steps,
                     research_tool_calls_used=research_tool_calls_used,
                     workspace_tool_calls_used=workspace_tool_calls_used,
+                    run_id=run_id,
+                    plan=plan,
                 )
                 messages.append({"role": "assistant", "content": json.dumps(action)})
                 messages.append(
@@ -408,6 +442,8 @@ class LiveAgentRunner:
                         llm_steps=llm_steps,
                         research_tool_calls_used=research_tool_calls_used,
                         workspace_tool_calls_used=workspace_tool_calls_used,
+                        run_id=run_id,
+                        plan=plan,
                     )
                     messages.append({"role": "assistant", "content": json.dumps(action)})
                     messages.append(
@@ -433,6 +469,8 @@ class LiveAgentRunner:
                     llm_steps=llm_steps,
                     research_tool_calls_used=research_tool_calls_used,
                     workspace_tool_calls_used=workspace_tool_calls_used,
+                    run_id=run_id,
+                    plan=plan,
                 )
                 continue
             if is_workspace_tool:
@@ -441,6 +479,7 @@ class LiveAgentRunner:
                 research_tool_calls_used += 1
             trace_entry = {
                 "type": "tool_result",
+                "step": llm_steps,
                 "tool_name": tool_name,
                 "arguments": arguments,
                 "result": result,
@@ -449,6 +488,7 @@ class LiveAgentRunner:
                 "workspace_tool_calls_used": workspace_tool_calls_used,
             }
             self._write_trace(trace_path, trace_entry)
+            self._publish_trace_event(run_id, plan, {"ts": datetime.now(timezone.utc).isoformat(), **trace_entry})
             if not is_workspace_tool:
                 self._write_raw_tool_result(
                     raw_trace_path,
@@ -465,6 +505,9 @@ class LiveAgentRunner:
                     result=result,
                     query_index=research_tool_calls_used,
                 )
+                self._publish_artifact_update(run_id, plan, "queries.md")
+            elif isinstance(arguments.get("path"), str):
+                self._publish_artifact_update(run_id, plan, str(arguments["path"]))
 
             memory_update = action.get("memory_update")
             if memory_update:
@@ -474,6 +517,7 @@ class LiveAgentRunner:
                     str(memory_update),
                     heading=f"Step {llm_steps}: {tool_name}",
                 )
+                self._publish_artifact_update(run_id, plan, "memory.md")
 
             messages.append({"role": "assistant", "content": json.dumps(action)})
             messages.append(
@@ -518,6 +562,7 @@ class LiveAgentRunner:
                 research_tool_calls_used,
                 workspace_tool_calls_used,
                 start_step=llm_steps,
+                run_id=run_id,
             )
             llm_steps = repair_result["llm_steps"]
             workspace_tool_calls_used = repair_result["workspace_tool_calls_used"]
@@ -530,6 +575,7 @@ class LiveAgentRunner:
                 exit_reason = AgentExitReason.INCOMPLETE_ARTIFACTS
                 handoff = self._forced_incomplete_handoff(plan, exit_reason, missing)
                 self.workspace.write_owned_markdown(plan.workspace_path, "handoff.md", handoff)
+                self._publish_artifact_update(run_id, plan, "handoff.md")
                 summary = (
                     f"{plan.subagent_id} stopped with incomplete artifacts; "
                     "forced incomplete handoff written."
@@ -537,9 +583,9 @@ class LiveAgentRunner:
             else:
                 handoff = await self._force_handoff(plan, messages, exit_reason)
                 self.workspace.write_owned_markdown(plan.workspace_path, "handoff.md", handoff)
+                self._publish_artifact_update(run_id, plan, "handoff.md")
                 summary = f"{plan.subagent_id} stopped at {exit_reason.value}; forced handoff written."
 
-        profile = self.llm.profile_for(plan.model_role)
         return AgentRunResult(
             agent_id=plan.subagent_id,
             stage=stage,
@@ -602,6 +648,7 @@ class LiveAgentRunner:
         workspace_tool_calls_used: int,
         *,
         start_step: int,
+        run_id: str | None = None,
     ) -> dict[str, Any]:
         llm_steps = start_step
         exit_reason = AgentExitReason.MAX_TOOL_CALLS_REACHED
@@ -639,6 +686,8 @@ class LiveAgentRunner:
                     llm_steps=llm_steps,
                     research_tool_calls_used=research_tool_calls_used,
                     workspace_tool_calls_used=workspace_tool_calls_used,
+                    run_id=run_id,
+                    plan=plan,
                 )
                 continue
             if not isinstance(action, dict):
@@ -649,9 +698,16 @@ class LiveAgentRunner:
                     llm_steps=llm_steps,
                     research_tool_calls_used=research_tool_calls_used,
                     workspace_tool_calls_used=workspace_tool_calls_used,
+                    run_id=run_id,
+                    plan=plan,
                 )
                 continue
-            self._write_trace(trace_path, {"type": "llm_action", "step": llm_steps, "action": action})
+            self._write_trace(
+                trace_path,
+                {"type": "llm_action", "step": llm_steps, "action": action},
+                run_id=run_id,
+                plan=plan,
+            )
             action_type = action.get("action")
             if action_type == "final":
                 if not self._evidence_state(plan.workspace_path).has_any_search:
@@ -693,6 +749,7 @@ class LiveAgentRunner:
                     )
                     continue
                 self.workspace.write_owned_markdown(plan.workspace_path, "handoff.md", handoff)
+                self._publish_artifact_update(run_id, plan, "handoff.md")
                 return {
                     "llm_steps": llm_steps,
                     "workspace_tool_calls_used": workspace_tool_calls_used,
@@ -709,6 +766,8 @@ class LiveAgentRunner:
                     llm_steps=llm_steps,
                     research_tool_calls_used=research_tool_calls_used,
                     workspace_tool_calls_used=workspace_tool_calls_used,
+                    run_id=run_id,
+                    plan=plan,
                 )
                 messages.append({"role": "assistant", "content": json.dumps(action)})
                 messages.append(
@@ -733,6 +792,8 @@ class LiveAgentRunner:
                     llm_steps=llm_steps,
                     research_tool_calls_used=research_tool_calls_used,
                     workspace_tool_calls_used=workspace_tool_calls_used,
+                    run_id=run_id,
+                    plan=plan,
                 )
                 messages.append({"role": "assistant", "content": json.dumps(action)})
                 messages.append(
@@ -762,6 +823,8 @@ class LiveAgentRunner:
                     llm_steps=llm_steps,
                     research_tool_calls_used=research_tool_calls_used,
                     workspace_tool_calls_used=workspace_tool_calls_used,
+                    run_id=run_id,
+                    plan=plan,
                 )
                 continue
             workspace_tool_calls_used += 1
@@ -769,6 +832,7 @@ class LiveAgentRunner:
                 trace_path,
                 {
                     "type": "tool_result",
+                    "step": llm_steps,
                     "tool_name": tool_name,
                     "arguments": arguments,
                     "result": result,
@@ -776,7 +840,11 @@ class LiveAgentRunner:
                     "research_tool_calls_used": research_tool_calls_used,
                     "workspace_tool_calls_used": workspace_tool_calls_used,
                 },
+                run_id=run_id,
+                plan=plan,
             )
+            if isinstance(arguments.get("path"), str):
+                self._publish_artifact_update(run_id, plan, str(arguments["path"]))
             messages.append({"role": "assistant", "content": json.dumps(action)})
             messages.append(
                 {
@@ -822,10 +890,132 @@ class LiveAgentRunner:
             + "\n"
         )
 
-    def _write_trace(self, path: Path, entry: dict[str, Any]) -> None:
+    def _write_trace(
+        self,
+        path: Path,
+        entry: dict[str, Any],
+        *,
+        run_id: str | None = None,
+        plan: SubagentPlan | None = None,
+    ) -> None:
         entry = {"ts": datetime.now(timezone.utc).isoformat(), **entry}
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(entry, default=str) + "\n")
+        if run_id and plan:
+            self._publish_trace_event(run_id, plan, entry)
+
+    def _publish_event(
+        self,
+        run_id: str | None,
+        event_type: DeepDiveEventType,
+        payload: dict[str, Any],
+    ) -> None:
+        if not run_id or not self.event_bus:
+            return
+        try:
+            asyncio.create_task(
+                self.event_bus.publish(
+                    DeepDiveEvent(type=event_type, run_id=run_id, payload=payload)
+                )
+            )
+        except RuntimeError:
+            return
+
+    def _publish_trace_event(
+        self,
+        run_id: str | None,
+        plan: SubagentPlan,
+        entry: dict[str, Any],
+    ) -> None:
+        entry_type = entry.get("type")
+        action = entry.get("action") if isinstance(entry.get("action"), dict) else {}
+        tool_name = str(entry.get("tool_name") or action.get("tool_name") or action.get("action") or "")
+        common = {
+            "subagent_id": plan.subagent_id,
+            "investigator_id": plan.investigator_id,
+            "step": entry.get("step"),
+            "tool_name": tool_name,
+            "arguments": entry.get("arguments") or action.get("arguments") or {},
+            "trace_entry": _compact_trace_entry(entry),
+        }
+        if entry_type == "llm_action":
+            if tool_name == "final":
+                return
+            self._publish_event(
+                run_id,
+                DeepDiveEventType.SUBAGENT_TOOL_REQUESTED,
+                {**common, "action": action, "memory_update": action.get("memory_update")},
+            )
+        elif entry_type == "tool_result":
+            self._publish_event(
+                run_id,
+                DeepDiveEventType.SUBAGENT_TOOL_RESULT,
+                {
+                    **common,
+                    "result_preview": _preview_value(entry.get("result")),
+                    "research_tool_calls_used": entry.get("research_tool_calls_used"),
+                    "workspace_tool_calls_used": entry.get("workspace_tool_calls_used"),
+                },
+            )
+            self._publish_budget(run_id, plan, entry)
+        elif entry_type == "rejected_action":
+            self._publish_event(
+                run_id,
+                DeepDiveEventType.SUBAGENT_TOOL_REJECTED,
+                {**common, "action": action or entry.get("action"), "reason": entry.get("reason", "")},
+            )
+            self._publish_budget(run_id, plan, entry)
+        elif entry_type == "tool_error":
+            self._publish_event(
+                run_id,
+                DeepDiveEventType.SUBAGENT_TOOL_ERROR,
+                {
+                    **common,
+                    "error": entry.get("error", ""),
+                    "error_type": entry.get("error_type", ""),
+                },
+            )
+            self._publish_budget(run_id, plan, entry)
+
+    def _publish_budget(self, run_id: str | None, plan: SubagentPlan, entry: dict[str, Any]) -> None:
+        self._publish_event(
+            run_id,
+            DeepDiveEventType.SUBAGENT_BUDGET,
+            {
+                "subagent_id": plan.subagent_id,
+                "research_used": entry.get("research_tool_calls_used") or 0,
+                "research_max": plan.max_tool_calls,
+                "workspace_used": entry.get("workspace_tool_calls_used") or 0,
+                "workspace_max": self.max_workspace_tool_calls,
+                "llm_steps": entry.get("step") or 0,
+            },
+        )
+
+    def _publish_artifact_update(
+        self,
+        run_id: str | None,
+        plan: SubagentPlan,
+        relative_path: str,
+    ) -> None:
+        artifact = Path(relative_path).name
+        if artifact not in set(self._tracked_artifacts(plan.workspace_path)):
+            return
+        path = plan.workspace_path / artifact
+        if not path.exists():
+            return
+        content = path.read_text(encoding="utf-8")
+        self._publish_event(
+            run_id,
+            DeepDiveEventType.SUBAGENT_ARTIFACT_UPDATED,
+            {
+                "subagent_id": plan.subagent_id,
+                "investigator_id": plan.investigator_id,
+                "artifact": artifact.removesuffix(".md"),
+                "path": artifact,
+                "content": content,
+                "char_count": len(content),
+            },
+        )
 
     def _write_rejected_action_trace(
         self,
@@ -836,6 +1026,8 @@ class LiveAgentRunner:
         llm_steps: int,
         research_tool_calls_used: int,
         workspace_tool_calls_used: int,
+        run_id: str | None = None,
+        plan: SubagentPlan | None = None,
     ) -> None:
         self._write_trace(
             path,
@@ -847,6 +1039,8 @@ class LiveAgentRunner:
                 "research_tool_calls_used": research_tool_calls_used,
                 "workspace_tool_calls_used": workspace_tool_calls_used,
             },
+            run_id=run_id,
+            plan=plan,
         )
 
     def _handle_malformed_json_action(
@@ -858,6 +1052,8 @@ class LiveAgentRunner:
         llm_steps: int,
         research_tool_calls_used: int,
         workspace_tool_calls_used: int,
+        run_id: str | None = None,
+        plan: SubagentPlan | None = None,
     ) -> None:
         raw = exc.content.strip()
         self._write_rejected_action_trace(
@@ -867,6 +1063,8 @@ class LiveAgentRunner:
             llm_steps=llm_steps,
             research_tool_calls_used=research_tool_calls_used,
             workspace_tool_calls_used=workspace_tool_calls_used,
+            run_id=run_id,
+            plan=plan,
         )
         messages.append({"role": "assistant", "content": raw[:4000]})
         messages.append(
@@ -890,6 +1088,8 @@ class LiveAgentRunner:
         llm_steps: int,
         research_tool_calls_used: int,
         workspace_tool_calls_used: int,
+        run_id: str | None = None,
+        plan: SubagentPlan | None = None,
     ) -> None:
         rendered = json.dumps(action, default=str)[:4000]
         self._write_rejected_action_trace(
@@ -899,6 +1099,8 @@ class LiveAgentRunner:
             llm_steps=llm_steps,
             research_tool_calls_used=research_tool_calls_used,
             workspace_tool_calls_used=workspace_tool_calls_used,
+            run_id=run_id,
+            plan=plan,
         )
         messages.append({"role": "assistant", "content": rendered})
         messages.append(
@@ -927,6 +1129,8 @@ class LiveAgentRunner:
         llm_steps: int,
         research_tool_calls_used: int,
         workspace_tool_calls_used: int,
+        run_id: str | None = None,
+        plan: SubagentPlan | None = None,
     ) -> None:
         error_result = {
             "error": True,
@@ -947,6 +1151,8 @@ class LiveAgentRunner:
                 "research_tool_calls_used": research_tool_calls_used,
                 "workspace_tool_calls_used": workspace_tool_calls_used,
             },
+            run_id=run_id,
+            plan=plan,
         )
         if not is_workspace_tool:
             self._write_raw_tool_result(
@@ -1438,3 +1644,22 @@ def _action_updates_markdown(action: dict[str, Any], relative_path: str) -> bool
         return False
     content = arguments.get("content")
     return isinstance(content, str) and bool(content.strip())
+
+
+def _preview_value(value: Any, limit: int = 4000) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, dict) and value.get("truncated") and value.get("prefix"):
+        text = str(value["prefix"])
+    elif isinstance(value, str):
+        text = value
+    else:
+        text = json.dumps(value, default=str)
+    return text[:limit].rstrip() + ("..." if len(text) > limit else "")
+
+
+def _compact_trace_entry(entry: dict[str, Any]) -> dict[str, Any]:
+    compact = dict(entry)
+    if "result" in compact:
+        compact["result_preview"] = _preview_value(compact.pop("result"))
+    return compact

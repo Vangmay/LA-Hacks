@@ -10,6 +10,8 @@ from typing import Any
 
 from .agent_runner import LiveAgentRunner
 from .config import DeepDiveConfig
+from .event_bus import DeepDiveEventBus
+from .events import DeepDiveEvent, DeepDiveEventType
 from .llm import DeepDiveLLMProvider
 from .models import (
     AgentExitReason,
@@ -49,12 +51,14 @@ class DeepDiveOrchestrator:
         prompt_book: PromptBook | None = None,
         llm_provider: DeepDiveLLMProvider | None = None,
         tool_runtime: ToolRuntime | None = None,
+        event_bus: DeepDiveEventBus | None = None,
     ) -> None:
         self.config = (config or DeepDiveConfig()).normalized()
         self.prompt_book = prompt_book or PromptBook()
         self.tools = build_default_tool_registry()
         self.workspace = WorkspaceManager(self.config.workspace_root)
         self.llm = llm_provider or DeepDiveLLMProvider(self.config)
+        self.event_bus = event_bus
         self.tool_runtime = tool_runtime or ToolRuntime(
             workspace=self.workspace,
             http_timeout_seconds=self.config.http_timeout_seconds,
@@ -70,55 +74,229 @@ class DeepDiveOrchestrator:
             max_steps=self.config.subagent_max_steps,
             workspace_write_char_budget=self.config.workspace_write_char_budget,
             max_workspace_tool_calls=self.config.subagent_max_workspace_tool_calls,
+            event_bus=event_bus,
+        )
+
+    async def _emit(
+        self,
+        run_id: str,
+        event_type: DeepDiveEventType,
+        payload: dict[str, Any] | None = None,
+    ) -> None:
+        if not self.event_bus:
+            return
+        await self.event_bus.publish(
+            DeepDiveEvent(
+                type=event_type,
+                run_id=run_id,
+                payload=payload or {},
+            )
+        )
+
+    async def _emit_plans(self, run_id: str, investigators: list[InvestigatorPlan]) -> None:
+        for investigator in investigators:
+            await self._emit(
+                run_id,
+                DeepDiveEventType.INVESTIGATOR_PLANNED,
+                {
+                    "investigator_id": investigator.investigator_id,
+                    "section_id": investigator.section_id,
+                    "section_title": investigator.section_title,
+                    "workspace_path": str(investigator.workspace_path),
+                    "system_prompt_preview": investigator.system_prompt[:4000],
+                    "subagent_ids": [sub.subagent_id for sub in investigator.subagents],
+                },
+            )
+            for subagent in investigator.subagents:
+                await self._emit(
+                    run_id,
+                    DeepDiveEventType.SUBAGENT_PLANNED,
+                    {
+                        "subagent_id": subagent.subagent_id,
+                        "investigator_id": subagent.investigator_id,
+                        "section_id": subagent.section_id,
+                        "section_title": subagent.section_title,
+                        "workspace_path": str(subagent.workspace_path),
+                        "taste": subagent.taste.model_dump(),
+                        "allowed_tools": subagent.allowed_tools,
+                        "max_tool_calls": subagent.max_tool_calls,
+                        "model_role": subagent.model_role.value,
+                    },
+                )
+
+    async def _emit_subagent_completed(self, run_id: str, result: AgentRunResult) -> None:
+        await self._emit(
+            run_id,
+            DeepDiveEventType.SUBAGENT_COMPLETED,
+            {
+                "subagent_id": result.agent_id,
+                "exit_reason": result.exit_reason.value,
+                "summary": result.summary,
+                "error": result.error,
+                "workspace_path": str(result.workspace_path),
+                "model_provider": result.model_provider,
+                "model_name": result.model_name,
+                "budget": {
+                    "research_used": result.research_tool_calls_used or result.tool_calls_used,
+                    "workspace_used": result.workspace_tool_calls_used,
+                    "llm_steps": result.llm_steps_used,
+                },
+                "artifacts": [str(path) for path in result.artifacts],
+            },
+        )
+
+    async def _emit_investigator_synthesis(self, run_id: str, result: AgentRunResult) -> None:
+        artifact = result.artifacts[0] if result.artifacts else None
+        await self._emit(
+            run_id,
+            DeepDiveEventType.INVESTIGATOR_SYNTHESIZED,
+            {
+                "investigator_id": result.agent_id,
+                "summary": result.summary,
+                "exit_reason": result.exit_reason.value,
+                "synthesis_path": str(artifact) if artifact else "",
+                "synthesis_md": artifact.read_text(encoding="utf-8") if artifact and artifact.exists() else "",
+            },
+        )
+
+    async def _emit_cross_completed(self, run_id: str, run_root: Path, paths: list[Path]) -> None:
+        artifacts: dict[str, str] = {}
+        for path in paths:
+            if path.exists():
+                artifacts[path.name.replace(".md", "")] = path.read_text(encoding="utf-8")
+        for name in ("proposal_families.md", "global_evidence_map.md", "unresolved_conflicts.md"):
+            path = run_root / "shared" / name
+            if path.exists():
+                artifacts[path.name.replace(".md", "")] = path.read_text(encoding="utf-8")
+        await self._emit(
+            run_id,
+            DeepDiveEventType.CROSS_INVESTIGATOR_COMPLETED,
+            {"artifacts": artifacts},
+        )
+
+    async def _emit_critique_completed(self, run_id: str, critique: CritiqueResult) -> None:
+        await self._emit(
+            run_id,
+            DeepDiveEventType.CRITIQUE_COMPLETED,
+            {
+                "critic_id": critique.critic_id,
+                "lens": critique.lens,
+                "summary": critique.summary,
+                "workspace_path": str(critique.workspace_path),
+                "artifact_path": str(critique.artifact_path),
+                "critique_md": (
+                    critique.artifact_path.read_text(encoding="utf-8")
+                    if critique.artifact_path.exists()
+                    else ""
+                ),
+            },
         )
 
     async def run(self, request: DeepDiveRunRequest) -> DeepDiveRunResult:
         stages: list[ResearchStage] = []
         warnings: list[str] = []
         run_root = self.workspace.prepare_run(request.run_id)
+        current_stage = ResearchStage.BOOTSTRAP
 
         try:
+            await self._emit(
+                request.run_id,
+                DeepDiveEventType.RUN_STARTED,
+                {
+                    "run_id": request.run_id,
+                    "arxiv_url": request.arxiv_url,
+                    "paper_id": request.paper_id,
+                    "objective": request.research_objective,
+                    "mode": request.mode,
+                    "workspace_path": str(run_root),
+                    "config": {
+                        "max_investigators": self.config.max_investigators,
+                        "subagents_per_investigator": self.config.subagents_per_investigator,
+                        "subagent_max_tool_calls": self.config.subagent_max_tool_calls,
+                        "max_parallel_subagents": self.config.max_parallel_subagents,
+                        "dynamic_roster_enabled": self.config.dynamic_roster_enabled,
+                    },
+                },
+            )
+            await self._emit(request.run_id, DeepDiveEventType.STAGE_ENTERED, {"stage": current_stage.value})
             stages.append(ResearchStage.BOOTSTRAP)
+            await self._emit(request.run_id, DeepDiveEventType.STAGE_COMPLETED, {"stage": current_stage.value})
+
+            current_stage = ResearchStage.INVESTIGATOR_PLANNING
+            await self._emit(request.run_id, DeepDiveEventType.STAGE_ENTERED, {"stage": current_stage.value})
             if request.mode == "live" and self.config.dynamic_roster_enabled:
                 investigators = await self._plan_investigators_live(request, run_root, warnings)
             else:
                 investigators = self._plan_investigators(request, run_root)
             stages.append(ResearchStage.INVESTIGATOR_PLANNING)
+            await self._emit_plans(request.run_id, investigators)
+            await self._emit(request.run_id, DeepDiveEventType.STAGE_COMPLETED, {"stage": current_stage.value})
 
+            current_stage = ResearchStage.SUBAGENT_RESEARCH
+            await self._emit(request.run_id, DeepDiveEventType.STAGE_ENTERED, {"stage": current_stage.value})
             subagent_results = await self._run_all_subagents(investigators, request)
             stages.append(ResearchStage.SUBAGENT_RESEARCH)
+            await self._emit(request.run_id, DeepDiveEventType.STAGE_COMPLETED, {"stage": current_stage.value})
 
+            current_stage = ResearchStage.INVESTIGATOR_SYNTHESIS
+            await self._emit(request.run_id, DeepDiveEventType.STAGE_ENTERED, {"stage": current_stage.value})
+            syntheses: list[AgentRunResult] = []
             if request.mode == "live":
-                syntheses = [
-                    await self._synthesize_investigator_live(plan, subagent_results, request)
-                    for plan in investigators
-                ]
+                for plan in investigators:
+                    result = await self._synthesize_investigator_live(plan, subagent_results, request)
+                    syntheses.append(result)
+                    await self._emit_investigator_synthesis(request.run_id, result)
             else:
-                syntheses = [self._synthesize_investigator(plan, subagent_results) for plan in investigators]
+                for plan in investigators:
+                    result = self._synthesize_investigator(plan, subagent_results)
+                    syntheses.append(result)
+                    await self._emit_investigator_synthesis(request.run_id, result)
             stages.append(ResearchStage.INVESTIGATOR_SYNTHESIS)
+            await self._emit(request.run_id, DeepDiveEventType.STAGE_COMPLETED, {"stage": current_stage.value})
 
+            current_stage = ResearchStage.CROSS_INVESTIGATOR_DEEP_DIVE
+            await self._emit(request.run_id, DeepDiveEventType.STAGE_ENTERED, {"stage": current_stage.value})
             if request.mode == "live":
-                await self._run_cross_investigator_deep_dive_live(
+                cross_paths = await self._run_cross_investigator_deep_dive_live(
                     run_root,
                     investigators,
                     syntheses,
                     request,
                 )
             else:
-                self._write_cross_investigator_deep_dive(run_root, syntheses, request)
+                cross_paths = [self._write_cross_investigator_deep_dive(run_root, syntheses, request)]
             stages.append(ResearchStage.CROSS_INVESTIGATOR_DEEP_DIVE)
+            await self._emit_cross_completed(request.run_id, run_root, cross_paths)
+            await self._emit(request.run_id, DeepDiveEventType.STAGE_COMPLETED, {"stage": current_stage.value})
 
+            current_stage = ResearchStage.CRITIQUE
+            await self._emit(request.run_id, DeepDiveEventType.STAGE_ENTERED, {"stage": current_stage.value})
             if request.mode == "live":
                 critiques = await self._run_critiques_live(run_root, syntheses, request)
             else:
                 critiques = self._run_critiques(run_root, syntheses, request)
             stages.append(ResearchStage.CRITIQUE)
+            for critique in critiques:
+                await self._emit_critique_completed(request.run_id, critique)
+            await self._emit(request.run_id, DeepDiveEventType.STAGE_COMPLETED, {"stage": current_stage.value})
 
+            current_stage = ResearchStage.FINALIZATION
+            await self._emit(request.run_id, DeepDiveEventType.STAGE_ENTERED, {"stage": current_stage.value})
             if request.mode == "live":
                 final_report = await self._finalize_live(run_root, request, investigators, syntheses, critiques)
             else:
                 final_report = self._finalize(run_root, request, investigators, syntheses, critiques)
             stages.append(ResearchStage.FINALIZATION)
+            await self._emit(
+                request.run_id,
+                DeepDiveEventType.RUN_FINALIZED,
+                {
+                    "run_id": request.run_id,
+                    "final_report_path": str(final_report),
+                    "final_report_md": final_report.read_text(encoding="utf-8") if final_report.exists() else "",
+                },
+            )
+            await self._emit(request.run_id, DeepDiveEventType.STAGE_COMPLETED, {"stage": current_stage.value})
 
             return DeepDiveRunResult(
                 run_id=request.run_id,
@@ -133,6 +311,15 @@ class DeepDiveOrchestrator:
                 warnings=warnings,
             )
         except Exception as exc:
+            await self._emit(
+                request.run_id,
+                DeepDiveEventType.RUN_ERROR,
+                {
+                    "run_id": request.run_id,
+                    "stage": current_stage.value,
+                    "error": str(exc),
+                },
+            )
             return DeepDiveRunResult(
                 run_id=request.run_id,
                 status="error",
@@ -577,11 +764,36 @@ class DeepDiveOrchestrator:
         async def run_one(plan: SubagentPlan) -> AgentRunResult:
             async with semaphore:
                 try:
+                    if request.mode != "live":
+                        await self._emit(
+                            request.run_id,
+                            DeepDiveEventType.SUBAGENT_STARTED,
+                            {
+                                "subagent_id": plan.subagent_id,
+                                "model_provider": None,
+                                "model_name": None,
+                            },
+                        )
                     if request.mode == "live":
-                        return await self.live_runner.run_subagent(plan, ResearchStage.SUBAGENT_RESEARCH)
-                    return await self._run_subagent_budget(plan, request.mode)
+                        try:
+                            result = await self.live_runner.run_subagent(
+                                plan,
+                                ResearchStage.SUBAGENT_RESEARCH,
+                                run_id=request.run_id,
+                            )
+                        except TypeError as exc:
+                            if "run_id" not in str(exc):
+                                raise
+                            result = await self.live_runner.run_subagent(
+                                plan,
+                                ResearchStage.SUBAGENT_RESEARCH,
+                            )
+                    else:
+                        result = await self._run_subagent_budget(plan, request.mode)
                 except Exception as exc:
-                    return self._subagent_error_result(plan, exc)
+                    result = self._subagent_error_result(plan, exc)
+                await self._emit_subagent_completed(request.run_id, result)
+                return result
 
         tasks = [run_one(subagent) for inv in investigators for subagent in inv.subagents]
         return list(await asyncio.gather(*tasks))
