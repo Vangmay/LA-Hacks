@@ -425,11 +425,13 @@ class AtomExtractorAgent(BaseAgent):
             Callable[[list[ResearchAtom], dict[str, Any]], Awaitable[None]]
         ] = None,
         normalize_headers: bool = True,
+        model: Optional[str] = None,
     ) -> None:
         self._client = client
         self._max_section_chars = max_section_chars
         self._progress_callback = progress_callback
         self._normalize_headers = normalize_headers
+        self._model = model or settings.openai_model
 
     def _get_client(self) -> AsyncOpenAI:
         if self._client is None:
@@ -454,11 +456,13 @@ class AtomExtractorAgent(BaseAgent):
         progress_deterministic = _local_candidate_filter(deterministic, progress_warnings)
         warnings.extend(progress_warnings)
         await self._emit_progress(
-            _candidates_to_research_atoms(paper, progress_deterministic),
+            _progress_atoms_from_candidates(paper, progress_deterministic),
             {
                 "stage": "Extracting deterministic atoms",
                 "batches_completed": 0,
                 "batches_total": batch_count,
+                "current_batch": 0,
+                "publish_atoms": False,
             },
         )
 
@@ -502,19 +506,25 @@ class AtomExtractorAgent(BaseAgent):
             try:
                 atoms, normalization_warnings = await self._normalize_headers_with_llm(atoms)
                 warnings.extend(normalization_warnings)
-                await self._emit_progress(
-                    atoms,
-                    {
-                        "stage": "Normalizing atom headers",
-                        "batches_completed": 1,
-                        "batches_total": 1,
-                    },
-                )
+                # Don't include batch counts here — the orchestrator preserves
+                # the prior extraction batch totals when this emit omits them,
+                # so the progress bar holds at N/N rather than resetting to 1/1.
+                await self._emit_progress([], {"stage": "Normalizing atom headers", "publish_atoms": False})
             except Exception as exc:
                 logger.exception("LLM atom header normalization failed")
                 warnings.append(f"llm_header_normalization_failed: {exc}")
         atoms, final_header_warnings = _finalize_atom_headers(atoms)
         warnings.extend(final_header_warnings)
+        await self._emit_progress(
+            atoms,
+            {
+                "stage": "Atom extraction complete",
+                "batches_completed": batch_count,
+                "batches_total": batch_count,
+                "current_batch": batch_count,
+                "publish_atoms": True,
+            },
+        )
         result = AtomExtractionResult(
             paper_id=paper.paper_id,
             atoms=atoms,
@@ -613,9 +623,20 @@ class AtomExtractorAgent(BaseAgent):
                 seen_block=seen_block,
                 sections_text=sections_text,
             )
+            progress_atoms = _progress_atoms_from_candidates(paper, [*seen, *candidates])
 
+            await self._emit_progress(
+                progress_atoms,
+                {
+                    "stage": f"Extracting atom candidates ({batch_idx}/{len(batches)})",
+                    "batches_completed": batch_idx - 1,
+                    "batches_total": len(batches),
+                    "current_batch": batch_idx,
+                    "publish_atoms": False,
+                },
+            )
             response = await client.chat.completions.create(
-                model=settings.openai_model,
+                model=self._model,
                 messages=[
                     {"role": "system", "content": _SYSTEM_PROMPT},
                     {"role": "user", "content": prompt},
@@ -655,14 +676,13 @@ class AtomExtractorAgent(BaseAgent):
             )
             progress_candidates = _local_candidate_filter(progress_candidates, warnings=[])
             await self._emit_progress(
-                _candidates_to_research_atoms(
-                    paper,
-                    progress_candidates,
-                ),
+                _progress_atoms_from_candidates(paper, progress_candidates),
                 {
                     "stage": f"Extracting atom candidates ({batch_idx}/{len(batches)})",
                     "batches_completed": batch_idx,
                     "batches_total": len(batches),
+                    "current_batch": batch_idx,
+                    "publish_atoms": False,
                 },
             )
 
@@ -701,7 +721,7 @@ class AtomExtractorAgent(BaseAgent):
                 candidates_json=json.dumps(payload, ensure_ascii=False, indent=2)
             )
             response = await client.chat.completions.create(
-                model=settings.openai_model,
+                model=self._model,
                 messages=[
                     {"role": "system", "content": _CRITIC_SYSTEM_PROMPT},
                     {"role": "user", "content": prompt},
@@ -814,7 +834,7 @@ class AtomExtractorAgent(BaseAgent):
             candidates_json=json.dumps(payload, ensure_ascii=False, indent=2),
         )
         response = await client.chat.completions.create(
-            model=settings.openai_model,
+            model=self._model,
             messages=[
                 {"role": "system", "content": _QUOTE_REPAIR_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
@@ -903,7 +923,7 @@ class AtomExtractorAgent(BaseAgent):
                 atoms_json=json.dumps(payload, ensure_ascii=False, indent=2)
             )
             response = await client.chat.completions.create(
-                model=settings.openai_model,
+                model=self._model,
                 messages=[
                     {"role": "system", "content": _HEADER_SYSTEM_PROMPT},
                     {"role": "user", "content": prompt},
@@ -1094,12 +1114,16 @@ def _candidate_entries_from_response(data: Any) -> Optional[list[Any]]:
 
 
 def _loads_json_object(raw: str) -> tuple[Optional[dict[str, Any]], Optional[str]]:
+    # Strip Gemma-style <thought>...</thought> tags that precede the JSON
+    cleaned = re.sub(r"<thought>.*?</thought>\s*", "", raw, flags=re.DOTALL).strip()
+    if not cleaned:
+        cleaned = raw
     try:
-        data = json.loads(raw)
+        data = json.loads(cleaned)
         return (data if isinstance(data, dict) else None), None
     except json.JSONDecodeError as first_exc:
-        repaired = _repair_json_backslashes(raw)
-        if repaired == raw:
+        repaired = _repair_json_backslashes(cleaned)
+        if repaired == cleaned:
             return None, str(first_exc)
         try:
             data = json.loads(repaired)
@@ -1107,7 +1131,7 @@ def _loads_json_object(raw: str) -> tuple[Optional[dict[str, Any]], Optional[str
             if repair_json is None:
                 return None, f"{first_exc}; repair_failed={second_exc}"
             try:
-                repair_output = repair_json(raw)
+                repair_output = repair_json(cleaned)
                 data = json.loads(repair_output)
             except Exception as repair_exc:  # noqa: BLE001
                 return None, f"{first_exc}; repair_failed={second_exc}; json_repair_failed={repair_exc}"
@@ -1723,6 +1747,34 @@ def _candidates_to_research_atoms(
             )
         )
     return atoms
+
+
+def _progress_atoms_from_candidates(
+    paper: ParsedPaper,
+    candidates: list[AtomCandidate],
+) -> list[ResearchAtom]:
+    """Build safe progress-only atoms for counts/previews, not final DAG nodes."""
+    warnings: list[str] = []
+    visible_candidates = [
+        candidate
+        for candidate in _dedupe_candidates(candidates, warnings)
+        if _progress_visible_candidate(candidate)
+    ]
+    try:
+        return _candidates_to_research_atoms(paper, visible_candidates)
+    except Exception:
+        logger.debug("failed to build progress atoms", exc_info=True)
+        return []
+
+
+def _progress_visible_candidate(candidate: AtomCandidate) -> bool:
+    if candidate.reviewability in {
+        AtomReviewability.DROP,
+        AtomReviewability.BACKGROUND,
+    }:
+        return False
+    text = candidate.normalized_text or candidate.text
+    return _locally_keepable_header(text)
 
 
 def _renumber_atoms(atoms: list[ResearchAtom]) -> list[ResearchAtom]:

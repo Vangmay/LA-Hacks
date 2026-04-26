@@ -25,7 +25,15 @@ _SYSTEM_PROMPT = (
     "Return a JSON object with key 'exercises' containing an array of objects, each with: "
     "prompt (str), exercise_type (counterexample_mcq|computational|proof_fill), "
     "answer_key (str), and for counterexample_mcq only, options ([str]) with exactly "
-    "four answer choices. Return ONLY the JSON object."
+    "four answer choices. For counterexample_mcq, make the prompt a standalone "
+    "question in this style: 'Which of the following scenarios best describes "
+    "<the concept being tested>?' Do not embed A/B/C/D choices in the prompt. "
+    "Each option must be a complete, grammatical scenario, for example: "
+    "'A mechanism where each value vector is multiplied by an attention weight "
+    "computed from the query-key compatibility score, and the weighted values are "
+    "summed.' Avoid ambiguous phrases like 'corresponding key' when the mechanism "
+    "compares one query against all keys. Preserve mathematical notation as LaTeX "
+    "when useful, using $...$ for inline math. Return ONLY the JSON object."
 )
 
 _VALID_TYPES = {"conceptual", "computational", "counterexample_mcq", "proof_fill"}

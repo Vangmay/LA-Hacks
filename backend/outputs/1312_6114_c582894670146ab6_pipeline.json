@@ -1,0 +1,4877 @@
+{
+  "job_id": "manual-f8f6fd7e",
+  "arxiv_id": "1312.6114",
+  "source_url": "https://arxiv.org/e-print/1312.6114",
+  "source": {
+    "main_tex_path": "C:\\Users\\ishur\\AppData\\Local\\Temp\\tmpbwrvb5ef\\source\\iclr14_sva.tex",
+    "tex_files": 4,
+    "chars": 51731,
+    "content_hash": "c582894670146ab6"
+  },
+  "parser": {
+    "title": "Auto-Encoding Variational Bayes",
+    "sections": 24,
+    "equations": 182,
+    "bibliography": 1,
+    "warnings": []
+  },
+  "atoms": [
+    {
+      "atom_id": "atom_001",
+      "paper_id": "1312.6114",
+      "atom_type": "algorithm",
+      "text": "Minibatch version of the Auto-Encoding VB (AEVB) algorithm. Either of the two SGVB estimators in section (subsec:our_estimator) can be used. We use settings $M=100$ and $L=1$ in experiments.",
+      "normalized_text": null,
+      "section_id": "sec_005",
+      "section_heading": "The SGVB estimator and AEVB algorithm",
+      "source_span": {
+        "paper_id": "1312.6114",
+        "section_id": "sec_005",
+        "char_start": null,
+        "char_end": null,
+        "tex_start": 18669,
+        "tex_end": 19542,
+        "raw_excerpt": "Minibatch version of the Auto-Encoding VB (AEVB) algorithm. Either of the two SGVB estimators in section (subsec:our_estimator) can be used. We use settings $M=100$ and $L=1$ in experiments.",
+        "match_confidence": 1.0
+      },
+      "equations": [
+        {
+          "equation_id": "eq_074",
+          "latex": "\\bX^M = \\{\\bxi\\}_{i=1}^M",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_005",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_005",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 17272,
+            "tex_end": 17298,
+            "raw_excerpt": "\\bX^M = \\{\\bxi\\}_{i=1}^M",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_075",
+          "latex": "datapoints from the full dataset",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_005",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_005",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 17331,
+            "tex_end": 17367,
+            "raw_excerpt": "datapoints from the full dataset",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_076",
+          "latex": "with",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_005",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_005",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 17370,
+            "tex_end": 17378,
+            "raw_excerpt": "with",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_077",
+          "latex": "datapoints. In our experiments we found that the number of samples",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_005",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_005",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 17379,
+            "tex_end": 17449,
+            "raw_excerpt": "datapoints. In our experiments we found that the number of samples",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_078",
+          "latex": "per datapoint can be set to",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_005",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_005",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 17450,
+            "tex_end": 17481,
+            "raw_excerpt": "per datapoint can be set to",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_079",
+          "latex": "as long as the minibatch size",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_005",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_005",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 17482,
+            "tex_end": 17515,
+            "raw_excerpt": "as long as the minibatch size",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_080",
+          "latex": "was large enough, e.g.",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_005",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_005",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 17516,
+            "tex_end": 17542,
+            "raw_excerpt": "was large enough, e.g.",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_081",
+          "latex": ". Derivatives",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_005",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_005",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 17547,
+            "tex_end": 17563,
+            "raw_excerpt": ". Derivatives",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_082",
+          "latex": "\\gPhi(.)",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_005",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_005",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 18174,
+            "tex_end": 18184,
+            "raw_excerpt": "\\gPhi(.)",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_083",
+          "latex": "\\bxi",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_005",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_005",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 18225,
+            "tex_end": 18231,
+            "raw_excerpt": "\\bxi",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_084",
+          "latex": "\\bepsl",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_005",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_005",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 18258,
+            "tex_end": 18266,
+            "raw_excerpt": "\\bepsl",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_085",
+          "latex": "\\bzil = \\gPhi(\\bepsl, \\bxi)",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_005",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_005",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 18330,
+            "tex_end": 18359,
+            "raw_excerpt": "\\bzil = \\gPhi(\\bepsl, \\bxi)",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_086",
+          "latex": "\\bzil \\sim \\qPhi(\\bz|\\bxi)",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_005",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_005",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 18366,
+            "tex_end": 18394,
+            "raw_excerpt": "\\bzil \\sim \\qPhi(\\bz|\\bxi)",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_087",
+          "latex": "\\bzil",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_005",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_005",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 18422,
+            "tex_end": 18429,
+            "raw_excerpt": "\\bzil",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_088",
+          "latex": "\\log \\pT(\\bxi|\\bzil)",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_005",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_005",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 18456,
+            "tex_end": 18478,
+            "raw_excerpt": "\\log \\pT(\\bxi|\\bzil)",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_089",
+          "latex": "M=100",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_005",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_005",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 18860,
+            "tex_end": 18867,
+            "raw_excerpt": "M=100",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_090",
+          "latex": "L=1",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_005",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_005",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 18872,
+            "tex_end": 18877,
+            "raw_excerpt": "L=1",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_091",
+          "latex": "\\bT, \\bphi \\gets",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_005",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_005",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 18976,
+            "tex_end": 18994,
+            "raw_excerpt": "\\bT, \\bphi \\gets",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_092",
+          "latex": "\\bX^M \\gets",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_005",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_005",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 19032,
+            "tex_end": 19046,
+            "raw_excerpt": "\\bX^M \\gets",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_093",
+          "latex": "\\beps \\gets",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_005",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_005",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 19115,
+            "tex_end": 19129,
+            "raw_excerpt": "\\beps \\gets",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_094",
+          "latex": "\\bg \\gets \\nabla_{\\bT,\\bphi} \\LBT{M}{\\bX^M,\\beps}",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_005",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_005",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 19187,
+            "tex_end": 19238,
+            "raw_excerpt": "\\bg \\gets \\nabla_{\\bT,\\bphi} \\LBT{M}{\\bX^M,\\beps}",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_095",
+          "latex": "\\bg",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_005",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_005",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 19365,
+            "tex_end": 19370,
+            "raw_excerpt": "\\bg",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_096",
+          "latex": "(\\bT,\\bphi)",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_005",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_005",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 19452,
+            "tex_end": 19465,
+            "raw_excerpt": "(\\bT,\\bphi)",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_097",
+          "latex": "\\bT, \\bphi",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_005",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_005",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 19478,
+            "tex_end": 19490,
+            "raw_excerpt": "\\bT, \\bphi",
+            "match_confidence": 1.0
+          }
+        }
+      ],
+      "citations": [
+        {
+          "citation_id": "atom_001_cite_001",
+          "key": "duchi2010adaptive",
+          "label": null,
+          "raw_bib_text": "",
+          "title": null,
+          "authors": [],
+          "year": null,
+          "venue": null,
+          "url": null,
+          "doi": null
+        }
+      ],
+      "extraction_confidence": 0.95,
+      "importance": "high",
+      "role_in_paper": "algorithm from \\begin{algorithm} environment (label algorithm)",
+      "assumptions": [],
+      "conclusions": [],
+      "proof_sketch": null,
+      "key_terms": [],
+      "symbols": []
+    },
+    {
+      "atom_id": "atom_002",
+      "paper_id": "1312.6114",
+      "atom_type": "algorithm",
+      "text": "Pseudocode for computing a stochastic gradient using our estimator. See text for meaning of the functions $\\fPhi$, $\\gPhi$ and $\\hPhi$.",
+      "normalized_text": null,
+      "section_id": "sec_022",
+      "section_heading": "Full VB",
+      "source_span": {
+        "paper_id": "1312.6114",
+        "section_id": "sec_022",
+        "char_start": null,
+        "char_end": null,
+        "tex_start": 48620,
+        "tex_end": 49306,
+        "raw_excerpt": "Pseudocode for computing a stochastic gradient using our estimator. See text for meaning of the functions $\\fPhi$, $\\gPhi$ and $\\hPhi$.",
+        "match_confidence": 1.0
+      },
+      "equations": [
+        {
+          "equation_id": "eq_002",
+          "latex": "\\fPhi(\\bx, \\bz, \\bT) = N \\cdot (\\log \\pT(\\bx | \\bz) + \\log \\pT(\\bz) - \\log \\qPhi(\\bz|\\bx)) + \\log \\pA(\\bT) - \\log \\qPhi(\\bT)\n\\label{eq:f_ap}",
+          "label": "eq:f_ap",
+          "environment": "align",
+          "section_id": "sec_022",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_022",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 47635,
+            "tex_end": 47801,
+            "raw_excerpt": "\\fPhi(\\bx, \\bz, \\bT) = N \\cdot (\\log \\pT(\\bx | \\bz) + \\log \\pT(\\bz) - \\log \\qPhi(\\bz|\\bx)) + \\log \\pA(\\bT) - \\log \\qPhi(\\bT)\n\\label{eq:f_ap}",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_025",
+          "latex": "\\mathcal{L}(\\bphi;\\bX)\n&= \\int \\qPhi(\\bT) \\left( \\log \\pT(\\bX) + \\log \\pA(\\bT) - \\log \\qPhi(\\bT) \\right) \\,d\\bT \\\\\n&= \\int p(\\bzeta) \\left( \\log \\pT(\\bX) + \\log \\pA(\\bT) - \\log \\qPhi(\\bT) \\right) \\bigg|_{\\bT=\\hPhi(\\bzeta)} \\,d\\bzeta\n\\eqnr\\label{eq:reparameterizedbound1_ap}",
+          "label": "eq:reparameterizedbound1_ap",
+          "environment": "align*",
+          "section_id": "sec_022",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_022",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 47248,
+            "tex_end": 47548,
+            "raw_excerpt": "\\mathcal{L}(\\bphi;\\bX)\n&= \\int \\qPhi(\\bT) \\left( \\log \\pT(\\bX) + \\log \\pA(\\bT) - \\log \\qPhi(\\bT) \\right) \\,d\\bT \\\\\n&= \\int p(\\bzeta) \\left( \\log \\pT(\\bX) + \\log \\pA(\\bT) - \\log \\qPhi(\\bT) \\right) \\bigg|_{\\bT=\\hPhi(\\bzeta)} \\,d\\bzeta\n\\eqnr\\label{eq:reparameterizedbound1_ap}",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_026",
+          "latex": "\\mathcal{L}(\\bphi;\\bX)\n&\\simeq \\frac{1}{L} \\sum_{l=1}^L \\fPhi(\\bxl, \\gPhi(\\bepsl,\\bxl), \\hPhi(\\bzetal))\n\\eqnr\\label{eq:fullestimator_ap}",
+          "label": "eq:fullestimator_ap",
+          "environment": "align*",
+          "section_id": "sec_022",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_022",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 47982,
+            "tex_end": 48145,
+            "raw_excerpt": "\\mathcal{L}(\\bphi;\\bX)\n&\\simeq \\frac{1}{L} \\sum_{l=1}^L \\fPhi(\\bxl, \\gPhi(\\bepsl,\\bxl), \\hPhi(\\bzetal))\n\\eqnr\\label{eq:fullestimator_ap}",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_164",
+          "latex": "p(\\bzeta)",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_022",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_022",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 47174,
+            "tex_end": 47185,
+            "raw_excerpt": "p(\\bzeta)",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_165",
+          "latex": "\\hPhi(\\bzeta)",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_022",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_022",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 47201,
+            "tex_end": 47216,
+            "raw_excerpt": "\\hPhi(\\bzeta)",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_166",
+          "latex": "\\fPhi(\\bx, \\bz, \\bT)",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_022",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_022",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 47611,
+            "tex_end": 47633,
+            "raw_excerpt": "\\fPhi(\\bx, \\bz, \\bT)",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_167",
+          "latex": "\\bzetal \\sim p(\\bzeta)",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_022",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_022",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 48179,
+            "tex_end": 48203,
+            "raw_excerpt": "\\bzetal \\sim p(\\bzeta)",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_168",
+          "latex": "\\fPhi",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_022",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_022",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 48756,
+            "tex_end": 48763,
+            "raw_excerpt": "\\fPhi",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_169",
+          "latex": "\\gPhi",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_022",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_022",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 48765,
+            "tex_end": 48772,
+            "raw_excerpt": "\\gPhi",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_170",
+          "latex": "\\hPhi",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_022",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_022",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 48777,
+            "tex_end": 48784,
+            "raw_excerpt": "\\hPhi",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_171",
+          "latex": "\\bg \\gets 0",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_022",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_022",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 48927,
+            "tex_end": 48940,
+            "raw_excerpt": "\\bg \\gets 0",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_172",
+          "latex": "is",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_022",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_022",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 48948,
+            "tex_end": 48954,
+            "raw_excerpt": "is",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_173",
+          "latex": "to",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_022",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_022",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 48955,
+            "tex_end": 48961,
+            "raw_excerpt": "to",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_174",
+          "latex": "\\bx \\gets",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_022",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_022",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 48972,
+            "tex_end": 48984,
+            "raw_excerpt": "\\bx \\gets",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_175",
+          "latex": "\\bzeta \\gets",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_022",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_022",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 49079,
+            "tex_end": 49094,
+            "raw_excerpt": "\\bzeta \\gets",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_176",
+          "latex": "\\bg \\gets \\bg + \\frac{1}{L} \\nabla_{\\bphi} \\fPhi(\\bx, \\gPhi(\\beps, \\bx), \\hPhi(\\bzeta))",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_022",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_022",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 49137,
+            "tex_end": 49226,
+            "raw_excerpt": "\\bg \\gets \\bg + \\frac{1}{L} \\nabla_{\\bphi} \\fPhi(\\bx, \\gPhi(\\beps, \\bx), \\hPhi(\\bzeta))",
+            "match_confidence": 1.0
+          }
+        }
+      ],
+      "citations": [
+        {
+          "citation_id": "atom_002_cite_001",
+          "key": "duchi2010adaptive",
+          "label": null,
+          "raw_bib_text": "",
+          "title": null,
+          "authors": [],
+          "year": null,
+          "venue": null,
+          "url": null,
+          "doi": null
+        }
+      ],
+      "extraction_confidence": 0.95,
+      "importance": "high",
+      "role_in_paper": "algorithm from \\begin{algorithm} environment (label algorithm_ap)",
+      "assumptions": [],
+      "conclusions": [],
+      "proof_sketch": null,
+      "key_terms": [],
+      "symbols": []
+    },
+    {
+      "atom_id": "atom_003",
+      "paper_id": "1312.6114",
+      "atom_type": "bound",
+      "text": "First, we show that a reparameterization of the variational lower bound yields a lower bound estimator that can be straightforwardly optimized using standard.",
+      "normalized_text": "First, we show that a reparameterization of the variational lower bound yields a lower bound estimator that can be straightforwardly optimized using standard.",
+      "section_id": "sec_abstract",
+      "section_heading": "Abstract",
+      "source_span": {
+        "paper_id": "1312.6114",
+        "section_id": "sec_abstract",
+        "char_start": null,
+        "char_end": null,
+        "tex_start": null,
+        "tex_end": null,
+        "raw_excerpt": "First, we show that a reparameterization of the variational lower bound yields a lower bound estimator that can be straightforwardly optimized using standard stochastic gradient methods.",
+        "match_confidence": 0.3
+      },
+      "equations": [],
+      "citations": [],
+      "extraction_confidence": 0.72,
+      "importance": "medium",
+      "role_in_paper": "deterministic prose atom",
+      "assumptions": [],
+      "conclusions": [],
+      "proof_sketch": null,
+      "key_terms": [],
+      "symbols": []
+    },
+    {
+      "atom_id": "atom_004",
+      "paper_id": "1312.6114",
+      "atom_type": "technique",
+      "text": "We will restrict ourselves here to the common case where we have an i.i.d. dataset with latent variables per datapoint, and where we like to perform maximum.",
+      "normalized_text": "We will restrict ourselves here to the common case where we have an i.i.d. dataset with latent variables per datapoint, and where we like to perform maximum.",
+      "section_id": "sec_002",
+      "section_heading": "Method",
+      "source_span": {
+        "paper_id": "1312.6114",
+        "section_id": "sec_002",
+        "char_start": 1926,
+        "char_end": 2217,
+        "tex_start": null,
+        "tex_end": null,
+        "raw_excerpt": "We will restrict ourselves here to the common case where we have an i.i.d. dataset with latent variables per datapoint, and where we like to perform maximum likelihood (ML) or maximum a posteriori (MAP) inference on the (global) parameters, and variational inference on the latent variables.",
+        "match_confidence": 1.0
+      },
+      "equations": [],
+      "citations": [],
+      "extraction_confidence": 0.72,
+      "importance": "low",
+      "role_in_paper": "deterministic prose atom",
+      "assumptions": [],
+      "conclusions": [],
+      "proof_sketch": null,
+      "key_terms": [],
+      "symbols": []
+    },
+    {
+      "atom_id": "atom_005",
+      "paper_id": "1312.6114",
+      "atom_type": "technique",
+      "text": "The variational parameters $\\bphi$ are learned jointly with the generative model parameters $\\bT$.",
+      "normalized_text": "The variational parameters $\\bphi$ are learned jointly with the generative model parameters $\\bT$.",
+      "section_id": "sec_002",
+      "section_heading": "Method",
+      "source_span": {
+        "paper_id": "1312.6114",
+        "section_id": "sec_002",
+        "char_start": 3075,
+        "char_end": 3173,
+        "tex_start": null,
+        "tex_end": null,
+        "raw_excerpt": "The variational parameters $\\bphi$ are learned jointly with the generative model parameters $\\bT$.",
+        "match_confidence": 1.0
+      },
+      "equations": [],
+      "citations": [],
+      "extraction_confidence": 0.72,
+      "importance": "low",
+      "role_in_paper": "deterministic prose atom",
+      "assumptions": [],
+      "conclusions": [],
+      "proof_sketch": null,
+      "key_terms": [],
+      "symbols": []
+    },
+    {
+      "atom_id": "atom_006",
+      "paper_id": "1312.6114",
+      "atom_type": "assumption",
+      "text": "We assume that the data are generated by some random process, involving an unobserved continuous random variable $\\bz$.",
+      "normalized_text": "We assume that the data are generated by some random process, involving an unobserved continuous random variable $\\bz$.",
+      "section_id": "sec_003",
+      "section_heading": "Problem scenario",
+      "source_span": {
+        "paper_id": "1312.6114",
+        "section_id": "sec_003",
+        "char_start": 3332,
+        "char_end": 3451,
+        "tex_start": null,
+        "tex_end": null,
+        "raw_excerpt": "We assume that the data are generated by some random process, involving an unobserved continuous random variable $\\bz$.",
+        "match_confidence": 1.0
+      },
+      "equations": [],
+      "citations": [],
+      "extraction_confidence": 0.72,
+      "importance": "medium",
+      "role_in_paper": "deterministic prose atom",
+      "assumptions": [],
+      "conclusions": [],
+      "proof_sketch": null,
+      "key_terms": [],
+      "symbols": []
+    },
+    {
+      "atom_id": "atom_007",
+      "paper_id": "1312.6114",
+      "atom_type": "definition",
+      "text": "However, the gradient of the lower bound w.r.t. $\\bphi$ is a bit problematic.",
+      "normalized_text": "However, the gradient of the lower bound w.r.t. $\\bphi$ is a bit problematic.",
+      "section_id": "sec_004",
+      "section_heading": "The variational bound",
+      "source_span": {
+        "paper_id": "1312.6114",
+        "section_id": "sec_004",
+        "char_start": 8139,
+        "char_end": 8216,
+        "tex_start": null,
+        "tex_end": null,
+        "raw_excerpt": "However, the gradient of the lower bound w.r.t. $\\bphi$ is a bit problematic.",
+        "match_confidence": 1.0
+      },
+      "equations": [],
+      "citations": [
+        {
+          "citation_id": "atom_007_cite_001",
+          "key": "blei2012variational",
+          "label": null,
+          "raw_bib_text": "",
+          "title": null,
+          "authors": [],
+          "year": null,
+          "venue": null,
+          "url": null,
+          "doi": null
+        }
+      ],
+      "extraction_confidence": 0.72,
+      "importance": "medium",
+      "role_in_paper": "deterministic prose atom",
+      "assumptions": [],
+      "conclusions": [],
+      "proof_sketch": null,
+      "key_terms": [],
+      "symbols": []
+    },
+    {
+      "atom_id": "atom_008",
+      "paper_id": "1312.6114",
+      "atom_type": "assumption",
+      "text": "We assume an approximate posterior in the form $\\qPhi(\\bz|\\bx)$, but please note that the technique can be applied to the case $\\qPhi(\\bz)$, i.e. where we do.",
+      "normalized_text": "We assume an approximate posterior in the form $\\qPhi(\\bz|\\bx)$, but please note that the technique can be applied to the case $\\qPhi(\\bz)$, i.e. where we do.",
+      "section_id": "sec_005",
+      "section_heading": "The SGVB estimator and AEVB algorithm",
+      "source_span": {
+        "paper_id": "1312.6114",
+        "section_id": "sec_005",
+        "char_start": 8799,
+        "char_end": 8989,
+        "tex_start": null,
+        "tex_end": null,
+        "raw_excerpt": "We assume an approximate posterior in the form $\\qPhi(\\bz|\\bx)$, but please note that the technique can be applied to the case $\\qPhi(\\bz)$, i.e. where we do not condition on $\\bx$, as well.",
+        "match_confidence": 1.0
+      },
+      "equations": [
+        {
+          "equation_id": "eq_035",
+          "latex": "\\qPhi(\\bz|\\bx)",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_002",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_002",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 8330,
+            "tex_end": 8346,
+            "raw_excerpt": "\\qPhi(\\bz|\\bx)",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_062",
+          "latex": "\\qPhi(\\bz)",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_005",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_005",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 14576,
+            "tex_end": 14588,
+            "raw_excerpt": "\\qPhi(\\bz)",
+            "match_confidence": 1.0
+          }
+        }
+      ],
+      "citations": [
+        {
+          "citation_id": "atom_008_cite_001",
+          "key": "duchi2010adaptive",
+          "label": null,
+          "raw_bib_text": "",
+          "title": null,
+          "authors": [],
+          "year": null,
+          "venue": null,
+          "url": null,
+          "doi": null
+        }
+      ],
+      "extraction_confidence": 0.72,
+      "importance": "medium",
+      "role_in_paper": "deterministic prose atom",
+      "assumptions": [],
+      "conclusions": [],
+      "proof_sketch": null,
+      "key_terms": [],
+      "symbols": []
+    },
+    {
+      "atom_id": "atom_009",
+      "paper_id": "1312.6114",
+      "atom_type": "bound",
+      "text": "In section (subsec:our_estimator) we applied this trick to obtain a differentiable estimator of the variational lower bound.",
+      "normalized_text": "In section (subsec:our_estimator) we applied this trick to obtain a differentiable estimator of the variational lower bound.",
+      "section_id": "sec_006",
+      "section_heading": "The reparameterization trick",
+      "source_span": {
+        "paper_id": "1312.6114",
+        "section_id": "sec_006",
+        "char_start": 14363,
+        "char_end": 14487,
+        "tex_start": null,
+        "tex_end": null,
+        "raw_excerpt": "In section (subsec:our_estimator) we applied this trick to obtain a differentiable estimator of the variational lower bound.",
+        "match_confidence": 1.0
+      },
+      "equations": [],
+      "citations": [
+        {
+          "citation_id": "atom_009_cite_001",
+          "key": "devroye1986sample",
+          "label": null,
+          "raw_bib_text": "",
+          "title": null,
+          "authors": [],
+          "year": null,
+          "venue": null,
+          "url": null,
+          "doi": null
+        }
+      ],
+      "extraction_confidence": 0.72,
+      "importance": "medium",
+      "role_in_paper": "deterministic prose atom",
+      "assumptions": [],
+      "conclusions": [],
+      "proof_sketch": null,
+      "key_terms": [],
+      "symbols": []
+    },
+    {
+      "atom_id": "atom_010",
+      "paper_id": "1312.6114",
+      "atom_type": "assertion",
+      "text": "In this model both $\\pT(\\bz)$ (the prior) and $\\qPhi(\\bz|\\bx)$ are Gaussian; in this case, we can use the estimator of eq.",
+      "normalized_text": "In this model both $\\pT(\\bz)$ (the prior) and $\\qPhi(\\bz|\\bx)$ are Gaussian; in this case, we can use the estimator of eq.",
+      "section_id": "sec_007",
+      "section_heading": "Example: Variational Auto-Encoder",
+      "source_span": {
+        "paper_id": "1312.6114",
+        "section_id": "sec_007",
+        "char_start": 18155,
+        "char_end": 18277,
+        "tex_start": null,
+        "tex_end": null,
+        "raw_excerpt": "In this model both $\\pT(\\bz)$ (the prior) and $\\qPhi(\\bz|\\bx)$ are Gaussian; in this case, we can use the estimator of eq.",
+        "match_confidence": 1.0
+      },
+      "equations": [
+        {
+          "equation_id": "eq_035",
+          "latex": "\\qPhi(\\bz|\\bx)",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_002",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_002",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 8330,
+            "tex_end": 8346,
+            "raw_excerpt": "\\qPhi(\\bz|\\bx)",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_071",
+          "latex": "\\pT(\\bz)",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_005",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_005",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 16476,
+            "tex_end": 16486,
+            "raw_excerpt": "\\pT(\\bz)",
+            "match_confidence": 1.0
+          }
+        }
+      ],
+      "citations": [],
+      "extraction_confidence": 0.72,
+      "importance": "medium",
+      "role_in_paper": "deterministic prose atom",
+      "assumptions": [],
+      "conclusions": [],
+      "proof_sketch": null,
+      "key_terms": [],
+      "symbols": []
+    },
+    {
+      "atom_id": "atom_011",
+      "paper_id": "1312.6114",
+      "atom_type": "definition",
+      "text": "Optimization of this objective is equivalent to approximate MAP estimation, where the likelihood gradient is approximated by the gradient of the lower bound.",
+      "normalized_text": "Optimization of this objective is equivalent to approximate MAP estimation, where the likelihood gradient is approximated by the gradient of the lower bound.",
+      "section_id": "sec_009",
+      "section_heading": "Experiments",
+      "source_span": {
+        "paper_id": "1312.6114",
+        "section_id": "sec_009",
+        "char_start": 25176,
+        "char_end": 25333,
+        "tex_start": null,
+        "tex_end": null,
+        "raw_excerpt": "Optimization of this objective is equivalent to approximate MAP estimation, where the likelihood gradient is approximated by the gradient of the lower bound.",
+        "match_confidence": 1.0
+      },
+      "equations": [],
+      "citations": [
+        {
+          "citation_id": "atom_011_cite_001",
+          "key": "hinton1995wake",
+          "label": null,
+          "raw_bib_text": "",
+          "title": null,
+          "authors": [],
+          "year": null,
+          "venue": null,
+          "url": null,
+          "doi": null
+        },
+        {
+          "citation_id": "atom_011_cite_002",
+          "key": "duchi2010adaptive",
+          "label": null,
+          "raw_bib_text": "",
+          "title": null,
+          "authors": [],
+          "year": null,
+          "venue": null,
+          "url": null,
+          "doi": null
+        }
+      ],
+      "extraction_confidence": 0.72,
+      "importance": "medium",
+      "role_in_paper": "deterministic prose atom",
+      "assumptions": [],
+      "conclusions": [],
+      "proof_sketch": null,
+      "key_terms": [],
+      "symbols": []
+    },
+    {
+      "atom_id": "atom_012",
+      "paper_id": "1312.6114",
+      "atom_type": "bound",
+      "text": "Interestingly, superfluous latent variables did not result in overfitting, which is explained by the regularizing nature of the variational bound. [t] [t]1.",
+      "normalized_text": "Interestingly, superfluous latent variables did not result in overfitting, which is explained by the regularizing nature of the variational bound. [t] [t]1.",
+      "section_id": "sec_010",
+      "section_heading": "Likelihood lower bound",
+      "source_span": {
+        "paper_id": "1312.6114",
+        "section_id": "sec_010",
+        "char_start": 26529,
+        "char_end": 26864,
+        "tex_start": null,
+        "tex_end": null,
+        "raw_excerpt": "Interestingly, superfluous latent variables did not result in overfitting, which is explained by the regularizing nature of the variational bound. [t] [t]1 figs/graph_marglik.pdf Comparison of AEVB to the wake-sleep algorithm and Monte Carlo EM, in terms of the estimated marginal likelihood, for a different number of training points.",
+        "match_confidence": 0.85
+      },
+      "equations": [
+        {
+          "equation_id": "eq_133",
+          "latex": "500",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_010",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_010",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 33155,
+            "tex_end": 33160,
+            "raw_excerpt": "500",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_134",
+          "latex": "200",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_010",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_010",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 33196,
+            "tex_end": 33201,
+            "raw_excerpt": "200",
+            "match_confidence": 1.0
+          }
+        }
+      ],
+      "citations": [],
+      "extraction_confidence": 0.72,
+      "importance": "medium",
+      "role_in_paper": "deterministic prose atom",
+      "assumptions": [],
+      "conclusions": [],
+      "proof_sketch": null,
+      "key_terms": [],
+      "symbols": []
+    },
+    {
+      "atom_id": "atom_013",
+      "paper_id": "1312.6114",
+      "atom_type": "bound",
+      "text": "We have introduced a novel estimator of the variational lower bound, Stochastic Gradient VB (SGVB), for efficient approximate inference with continuous latent.",
+      "normalized_text": "We have introduced a novel estimator of the variational lower bound, Stochastic Gradient VB (SGVB), for efficient approximate inference with continuous latent.",
+      "section_id": "sec_013",
+      "section_heading": "Conclusion",
+      "source_span": {
+        "paper_id": "1312.6114",
+        "section_id": "sec_013",
+        "char_start": 28127,
+        "char_end": 28296,
+        "tex_start": null,
+        "tex_end": null,
+        "raw_excerpt": "We have introduced a novel estimator of the variational lower bound, Stochastic Gradient VB (SGVB), for efficient approximate inference with continuous latent variables.",
+        "match_confidence": 1.0
+      },
+      "equations": [],
+      "citations": [],
+      "extraction_confidence": 0.72,
+      "importance": "high",
+      "role_in_paper": "deterministic prose atom",
+      "assumptions": [],
+      "conclusions": [],
+      "proof_sketch": null,
+      "key_terms": [],
+      "symbols": []
+    },
+    {
+      "atom_id": "atom_014",
+      "paper_id": "1312.6114",
+      "atom_type": "bound",
+      "text": "The variational lower bound (the objective to be maximized) contains a KL term that can often be integrated analytically.",
+      "normalized_text": "The variational lower bound (the objective to be maximized) contains a KL term that can often be integrated analytically.",
+      "section_id": "sec_016",
+      "section_heading": "Solution of $- D_{KL}(\\qPhi(\\bz) || \\pT(\\bz))$, Gaussian case",
+      "source_span": {
+        "paper_id": "1312.6114",
+        "section_id": "sec_016",
+        "char_start": 30439,
+        "char_end": 30560,
+        "tex_start": null,
+        "tex_end": null,
+        "raw_excerpt": "The variational lower bound (the objective to be maximized) contains a KL term that can often be integrated analytically.",
+        "match_confidence": 1.0
+      },
+      "equations": [],
+      "citations": [],
+      "extraction_confidence": 0.72,
+      "importance": "medium",
+      "role_in_paper": "deterministic prose atom",
+      "assumptions": [],
+      "conclusions": [],
+      "proof_sketch": null,
+      "key_terms": [],
+      "symbols": []
+    },
+    {
+      "atom_id": "atom_015",
+      "paper_id": "1312.6114",
+      "atom_type": "algorithm",
+      "text": "For all algorithms the parameters were updated using the Adagrad stepsizes (with accompanying annealing schedule).",
+      "normalized_text": "For all algorithms the parameters were updated using the Adagrad stepsizes (with accompanying annealing schedule).",
+      "section_id": "sec_021",
+      "section_heading": "Monte Carlo EM",
+      "source_span": {
+        "paper_id": "1312.6114",
+        "section_id": "sec_021",
+        "char_start": 35355,
+        "char_end": 35469,
+        "tex_start": null,
+        "tex_end": null,
+        "raw_excerpt": "For all algorithms the parameters were updated using the Adagrad stepsizes (with accompanying annealing schedule).",
+        "match_confidence": 1.0
+      },
+      "equations": [
+        {
+          "equation_id": "eq_155",
+          "latex": "\\nabla_{\\bz} \\log \\pT(\\bz|\\bx) = \\nabla_{\\bz} \\log \\pT(\\bz) + \\nabla_{\\bz} \\log \\pT(\\bx|\\bz)",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_021",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_021",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 43467,
+            "tex_end": 43561,
+            "raw_excerpt": "\\nabla_{\\bz} \\log \\pT(\\bz|\\bx) = \\nabla_{\\bz} \\log \\pT(\\bz) + \\nabla_{\\bz} \\log \\pT(\\bx|\\bz)",
+            "match_confidence": 1.0
+          }
+        }
+      ],
+      "citations": [],
+      "extraction_confidence": 0.72,
+      "importance": "medium",
+      "role_in_paper": "deterministic prose atom",
+      "assumptions": [],
+      "conclusions": [],
+      "proof_sketch": null,
+      "key_terms": [],
+      "symbols": []
+    },
+    {
+      "atom_id": "atom_016",
+      "paper_id": "1312.6114",
+      "atom_type": "construction",
+      "text": "The estimator only depends on samples from $p(\\beps)$ and $p(\\bzeta)$ which are obviously not influenced by $\\bphi$, therefore the estimator can be.",
+      "normalized_text": "The estimator only depends on samples from $p(\\beps)$ and $p(\\bzeta)$ which are obviously not influenced by $\\bphi$, therefore the estimator can be.",
+      "section_id": "sec_022",
+      "section_heading": "Full VB",
+      "source_span": {
+        "paper_id": "1312.6114",
+        "section_id": "sec_022",
+        "char_start": 39540,
+        "char_end": 39718,
+        "tex_start": null,
+        "tex_end": null,
+        "raw_excerpt": "The estimator only depends on samples from $p(\\beps)$ and $p(\\bzeta)$ which are obviously not influenced by $\\bphi$, therefore the estimator can be differentiated w.r.t. $\\bphi$.",
+        "match_confidence": 1.0
+      },
+      "equations": [
+        {
+          "equation_id": "eq_066",
+          "latex": "p(\\beps)",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_005",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_005",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 15245,
+            "tex_end": 15255,
+            "raw_excerpt": "p(\\beps)",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_164",
+          "latex": "p(\\bzeta)",
+          "label": null,
+          "environment": "$...$",
+          "section_id": "sec_022",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_022",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 47174,
+            "tex_end": 47185,
+            "raw_excerpt": "p(\\bzeta)",
+            "match_confidence": 1.0
+          }
+        }
+      ],
+      "citations": [
+        {
+          "citation_id": "atom_016_cite_001",
+          "key": "duchi2010adaptive",
+          "label": null,
+          "raw_bib_text": "",
+          "title": null,
+          "authors": [],
+          "year": null,
+          "venue": null,
+          "url": null,
+          "doi": null
+        }
+      ],
+      "extraction_confidence": 0.72,
+      "importance": "medium",
+      "role_in_paper": "deterministic prose atom",
+      "assumptions": [],
+      "conclusions": [],
+      "proof_sketch": null,
+      "key_terms": [],
+      "symbols": []
+    },
+    {
+      "atom_id": "atom_017",
+      "paper_id": "1312.6114",
+      "atom_type": "definition",
+      "text": "These can be plugged into the lower bound defined above (eqs (eq:f_ap) and (eq:fullestimator_ap)).",
+      "normalized_text": "These can be plugged into the lower bound defined above (eqs (eq:f_ap) and (eq:fullestimator_ap)).",
+      "section_id": "sec_023",
+      "section_heading": "Example",
+      "source_span": {
+        "paper_id": "1312.6114",
+        "section_id": "sec_023",
+        "char_start": 41242,
+        "char_end": 41340,
+        "tex_start": null,
+        "tex_end": null,
+        "raw_excerpt": "These can be plugged into the lower bound defined above (eqs (eq:f_ap) and (eq:fullestimator_ap)).",
+        "match_confidence": 1.0
+      },
+      "equations": [
+        {
+          "equation_id": "eq_002",
+          "latex": "\\fPhi(\\bx, \\bz, \\bT) = N \\cdot (\\log \\pT(\\bx | \\bz) + \\log \\pT(\\bz) - \\log \\qPhi(\\bz|\\bx)) + \\log \\pA(\\bT) - \\log \\qPhi(\\bT)\n\\label{eq:f_ap}",
+          "label": "eq:f_ap",
+          "environment": "align",
+          "section_id": "sec_022",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_022",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 47635,
+            "tex_end": 47801,
+            "raw_excerpt": "\\fPhi(\\bx, \\bz, \\bT) = N \\cdot (\\log \\pT(\\bx | \\bz) + \\log \\pT(\\bz) - \\log \\qPhi(\\bz|\\bx)) + \\log \\pA(\\bT) - \\log \\qPhi(\\bT)\n\\label{eq:f_ap}",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_007",
+          "latex": "\\LBT{A}{\\bxi}\n&= \\frac{1}{L} \\sum_{l=1}^L \n\\log \\pT(\\bxi, \\bzil) - \\log \\qPhi(\\bzil|\\bxi) \\\\\n\\text{where \\quad} \\bzil &= \\gPhi(\\bepsil,\\bxi)\n\\text{\\quad and \\quad} \\bepsl \\sim p(\\beps)\n\\eqnr\\label{eq:fullestimator}",
+          "label": "eq:fullestimator",
+          "environment": "align*",
+          "section_id": "sec_005",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_005",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 15809,
+            "tex_end": 16051,
+            "raw_excerpt": "\\LBT{A}{\\bxi}\n&= \\frac{1}{L} \\sum_{l=1}^L \n\\log \\pT(\\bxi, \\bzil) - \\log \\qPhi(\\bzil|\\bxi) \\\\\n\\text{where \\quad} \\bzil &= \\gPhi(\\bepsil,\\bxi)\n\\text{\\quad and \\quad} \\bepsl \\sim p(\\beps)\n\\eqnr\\label{eq:fullestimator}",
+            "match_confidence": 1.0
+          }
+        },
+        {
+          "equation_id": "eq_026",
+          "latex": "\\mathcal{L}(\\bphi;\\bX)\n&\\simeq \\frac{1}{L} \\sum_{l=1}^L \\fPhi(\\bxl, \\gPhi(\\bepsl,\\bxl), \\hPhi(\\bzetal))\n\\eqnr\\label{eq:fullestimator_ap}",
+          "label": "eq:fullestimator_ap",
+          "environment": "align*",
+          "section_id": "sec_022",
+          "source_span": {
+            "paper_id": "1312.6114",
+            "section_id": "sec_022",
+            "char_start": null,
+            "char_end": null,
+            "tex_start": 47982,
+            "tex_end": 48145,
+            "raw_excerpt": "\\mathcal{L}(\\bphi;\\bX)\n&\\simeq \\frac{1}{L} \\sum_{l=1}^L \\fPhi(\\bxl, \\gPhi(\\bepsl,\\bxl), \\hPhi(\\bzetal))\n\\eqnr\\label{eq:fullestimator_ap}",
+            "match_confidence": 1.0
+          }
+        }
+      ],
+      "citations": [],
+      "extraction_confidence": 0.72,
+      "importance": "medium",
+      "role_in_paper": "deterministic prose atom",
+      "assumptions": [],
+      "conclusions": [],
+      "proof_sketch": null,
+      "key_terms": [],
+      "symbols": []
+    }
+  ],
+  "graph": {
+    "paper_id": "1312.6114",
+    "atom_ids": [
+      "atom_001",
+      "atom_002",
+      "atom_003",
+      "atom_004",
+      "atom_005",
+      "atom_006",
+      "atom_007",
+      "atom_008",
+      "atom_009",
+      "atom_010",
+      "atom_011",
+      "atom_012",
+      "atom_013",
+      "atom_014",
+      "atom_015",
+      "atom_016",
+      "atom_017"
+    ],
+    "edges": [],
+    "roots": [
+      "atom_001",
+      "atom_002",
+      "atom_003",
+      "atom_004",
+      "atom_005",
+      "atom_006",
+      "atom_007",
+      "atom_008",
+      "atom_009",
+      "atom_010",
+      "atom_011",
+      "atom_012",
+      "atom_013",
+      "atom_014",
+      "atom_015",
+      "atom_016",
+      "atom_017"
+    ],
+    "topological_order": [
+      "atom_001",
+      "atom_002",
+      "atom_003",
+      "atom_004",
+      "atom_005",
+      "atom_006",
+      "atom_007",
+      "atom_008",
+      "atom_009",
+      "atom_010",
+      "atom_011",
+      "atom_012",
+      "atom_013",
+      "atom_014",
+      "atom_015",
+      "atom_016",
+      "atom_017"
+    ],
+    "warnings": [
+      "llm_edges_failed: LLM request timed out for gemma-4-26b-a4b-it after 15.0s"
+    ]
+  },
+  "reader_probe": {
+    "atom_id": "atom_001",
+    "atom_type": "algorithm",
+    "comprehension_level": "graduate",
+    "explainer": {},
+    "prerequisites": {
+      "prerequisites": []
+    },
+    "glossary": {
+      "glossary": {}
+    },
+    "exercises": {
+      "exercises": []
+    },
+    "tutor": {
+      "response": "To uncover the key insight, let's look at the term 'Minibatch version.' In the context of training algorithms on large-scale data, what is the primary computational advantage of using mini-batches instead of the entire dataset at once? How might applying this to the AEVB algorithm change how it scales?"
+    }
+  },
+  "verdicts": [
+    {
+      "verdict_id": "v_atom_001_aa57bb",
+      "atom_id": "atom_001",
+      "label": "LIKELY_FLAWED",
+      "confidence": 0.75,
+      "reason_codes": [
+        "algebraic_failure"
+      ],
+      "rationale": "LIKELY_FLAWED for algorithm atom atom_001. Algebraic sanity check failed on at least one attached equation.",
+      "checks": [
+        {
+          "check_id": "check_alg_atom_001_5c261d",
+          "atom_id": "atom_001",
+          "kind": "algebraic_sanity",
+          "status": "failed",
+          "summary": "at least one attached equation does not simplify to an identity",
+          "evidence": [
+            {
+              "evidence_id": "ev_f4d9a301",
+              "source_type": "algebraic_check",
+              "text": "eq_074 ($...$): LHS - RHS = bX**M - bxi",
+              "paper_id": "1312.6114",
+              "atom_id": "atom_001",
+              "equation_id": "eq_074",
+              "citation_id": null,
+              "check_id": "check_alg_atom_001_5c261d",
+              "url": null,
+              "external_paper_id": null,
+              "confidence": 0.85,
+              "metadata": {
+                "latex": "\\bX^M = \\{\\bxi\\}_{i=1}^M"
+              }
+            },
+            {
+              "evidence_id": "ev_dafc0800",
+              "source_type": "algebraic_check",
+              "text": "eq_075 ($...$): no relation to verify (bare expression)",
+              "paper_id": "1312.6114",
+              "atom_id": "atom_001",
+              "equation_id": "eq_075",
+              "citation_id": null,
+              "check_id": "check_alg_atom_001_5c261d",
+              "url": null,
+              "external_paper_id": null,
+              "confidence": 0.1,
+              "metadata": {
+                "latex": "datapoints from the full dataset"
+              }
+            },
+            {
+              "evidence_id": "ev_c01b4845",
+              "source_type": "algebraic_check",
+              "text": "eq_076 ($...$): no relation to verify (bare expression)",
+              "paper_id": "1312.6114",
+              "atom_id": "atom_001",
+              "equation_id": "eq_076",
+              "citation_id": null,
+              "check_id": "check_alg_atom_001_5c261d",
+              "url": null,
+              "external_paper_id": null,
+              "confidence": 0.1,
+              "metadata": {
+                "latex": "with"
+              }
+            },
+            {
+              "evidence_id": "ev_b5067c3e",
+              "source_type": "algebraic_check",
+              "text": "eq_077 ($...$): no relation to verify (bare expression)",
+              "paper_id": "1312.6114",
+              "atom_id": "atom_001",
+              "equation_id": "eq_077",
+              "citation_id": null,
+              "check_id": "check_alg_atom_001_5c261d",
+              "url": null,
+              "external_paper_id": null,
+              "confidence": 0.1,
+              "metadata": {
+                "latex": "datapoints. In our experiments we found that the number of samples"
+              }
+            },
+            {
+              "evidence_id": "ev_88b6d63e",
+              "source_type": "algebraic_check",
+              "text": "eq_078 ($...$): no relation to verify (bare expression)",
+              "paper_id": "1312.6114",
+              "atom_id": "atom_001",
+              "equation_id": "eq_078",
+              "citation_id": null,
+              "check_id": "check_alg_atom_001_5c261d",
+              "url": null,
+              "external_paper_id": null,
+              "confidence": 0.1,
+              "metadata": {
+                "latex": "per datapoint can be set to"
+              }
+            },
+            {
+              "evidence_id": "ev_129029b0",
+              "source_type": "algebraic_check",
+              "text": "eq_079 ($...$): no relation to verify (bare expression)",
+              "paper_id": "1312.6114",
+              "atom_id": "atom_001",
+              "equation_id": "eq_079",
+              "citation_id": null,
+              "check_id": "check_alg_atom_001_5c261d",
+              "url": null,
+              "external_paper_id": null,
+              "confidence": 0.1,
+              "metadata": {
+                "latex": "as long as the minibatch size"
+              }
+            },
+            {
+              "evidence_id": "ev_b4a6d644",
+              "source_type": "algebraic_check",
+              "text": "eq_080 ($...$): no relation to verify (bare expression)",
+              "paper_id": "1312.6114",
+              "atom_id": "atom_001",
+              "equation_id": "eq_080",
+              "citation_id": null,
+              "check_id": "check_alg_atom_001_5c261d",
+              "url": null,
+              "external_paper_id": null,
+              "confidence": 0.1,
+              "metadata": {
+                "latex": "was large enough, e.g."
+              }
+            },
+            {
+              "evidence_id": "ev_235aa2d1",
+              "source_type": "algebraic_check",
+              "text": "eq_081 ($...$): could not parse latex",
+              "paper_id": "1312.6114",
+              "atom_id": "atom_001",
+              "equation_id": "eq_081",
+              "citation_id": null,
+              "check_id": "check_alg_atom_001_5c261d",
+              "url": null,
+              "external_paper_id": null,
+              "confidence": 0.2,
+              "metadata": {
+                "latex": ". Derivatives"
+              }
+            },
+            {
+              "evidence_id": "ev_fb5f5696",
+              "source_type": "algebraic_check",
+              "text": "eq_082 ($...$): no relation to verify (bare expression)",
+              "paper_id": "1312.6114",
+              "atom_id": "atom_001",
+              "equation_id": "eq_082",
+              "citation_id": null,
+              "check_id": "check_alg_atom_001_5c261d",
+              "url": null,
+              "external_paper_id": null,
+              "confidence": 0.1,
+              "metadata": {
+                "latex": "\\gPhi(.)"
+              }
+            },
+            {
+              "evidence_id": "ev_e84ada1c",
+              "source_type": "algebraic_check",
+              "text": "eq_083 ($...$): no relation to verify (bare expression)",
+              "paper_id": "1312.6114",
+              "atom_id": "atom_001",
+              "equation_id": "eq_083",
+              "citation_id": null,
+              "check_id": "check_alg_atom_001_5c261d",
+              "url": null,
+              "external_paper_id": null,
+              "confidence": 0.1,
+              "metadata": {
+                "latex": "\\bxi"
+              }
+            },
+            {
+              "evidence_id": "ev_58feb75e",
+              "source_type": "algebraic_check",
+              "text": "eq_084 ($...$): no relation to verify (bare expression)",
+              "paper_id": "1312.6114",
+              "atom_id": "atom_001",
+              "equation_id": "eq_084",
+              "citation_id": null,
+              "check_id": "check_alg_atom_001_5c261d",
+              "url": null,
+              "external_paper_id": null,
+              "confidence": 0.1,
+              "metadata": {
+                "latex": "\\bepsl"
+              }
+            },
+            {
+              "evidence_id": "ev_ec0d9433",
+              "source_type": "algebraic_check",
+              "text": "eq_085 ($...$): LHS - RHS = bzil - gPhi(bepsl, bxi)",
+              "paper_id": "1312.6114",
+              "atom_id": "atom_001",
+              "equation_id": "eq_085",
+              "citation_id": null,
+              "check_id": "check_alg_atom_001_5c261d",
+              "url": null,
+              "external_paper_id": null,
+              "confidence": 0.85,
+              "metadata": {
+                "latex": "\\bzil = \\gPhi(\\bepsl, \\bxi)"
+              }
+            },
+            {
+              "evidence_id": "ev_b6369c8f",
+              "source_type": "algebraic_check",
+              "text": "eq_086 ($...$): no relation to verify (bare expression)",
+              "paper_id": "1312.6114",
+              "atom_id": "atom_001",
+              "equation_id": "eq_086",
+              "citation_id": null,
+              "check_id": "check_alg_atom_001_5c261d",
+              "url": null,
+              "external_paper_id": null,
+              "confidence": 0.1,
+              "metadata": {
+                "latex": "\\bzil \\sim \\qPhi(\\bz|\\bxi)"
+              }
+            },
+            {
+              "evidence_id": "ev_7db2bc8b",
+              "source_type": "algebraic_check",
+              "text": "eq_087 ($...$): no relation to verify (bare expression)",
+              "paper_id": "1312.6114",
+              "atom_id": "atom_001",
+              "equation_id": "eq_087",
+              "citation_id": null,
+              "check_id": "check_alg_atom_001_5c261d",
+              "url": null,
+              "external_paper_id": null,
+              "confidence": 0.1,
+              "metadata": {
+                "latex": "\\bzil"
+              }
+            },
+            {
+              "evidence_id": "ev_32ffd644",
+              "source_type": "algebraic_check",
+              "text": "eq_088 ($...$): no relation to verify (bare expression)",
+              "paper_id": "1312.6114",
+              "atom_id": "atom_001",
+              "equation_id": "eq_088",
+              "citation_id": null,
+              "check_id": "check_alg_atom_001_5c261d",
+              "url": null,
+              "external_paper_id": null,
+              "confidence": 0.1,
+              "metadata": {
+                "latex": "\\log \\pT(\\bxi|\\bzil)"
+              }
+            },
+            {
+              "evidence_id": "ev_11795604",
+              "source_type": "algebraic_check",
+              "text": "eq_089 ($...$): LHS - RHS = M - 100",
+              "paper_id": "1312.6114",
+              "atom_id": "atom_001",
+              "equation_id": "eq_089",
+              "citation_id": null,
+              "check_id": "check_alg_atom_001_5c261d",
+              "url": null,
+              "external_paper_id": null,
+              "confidence": 0.85,
+              "metadata": {
+                "latex": "M=100"
+              }
+            },
+            {
+              "evidence_id": "ev_db5b892f",
+              "source_type": "algebraic_check",
+              "text": "eq_090 ($...$): LHS - RHS = L - 1",
+              "paper_id": "1312.6114",
+              "atom_id": "atom_001",
+              "equation_id": "eq_090",
+              "citation_id": null,
+              "check_id": "check_alg_atom_001_5c261d",
+              "url": null,
+              "external_paper_id": null,
+              "confidence": 0.85,
+              "metadata": {
+                "latex": "L=1"
+              }
+            },
+            {
+              "evidence_id": "ev_744b9a0b",
+              "source_type": "algebraic_check",
+              "text": "eq_091 ($...$): no relation to verify (bare expression)",
+              "paper_id": "1312.6114",
+              "atom_id": "atom_001",
+              "equation_id": "eq_091",
+              "citation_id": null,
+              "check_id": "check_alg_atom_001_5c261d",
+              "url": null,
+              "external_paper_id": null,
+              "confidence": 0.1,
+              "metadata": {
+                "latex": "\\bT, \\bphi \\gets"
+              }
+            },
+            {
+              "evidence_id": "ev_7353dbcf",
+              "source_type": "algebraic_check",
+              "text": "eq_092 ($...$): no relation to verify (bare expression)",
+              "paper_id": "1312.6114",
+              "atom_id": "atom_001",
+              "equation_id": "eq_092",
+              "citation_id": null,
+              "check_id": "check_alg_atom_001_5c261d",
+              "url": null,
+              "external_paper_id": null,
+              "confidence": 0.1,
+              "metadata": {
+                "latex": "\\bX^M \\gets"
+              }
+            },
+            {
+              "evidence_id": "ev_44b46017",
+              "source_type": "algebraic_check",
+              "text": "eq_093 ($...$): no relation to verify (bare expression)",
+              "paper_id": "1312.6114",
+              "atom_id": "atom_001",
+              "equation_id": "eq_093",
+              "citation_id": null,
+              "check_id": "check_alg_atom_001_5c261d",
+              "url": null,
+              "external_paper_id": null,
+              "confidence": 0.1,
+              "metadata": {
+                "latex": "\\beps \\gets"
+              }
+            },
+            {
+              "evidence_id": "ev_9c549b5b",
+              "source_type": "algebraic_check",
+              "text": "eq_094 ($...$): no relation to verify (bare expression)",
+              "paper_id": "1312.6114",
+              "atom_id": "atom_001",
+              "equation_id": "eq_094",
+              "citation_id": null,
+              "check_id": "check_alg_atom_001_5c261d",
+              "url": null,
+              "external_paper_id": null,
+              "confidence": 0.1,
+              "metadata": {
+                "latex": "\\bg \\gets \\nabla_{\\bT,\\bphi} \\LBT{M}{\\bX^M,\\beps}"
+              }
+            },
+            {
+              "evidence_id": "ev_41455cfb",
+              "source_type": "algebraic_check",
+              "text": "eq_095 ($...$): no relation to verify (bare expression)",
+              "paper_id": "1312.6114",
+              "atom_id": "atom_001",
+              "equation_id": "eq_095",
+              "citation_id": null,
+              "check_id": "check_alg_atom_001_5c261d",
+              "url": null,
+              "external_paper_id": null,
+              "confidence": 0.1,
+              "metadata": {
+                "latex": "\\bg"
+              }
+            },
+            {
+              "evidence_id": "ev_8139890d",
+              "source_type": "algebraic_check",
+              "text": "eq_096 ($...$): could not parse latex",
+              "paper_id": "1312.6114",
+              "atom_id": "atom_001",
+              "equation_id": "eq_096",
+              "citation_id": null,
+              "check_id": "check_alg_atom_001_5c261d",
+              "url": null,
+              "external_paper_id": null,
+              "confidence": 0.2,
+              "metadata": {
+                "latex": "(\\bT,\\bphi)"
+              }
+            },
+            {
+              "evidence_id": "ev_f9162878",
+              "source_type": "algebraic_check",
+              "text": "eq_097 ($...$): no relation to verify (bare expression)",
+              "paper_id": "1312.6114",
+              "atom_id": "atom_001",
+              "equation_id": "eq_097",
+              "citation_id": null,
+              "check_id": "check_alg_atom_001_5c261d",
+              "url": null,
+              "external_paper_id": null,
+              "confidence": 0.1,
+              "metadata": {
+                "latex": "\\bT, \\bphi"
+              }
+            }
+          ],
+          "confidence": 0.85,
+          "raw_details": {
+            "equations": [
+              {
+                "status": "FAILED",
+                "detail": "LHS - RHS = bX**M - bxi",
+                "confidence": 0.85
+              },
+              {
+                "status": "SKIPPED",
+                "detail": "no relation to verify (bare expression)",
+                "confidence": 0.1
+              },
+              {
+                "status": "SKIPPED",
+                "detail": "no relation to verify (bare expression)",
+                "confidence": 0.1
+              },
+              {
+                "status": "SKIPPED",
+                "detail": "no relation to verify (bare expression)",
+                "confidence": 0.1
+              },
+              {
+                "status": "SKIPPED",
+                "detail": "no relation to verify (bare expression)",
+                "confidence": 0.1
+              },
+              {
+                "status": "SKIPPED",
+                "detail": "no relation to verify (bare expression)",
+                "confidence": 0.1
+              },
+              {
+                "status": "SKIPPED",
+                "detail": "no relation to verify (bare expression)",
+                "confidence": 0.1
+              },
+              {
+                "status": "SKIPPED",
+                "detail": "could not parse latex",
+                "confidence": 0.2
+              },
+              {
+                "status": "SKIPPED",
+                "detail": "no relation to verify (bare expression)",
+                "confidence": 0.1
+              },
+              {
+                "status": "SKIPPED",
+                "detail": "no relation to verify (bare expression)",
+                "confidence": 0.1
+              },
+              {
+                "status": "SKIPPED",
+                "detail": "no relation to verify (bare expression)",
+                "confidence": 0.1
+              },
+              {
+                "status": "FAILED",
+                "detail": "LHS - RHS = bzil - gPhi(bepsl, bxi)",
+                "confidence": 0.85
+              },
+              {
+                "status": "SKIPPED",
+                "detail": "no relation to verify (bare expression)",
+                "confidence": 0.1
+              },
+              {
+                "status": "SKIPPED",
+                "detail": "no relation to verify (bare expression)",
+                "confidence": 0.1
+              },
+              {
+                "status": "SKIPPED",
+                "detail": "no relation to verify (bare expression)",
+                "confidence": 0.1
+              },
+              {
+                "status": "FAILED",
+                "detail": "LHS - RHS = M - 100",
+                "confidence": 0.85
+              },
+              {
+                "status": "FAILED",
+                "detail": "LHS - RHS = L - 1",
+                "confidence": 0.85
+              },
+              {
+                "status": "SKIPPED",
+                "detail": "no relation to verify (bare expression)",
+                "confidence": 0.1
+              },
+              {
+                "status": "SKIPPED",
+                "detail": "no relation to verify (bare expression)",
+                "confidence": 0.1
+              },
+              {
+                "status": "SKIPPED",
+                "detail": "no relation to verify (bare expression)",
+                "confidence": 0.1
+              },
+              {
+                "status": "SKIPPED",
+                "detail": "no relation to verify (bare expression)",
+                "confidence": 0.1
+              },
+              {
+                "status": "SKIPPED",
+                "detail": "no relation to verify (bare expression)",
+                "confidence": 0.1
+              },
+              {
+                "status": "SKIPPED",
+                "detail": "could not parse latex",
+                "confidence": 0.2
+              },
+              {
+                "status": "SKIPPED",
+                "detail": "no relation to verify (bare expression)",
+                "confidence": 0.1
+              }
+            ]
+          },
+          "error": null
+        },
+        {
+          "check_id": "check_num_atom_001_8a9350",
+          "atom_id": "atom_001",
+          "kind": "numeric_counterexample_probe",
+          "status": "not_applicable",
+          "summary": "The text provides specific constant values for experimental settings ($M=100, L=1$) rather than a universal mathematical assertion.",
+          "evidence": [
+            {
+              "evidence_id": "ev_6af8858c",
+              "source_type": "numeric_probe",
+              "text": "numeric_probe (not_applicable): The text provides specific constant values for experimental settings ($M=100, L=1$) rather than a universal mathematical assertion.",
+              "paper_id": "1312.6114",
+              "atom_id": "atom_001",
+              "equation_id": null,
+              "citation_id": null,
+              "check_id": "check_num_atom_001_8a9350",
+              "url": null,
+              "external_paper_id": null,
+              "confidence": 0.1,
+              "metadata": {}
+            }
+          ],
+          "confidence": 0.1,
+          "raw_details": {
+            "spec": {
+              "is_universal": false,
+              "predicate": null,
+              "domain": null,
+              "explanation": "The text provides specific constant values for experimental settings ($M=100, L=1$) rather than a universal mathematical assertion."
+            }
+          },
+          "error": null
+        },
+        {
+          "check_id": "check_cite_atom_001_159183",
+          "atom_id": "atom_001",
+          "kind": "citation_context",
+          "status": "inconclusive",
+          "summary": "all attached citations unresolved (no bib entry): duchi2010adaptive",
+          "evidence": [
+            {
+              "evidence_id": "ev_52d35cc1",
+              "source_type": "citation",
+              "text": "unresolved citation keys: duchi2010adaptive",
+              "paper_id": "1312.6114",
+              "atom_id": "atom_001",
+              "equation_id": null,
+              "citation_id": null,
+              "check_id": "check_cite_atom_001_159183",
+              "url": null,
+              "external_paper_id": null,
+              "confidence": 0.4,
+              "metadata": {}
+            }
+          ],
+          "confidence": 0.4,
+          "raw_details": {},
+          "error": null
+        }
+      ],
+      "challenges": [],
+      "rebuttals": [],
+      "evidence": [],
+      "is_cascaded": false,
+      "cascade_source_atom_id": null
+    },
+    {
+      "verdict_id": "v_atom_002_08b86c",
+      "atom_id": "atom_002",
+      "label": "NOT_CHECKABLE",
+      "confidence": 0.4,
+      "reason_codes": [
+        "checks_inconclusive"
+      ],
+      "rationale": "NOT_CHECKABLE for algorithm atom atom_002. Checks were not applicable or inconclusive and no challenges were generated.",
+      "checks": [],
+      "challenges": [],
+      "rebuttals": [],
+      "evidence": [],
+      "is_cascaded": false,
+      "cascade_source_atom_id": null
+    },
+    {
+      "verdict_id": "v_atom_003_525e37",
+      "atom_id": "atom_003",
+      "label": "NOT_CHECKABLE",
+      "confidence": 0.4,
+      "reason_codes": [
+        "checks_inconclusive"
+      ],
+      "rationale": "NOT_CHECKABLE for bound atom atom_003. Checks were not applicable or inconclusive and no challenges were generated.",
+      "checks": [],
+      "challenges": [],
+      "rebuttals": [],
+      "evidence": [],
+      "is_cascaded": false,
+      "cascade_source_atom_id": null
+    },
+    {
+      "verdict_id": "v_atom_004_cc118e",
+      "atom_id": "atom_004",
+      "label": "NOT_CHECKABLE",
+      "confidence": 0.2,
+      "reason_codes": [
+        "not_reviewed"
+      ],
+      "rationale": "technique atoms in section Method are not adversarially reviewed.",
+      "checks": [],
+      "challenges": [],
+      "rebuttals": [],
+      "evidence": [],
+      "is_cascaded": false,
+      "cascade_source_atom_id": null
+    },
+    {
+      "verdict_id": "v_atom_005_ec6bc5",
+      "atom_id": "atom_005",
+      "label": "NOT_CHECKABLE",
+      "confidence": 0.2,
+      "reason_codes": [
+        "not_reviewed"
+      ],
+      "rationale": "technique atoms in section Method are not adversarially reviewed.",
+      "checks": [],
+      "challenges": [],
+      "rebuttals": [],
+      "evidence": [],
+      "is_cascaded": false,
+      "cascade_source_atom_id": null
+    },
+    {
+      "verdict_id": "v_atom_006_35b223",
+      "atom_id": "atom_006",
+      "label": "NOT_CHECKABLE",
+      "confidence": 0.4,
+      "reason_codes": [
+        "checks_inconclusive"
+      ],
+      "rationale": "NOT_CHECKABLE for assumption atom atom_006. Checks were not applicable or inconclusive and no challenges were generated.",
+      "checks": [],
+      "challenges": [],
+      "rebuttals": [],
+      "evidence": [],
+      "is_cascaded": false,
+      "cascade_source_atom_id": null
+    },
+    {
+      "verdict_id": "v_atom_007_45aabd",
+      "atom_id": "atom_007",
+      "label": "NOT_CHECKABLE",
+      "confidence": 0.2,
+      "reason_codes": [
+        "not_reviewed"
+      ],
+      "rationale": "definition atoms in section The variational bound are not adversarially reviewed.",
+      "checks": [],
+      "challenges": [],
+      "rebuttals": [],
+      "evidence": [],
+      "is_cascaded": false,
+      "cascade_source_atom_id": null
+    },
+    {
+      "verdict_id": "v_atom_008_daa196",
+      "atom_id": "atom_008",
+      "label": "NOT_CHECKABLE",
+      "confidence": 0.4,
+      "reason_codes": [
+        "checks_inconclusive"
+      ],
+      "rationale": "NOT_CHECKABLE for assumption atom atom_008. Checks were not applicable or inconclusive and no challenges were generated.",
+      "checks": [],
+      "challenges": [],
+      "rebuttals": [],
+      "evidence": [],
+      "is_cascaded": false,
+      "cascade_source_atom_id": null
+    },
+    {
+      "verdict_id": "v_atom_009_afb38e",
+      "atom_id": "atom_009",
+      "label": "NOT_CHECKABLE",
+      "confidence": 0.4,
+      "reason_codes": [
+        "checks_inconclusive"
+      ],
+      "rationale": "NOT_CHECKABLE for bound atom atom_009. Checks were not applicable or inconclusive and no challenges were generated.",
+      "checks": [],
+      "challenges": [],
+      "rebuttals": [],
+      "evidence": [],
+      "is_cascaded": false,
+      "cascade_source_atom_id": null
+    },
+    {
+      "verdict_id": "v_atom_010_ab970b",
+      "atom_id": "atom_010",
+      "label": "NOT_CHECKABLE",
+      "confidence": 0.4,
+      "reason_codes": [
+        "checks_inconclusive"
+      ],
+      "rationale": "NOT_CHECKABLE for assertion atom atom_010. Checks were not applicable or inconclusive and no challenges were generated.",
+      "checks": [],
+      "challenges": [],
+      "rebuttals": [],
+      "evidence": [],
+      "is_cascaded": false,
+      "cascade_source_atom_id": null
+    },
+    {
+      "verdict_id": "v_atom_011_c20697",
+      "atom_id": "atom_011",
+      "label": "NOT_CHECKABLE",
+      "confidence": 0.2,
+      "reason_codes": [
+        "not_reviewed"
+      ],
+      "rationale": "definition atoms in section Experiments are not adversarially reviewed.",
+      "checks": [],
+      "challenges": [],
+      "rebuttals": [],
+      "evidence": [],
+      "is_cascaded": false,
+      "cascade_source_atom_id": null
+    },
+    {
+      "verdict_id": "v_atom_012_d92624",
+      "atom_id": "atom_012",
+      "label": "NOT_CHECKABLE",
+      "confidence": 0.4,
+      "reason_codes": [
+        "checks_inconclusive"
+      ],
+      "rationale": "NOT_CHECKABLE for bound atom atom_012. Checks were not applicable or inconclusive and no challenges were generated.",
+      "checks": [],
+      "challenges": [],
+      "rebuttals": [],
+      "evidence": [],
+      "is_cascaded": false,
+      "cascade_source_atom_id": null
+    },
+    {
+      "verdict_id": "v_atom_013_095b02",
+      "atom_id": "atom_013",
+      "label": "NOT_CHECKABLE",
+      "confidence": 0.4,
+      "reason_codes": [
+        "checks_inconclusive"
+      ],
+      "rationale": "NOT_CHECKABLE for bound atom atom_013. Checks were not applicable or inconclusive and no challenges were generated.",
+      "checks": [],
+      "challenges": [],
+      "rebuttals": [],
+      "evidence": [],
+      "is_cascaded": false,
+      "cascade_source_atom_id": null
+    },
+    {
+      "verdict_id": "v_atom_014_7485d2",
+      "atom_id": "atom_014",
+      "label": "NOT_CHECKABLE",
+      "confidence": 0.4,
+      "reason_codes": [
+        "checks_inconclusive"
+      ],
+      "rationale": "NOT_CHECKABLE for bound atom atom_014. Checks were not applicable or inconclusive and no challenges were generated.",
+      "checks": [],
+      "challenges": [],
+      "rebuttals": [],
+      "evidence": [],
+      "is_cascaded": false,
+      "cascade_source_atom_id": null
+    },
+    {
+      "verdict_id": "v_atom_015_cf1397",
+      "atom_id": "atom_015",
+      "label": "NOT_CHECKABLE",
+      "confidence": 0.4,
+      "reason_codes": [
+        "checks_inconclusive"
+      ],
+      "rationale": "NOT_CHECKABLE for algorithm atom atom_015. Checks were not applicable or inconclusive and no challenges were generated.",
+      "checks": [],
+      "challenges": [],
+      "rebuttals": [],
+      "evidence": [],
+      "is_cascaded": false,
+      "cascade_source_atom_id": null
+    },
+    {
+      "verdict_id": "v_atom_016_978510",
+      "atom_id": "atom_016",
+      "label": "NOT_CHECKABLE",
+      "confidence": 0.4,
+      "reason_codes": [
+        "checks_inconclusive"
+      ],
+      "rationale": "NOT_CHECKABLE for construction atom atom_016. Checks were not applicable or inconclusive and no challenges were generated.",
+      "checks": [],
+      "challenges": [],
+      "rebuttals": [],
+      "evidence": [],
+      "is_cascaded": false,
+      "cascade_source_atom_id": null
+    },
+    {
+      "verdict_id": "v_atom_017_500dfe",
+      "atom_id": "atom_017",
+      "label": "NOT_CHECKABLE",
+      "confidence": 0.2,
+      "reason_codes": [
+        "not_reviewed"
+      ],
+      "rationale": "definition atoms in section Example are not adversarially reviewed.",
+      "checks": [],
+      "challenges": [],
+      "rebuttals": [],
+      "evidence": [],
+      "is_cascaded": false,
+      "cascade_source_atom_id": null
+    }
+  ],
+  "report": {
+    "report_id": "report_4fbeccef3d",
+    "job_id": "manual-f8f6fd7e",
+    "paper_id": "1312.6114",
+    "paper_title": "Auto-Encoding Variational Bayes",
+    "arxiv_id": "1312.6114",
+    "paper_hash": "bd410ebdb81f9032",
+    "reviewed_at": "2026-04-26 08:47:24.592766",
+    "summary": {
+      "total_atoms": 17,
+      "total_reviewed_atoms": 12,
+      "no_objection_found": 0,
+      "contested": 0,
+      "likely_flawed": 1,
+      "refuted": 0,
+      "not_checkable": 16,
+      "high_risk_atom_ids": [
+        "atom_001"
+      ],
+      "cascaded_atom_ids": []
+    },
+    "atoms": [
+      {
+        "atom_id": "atom_001",
+        "paper_id": "1312.6114",
+        "atom_type": "algorithm",
+        "text": "Minibatch version of the Auto-Encoding VB (AEVB) algorithm. Either of the two SGVB estimators in section (subsec:our_estimator) can be used. We use settings $M=100$ and $L=1$ in experiments.",
+        "normalized_text": null,
+        "section_id": "sec_005",
+        "section_heading": "The SGVB estimator and AEVB algorithm",
+        "source_span": {
+          "paper_id": "1312.6114",
+          "section_id": "sec_005",
+          "char_start": null,
+          "char_end": null,
+          "tex_start": 18669,
+          "tex_end": 19542,
+          "raw_excerpt": "Minibatch version of the Auto-Encoding VB (AEVB) algorithm. Either of the two SGVB estimators in section (subsec:our_estimator) can be used. We use settings $M=100$ and $L=1$ in experiments.",
+          "match_confidence": 1.0
+        },
+        "equations": [
+          {
+            "equation_id": "eq_074",
+            "latex": "\\bX^M = \\{\\bxi\\}_{i=1}^M",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_005",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_005",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 17272,
+              "tex_end": 17298,
+              "raw_excerpt": "\\bX^M = \\{\\bxi\\}_{i=1}^M",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_075",
+            "latex": "datapoints from the full dataset",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_005",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_005",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 17331,
+              "tex_end": 17367,
+              "raw_excerpt": "datapoints from the full dataset",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_076",
+            "latex": "with",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_005",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_005",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 17370,
+              "tex_end": 17378,
+              "raw_excerpt": "with",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_077",
+            "latex": "datapoints. In our experiments we found that the number of samples",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_005",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_005",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 17379,
+              "tex_end": 17449,
+              "raw_excerpt": "datapoints. In our experiments we found that the number of samples",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_078",
+            "latex": "per datapoint can be set to",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_005",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_005",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 17450,
+              "tex_end": 17481,
+              "raw_excerpt": "per datapoint can be set to",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_079",
+            "latex": "as long as the minibatch size",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_005",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_005",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 17482,
+              "tex_end": 17515,
+              "raw_excerpt": "as long as the minibatch size",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_080",
+            "latex": "was large enough, e.g.",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_005",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_005",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 17516,
+              "tex_end": 17542,
+              "raw_excerpt": "was large enough, e.g.",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_081",
+            "latex": ". Derivatives",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_005",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_005",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 17547,
+              "tex_end": 17563,
+              "raw_excerpt": ". Derivatives",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_082",
+            "latex": "\\gPhi(.)",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_005",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_005",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 18174,
+              "tex_end": 18184,
+              "raw_excerpt": "\\gPhi(.)",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_083",
+            "latex": "\\bxi",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_005",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_005",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 18225,
+              "tex_end": 18231,
+              "raw_excerpt": "\\bxi",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_084",
+            "latex": "\\bepsl",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_005",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_005",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 18258,
+              "tex_end": 18266,
+              "raw_excerpt": "\\bepsl",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_085",
+            "latex": "\\bzil = \\gPhi(\\bepsl, \\bxi)",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_005",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_005",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 18330,
+              "tex_end": 18359,
+              "raw_excerpt": "\\bzil = \\gPhi(\\bepsl, \\bxi)",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_086",
+            "latex": "\\bzil \\sim \\qPhi(\\bz|\\bxi)",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_005",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_005",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 18366,
+              "tex_end": 18394,
+              "raw_excerpt": "\\bzil \\sim \\qPhi(\\bz|\\bxi)",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_087",
+            "latex": "\\bzil",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_005",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_005",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 18422,
+              "tex_end": 18429,
+              "raw_excerpt": "\\bzil",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_088",
+            "latex": "\\log \\pT(\\bxi|\\bzil)",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_005",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_005",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 18456,
+              "tex_end": 18478,
+              "raw_excerpt": "\\log \\pT(\\bxi|\\bzil)",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_089",
+            "latex": "M=100",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_005",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_005",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 18860,
+              "tex_end": 18867,
+              "raw_excerpt": "M=100",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_090",
+            "latex": "L=1",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_005",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_005",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 18872,
+              "tex_end": 18877,
+              "raw_excerpt": "L=1",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_091",
+            "latex": "\\bT, \\bphi \\gets",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_005",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_005",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 18976,
+              "tex_end": 18994,
+              "raw_excerpt": "\\bT, \\bphi \\gets",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_092",
+            "latex": "\\bX^M \\gets",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_005",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_005",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 19032,
+              "tex_end": 19046,
+              "raw_excerpt": "\\bX^M \\gets",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_093",
+            "latex": "\\beps \\gets",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_005",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_005",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 19115,
+              "tex_end": 19129,
+              "raw_excerpt": "\\beps \\gets",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_094",
+            "latex": "\\bg \\gets \\nabla_{\\bT,\\bphi} \\LBT{M}{\\bX^M,\\beps}",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_005",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_005",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 19187,
+              "tex_end": 19238,
+              "raw_excerpt": "\\bg \\gets \\nabla_{\\bT,\\bphi} \\LBT{M}{\\bX^M,\\beps}",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_095",
+            "latex": "\\bg",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_005",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_005",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 19365,
+              "tex_end": 19370,
+              "raw_excerpt": "\\bg",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_096",
+            "latex": "(\\bT,\\bphi)",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_005",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_005",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 19452,
+              "tex_end": 19465,
+              "raw_excerpt": "(\\bT,\\bphi)",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_097",
+            "latex": "\\bT, \\bphi",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_005",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_005",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 19478,
+              "tex_end": 19490,
+              "raw_excerpt": "\\bT, \\bphi",
+              "match_confidence": 1.0
+            }
+          }
+        ],
+        "citations": [
+          {
+            "citation_id": "atom_001_cite_001",
+            "key": "duchi2010adaptive",
+            "label": null,
+            "raw_bib_text": "",
+            "title": null,
+            "authors": [],
+            "year": null,
+            "venue": null,
+            "url": null,
+            "doi": null
+          }
+        ],
+        "extraction_confidence": 0.95,
+        "importance": "high",
+        "role_in_paper": "algorithm from \\begin{algorithm} environment (label algorithm)",
+        "assumptions": [],
+        "conclusions": [],
+        "proof_sketch": null,
+        "key_terms": [],
+        "symbols": []
+      },
+      {
+        "atom_id": "atom_002",
+        "paper_id": "1312.6114",
+        "atom_type": "algorithm",
+        "text": "Pseudocode for computing a stochastic gradient using our estimator. See text for meaning of the functions $\\fPhi$, $\\gPhi$ and $\\hPhi$.",
+        "normalized_text": null,
+        "section_id": "sec_022",
+        "section_heading": "Full VB",
+        "source_span": {
+          "paper_id": "1312.6114",
+          "section_id": "sec_022",
+          "char_start": null,
+          "char_end": null,
+          "tex_start": 48620,
+          "tex_end": 49306,
+          "raw_excerpt": "Pseudocode for computing a stochastic gradient using our estimator. See text for meaning of the functions $\\fPhi$, $\\gPhi$ and $\\hPhi$.",
+          "match_confidence": 1.0
+        },
+        "equations": [
+          {
+            "equation_id": "eq_002",
+            "latex": "\\fPhi(\\bx, \\bz, \\bT) = N \\cdot (\\log \\pT(\\bx | \\bz) + \\log \\pT(\\bz) - \\log \\qPhi(\\bz|\\bx)) + \\log \\pA(\\bT) - \\log \\qPhi(\\bT)\n\\label{eq:f_ap}",
+            "label": "eq:f_ap",
+            "environment": "align",
+            "section_id": "sec_022",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_022",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 47635,
+              "tex_end": 47801,
+              "raw_excerpt": "\\fPhi(\\bx, \\bz, \\bT) = N \\cdot (\\log \\pT(\\bx | \\bz) + \\log \\pT(\\bz) - \\log \\qPhi(\\bz|\\bx)) + \\log \\pA(\\bT) - \\log \\qPhi(\\bT)\n\\label{eq:f_ap}",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_025",
+            "latex": "\\mathcal{L}(\\bphi;\\bX)\n&= \\int \\qPhi(\\bT) \\left( \\log \\pT(\\bX) + \\log \\pA(\\bT) - \\log \\qPhi(\\bT) \\right) \\,d\\bT \\\\\n&= \\int p(\\bzeta) \\left( \\log \\pT(\\bX) + \\log \\pA(\\bT) - \\log \\qPhi(\\bT) \\right) \\bigg|_{\\bT=\\hPhi(\\bzeta)} \\,d\\bzeta\n\\eqnr\\label{eq:reparameterizedbound1_ap}",
+            "label": "eq:reparameterizedbound1_ap",
+            "environment": "align*",
+            "section_id": "sec_022",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_022",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 47248,
+              "tex_end": 47548,
+              "raw_excerpt": "\\mathcal{L}(\\bphi;\\bX)\n&= \\int \\qPhi(\\bT) \\left( \\log \\pT(\\bX) + \\log \\pA(\\bT) - \\log \\qPhi(\\bT) \\right) \\,d\\bT \\\\\n&= \\int p(\\bzeta) \\left( \\log \\pT(\\bX) + \\log \\pA(\\bT) - \\log \\qPhi(\\bT) \\right) \\bigg|_{\\bT=\\hPhi(\\bzeta)} \\,d\\bzeta\n\\eqnr\\label{eq:reparameterizedbound1_ap}",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_026",
+            "latex": "\\mathcal{L}(\\bphi;\\bX)\n&\\simeq \\frac{1}{L} \\sum_{l=1}^L \\fPhi(\\bxl, \\gPhi(\\bepsl,\\bxl), \\hPhi(\\bzetal))\n\\eqnr\\label{eq:fullestimator_ap}",
+            "label": "eq:fullestimator_ap",
+            "environment": "align*",
+            "section_id": "sec_022",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_022",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 47982,
+              "tex_end": 48145,
+              "raw_excerpt": "\\mathcal{L}(\\bphi;\\bX)\n&\\simeq \\frac{1}{L} \\sum_{l=1}^L \\fPhi(\\bxl, \\gPhi(\\bepsl,\\bxl), \\hPhi(\\bzetal))\n\\eqnr\\label{eq:fullestimator_ap}",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_164",
+            "latex": "p(\\bzeta)",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_022",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_022",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 47174,
+              "tex_end": 47185,
+              "raw_excerpt": "p(\\bzeta)",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_165",
+            "latex": "\\hPhi(\\bzeta)",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_022",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_022",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 47201,
+              "tex_end": 47216,
+              "raw_excerpt": "\\hPhi(\\bzeta)",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_166",
+            "latex": "\\fPhi(\\bx, \\bz, \\bT)",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_022",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_022",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 47611,
+              "tex_end": 47633,
+              "raw_excerpt": "\\fPhi(\\bx, \\bz, \\bT)",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_167",
+            "latex": "\\bzetal \\sim p(\\bzeta)",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_022",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_022",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 48179,
+              "tex_end": 48203,
+              "raw_excerpt": "\\bzetal \\sim p(\\bzeta)",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_168",
+            "latex": "\\fPhi",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_022",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_022",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 48756,
+              "tex_end": 48763,
+              "raw_excerpt": "\\fPhi",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_169",
+            "latex": "\\gPhi",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_022",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_022",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 48765,
+              "tex_end": 48772,
+              "raw_excerpt": "\\gPhi",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_170",
+            "latex": "\\hPhi",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_022",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_022",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 48777,
+              "tex_end": 48784,
+              "raw_excerpt": "\\hPhi",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_171",
+            "latex": "\\bg \\gets 0",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_022",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_022",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 48927,
+              "tex_end": 48940,
+              "raw_excerpt": "\\bg \\gets 0",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_172",
+            "latex": "is",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_022",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_022",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 48948,
+              "tex_end": 48954,
+              "raw_excerpt": "is",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_173",
+            "latex": "to",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_022",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_022",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 48955,
+              "tex_end": 48961,
+              "raw_excerpt": "to",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_174",
+            "latex": "\\bx \\gets",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_022",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_022",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 48972,
+              "tex_end": 48984,
+              "raw_excerpt": "\\bx \\gets",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_175",
+            "latex": "\\bzeta \\gets",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_022",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_022",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 49079,
+              "tex_end": 49094,
+              "raw_excerpt": "\\bzeta \\gets",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_176",
+            "latex": "\\bg \\gets \\bg + \\frac{1}{L} \\nabla_{\\bphi} \\fPhi(\\bx, \\gPhi(\\beps, \\bx), \\hPhi(\\bzeta))",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_022",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_022",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 49137,
+              "tex_end": 49226,
+              "raw_excerpt": "\\bg \\gets \\bg + \\frac{1}{L} \\nabla_{\\bphi} \\fPhi(\\bx, \\gPhi(\\beps, \\bx), \\hPhi(\\bzeta))",
+              "match_confidence": 1.0
+            }
+          }
+        ],
+        "citations": [
+          {
+            "citation_id": "atom_002_cite_001",
+            "key": "duchi2010adaptive",
+            "label": null,
+            "raw_bib_text": "",
+            "title": null,
+            "authors": [],
+            "year": null,
+            "venue": null,
+            "url": null,
+            "doi": null
+          }
+        ],
+        "extraction_confidence": 0.95,
+        "importance": "high",
+        "role_in_paper": "algorithm from \\begin{algorithm} environment (label algorithm_ap)",
+        "assumptions": [],
+        "conclusions": [],
+        "proof_sketch": null,
+        "key_terms": [],
+        "symbols": []
+      },
+      {
+        "atom_id": "atom_003",
+        "paper_id": "1312.6114",
+        "atom_type": "bound",
+        "text": "First, we show that a reparameterization of the variational lower bound yields a lower bound estimator that can be straightforwardly optimized using standard.",
+        "normalized_text": "First, we show that a reparameterization of the variational lower bound yields a lower bound estimator that can be straightforwardly optimized using standard.",
+        "section_id": "sec_abstract",
+        "section_heading": "Abstract",
+        "source_span": {
+          "paper_id": "1312.6114",
+          "section_id": "sec_abstract",
+          "char_start": null,
+          "char_end": null,
+          "tex_start": null,
+          "tex_end": null,
+          "raw_excerpt": "First, we show that a reparameterization of the variational lower bound yields a lower bound estimator that can be straightforwardly optimized using standard stochastic gradient methods.",
+          "match_confidence": 0.3
+        },
+        "equations": [],
+        "citations": [],
+        "extraction_confidence": 0.72,
+        "importance": "medium",
+        "role_in_paper": "deterministic prose atom",
+        "assumptions": [],
+        "conclusions": [],
+        "proof_sketch": null,
+        "key_terms": [],
+        "symbols": []
+      },
+      {
+        "atom_id": "atom_004",
+        "paper_id": "1312.6114",
+        "atom_type": "technique",
+        "text": "We will restrict ourselves here to the common case where we have an i.i.d. dataset with latent variables per datapoint, and where we like to perform maximum.",
+        "normalized_text": "We will restrict ourselves here to the common case where we have an i.i.d. dataset with latent variables per datapoint, and where we like to perform maximum.",
+        "section_id": "sec_002",
+        "section_heading": "Method",
+        "source_span": {
+          "paper_id": "1312.6114",
+          "section_id": "sec_002",
+          "char_start": 1926,
+          "char_end": 2217,
+          "tex_start": null,
+          "tex_end": null,
+          "raw_excerpt": "We will restrict ourselves here to the common case where we have an i.i.d. dataset with latent variables per datapoint, and where we like to perform maximum likelihood (ML) or maximum a posteriori (MAP) inference on the (global) parameters, and variational inference on the latent variables.",
+          "match_confidence": 1.0
+        },
+        "equations": [],
+        "citations": [],
+        "extraction_confidence": 0.72,
+        "importance": "low",
+        "role_in_paper": "deterministic prose atom",
+        "assumptions": [],
+        "conclusions": [],
+        "proof_sketch": null,
+        "key_terms": [],
+        "symbols": []
+      },
+      {
+        "atom_id": "atom_005",
+        "paper_id": "1312.6114",
+        "atom_type": "technique",
+        "text": "The variational parameters $\\bphi$ are learned jointly with the generative model parameters $\\bT$.",
+        "normalized_text": "The variational parameters $\\bphi$ are learned jointly with the generative model parameters $\\bT$.",
+        "section_id": "sec_002",
+        "section_heading": "Method",
+        "source_span": {
+          "paper_id": "1312.6114",
+          "section_id": "sec_002",
+          "char_start": 3075,
+          "char_end": 3173,
+          "tex_start": null,
+          "tex_end": null,
+          "raw_excerpt": "The variational parameters $\\bphi$ are learned jointly with the generative model parameters $\\bT$.",
+          "match_confidence": 1.0
+        },
+        "equations": [],
+        "citations": [],
+        "extraction_confidence": 0.72,
+        "importance": "low",
+        "role_in_paper": "deterministic prose atom",
+        "assumptions": [],
+        "conclusions": [],
+        "proof_sketch": null,
+        "key_terms": [],
+        "symbols": []
+      },
+      {
+        "atom_id": "atom_006",
+        "paper_id": "1312.6114",
+        "atom_type": "assumption",
+        "text": "We assume that the data are generated by some random process, involving an unobserved continuous random variable $\\bz$.",
+        "normalized_text": "We assume that the data are generated by some random process, involving an unobserved continuous random variable $\\bz$.",
+        "section_id": "sec_003",
+        "section_heading": "Problem scenario",
+        "source_span": {
+          "paper_id": "1312.6114",
+          "section_id": "sec_003",
+          "char_start": 3332,
+          "char_end": 3451,
+          "tex_start": null,
+          "tex_end": null,
+          "raw_excerpt": "We assume that the data are generated by some random process, involving an unobserved continuous random variable $\\bz$.",
+          "match_confidence": 1.0
+        },
+        "equations": [],
+        "citations": [],
+        "extraction_confidence": 0.72,
+        "importance": "medium",
+        "role_in_paper": "deterministic prose atom",
+        "assumptions": [],
+        "conclusions": [],
+        "proof_sketch": null,
+        "key_terms": [],
+        "symbols": []
+      },
+      {
+        "atom_id": "atom_007",
+        "paper_id": "1312.6114",
+        "atom_type": "definition",
+        "text": "However, the gradient of the lower bound w.r.t. $\\bphi$ is a bit problematic.",
+        "normalized_text": "However, the gradient of the lower bound w.r.t. $\\bphi$ is a bit problematic.",
+        "section_id": "sec_004",
+        "section_heading": "The variational bound",
+        "source_span": {
+          "paper_id": "1312.6114",
+          "section_id": "sec_004",
+          "char_start": 8139,
+          "char_end": 8216,
+          "tex_start": null,
+          "tex_end": null,
+          "raw_excerpt": "However, the gradient of the lower bound w.r.t. $\\bphi$ is a bit problematic.",
+          "match_confidence": 1.0
+        },
+        "equations": [],
+        "citations": [
+          {
+            "citation_id": "atom_007_cite_001",
+            "key": "blei2012variational",
+            "label": null,
+            "raw_bib_text": "",
+            "title": null,
+            "authors": [],
+            "year": null,
+            "venue": null,
+            "url": null,
+            "doi": null
+          }
+        ],
+        "extraction_confidence": 0.72,
+        "importance": "medium",
+        "role_in_paper": "deterministic prose atom",
+        "assumptions": [],
+        "conclusions": [],
+        "proof_sketch": null,
+        "key_terms": [],
+        "symbols": []
+      },
+      {
+        "atom_id": "atom_008",
+        "paper_id": "1312.6114",
+        "atom_type": "assumption",
+        "text": "We assume an approximate posterior in the form $\\qPhi(\\bz|\\bx)$, but please note that the technique can be applied to the case $\\qPhi(\\bz)$, i.e. where we do.",
+        "normalized_text": "We assume an approximate posterior in the form $\\qPhi(\\bz|\\bx)$, but please note that the technique can be applied to the case $\\qPhi(\\bz)$, i.e. where we do.",
+        "section_id": "sec_005",
+        "section_heading": "The SGVB estimator and AEVB algorithm",
+        "source_span": {
+          "paper_id": "1312.6114",
+          "section_id": "sec_005",
+          "char_start": 8799,
+          "char_end": 8989,
+          "tex_start": null,
+          "tex_end": null,
+          "raw_excerpt": "We assume an approximate posterior in the form $\\qPhi(\\bz|\\bx)$, but please note that the technique can be applied to the case $\\qPhi(\\bz)$, i.e. where we do not condition on $\\bx$, as well.",
+          "match_confidence": 1.0
+        },
+        "equations": [
+          {
+            "equation_id": "eq_035",
+            "latex": "\\qPhi(\\bz|\\bx)",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_002",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_002",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 8330,
+              "tex_end": 8346,
+              "raw_excerpt": "\\qPhi(\\bz|\\bx)",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_062",
+            "latex": "\\qPhi(\\bz)",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_005",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_005",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 14576,
+              "tex_end": 14588,
+              "raw_excerpt": "\\qPhi(\\bz)",
+              "match_confidence": 1.0
+            }
+          }
+        ],
+        "citations": [
+          {
+            "citation_id": "atom_008_cite_001",
+            "key": "duchi2010adaptive",
+            "label": null,
+            "raw_bib_text": "",
+            "title": null,
+            "authors": [],
+            "year": null,
+            "venue": null,
+            "url": null,
+            "doi": null
+          }
+        ],
+        "extraction_confidence": 0.72,
+        "importance": "medium",
+        "role_in_paper": "deterministic prose atom",
+        "assumptions": [],
+        "conclusions": [],
+        "proof_sketch": null,
+        "key_terms": [],
+        "symbols": []
+      },
+      {
+        "atom_id": "atom_009",
+        "paper_id": "1312.6114",
+        "atom_type": "bound",
+        "text": "In section (subsec:our_estimator) we applied this trick to obtain a differentiable estimator of the variational lower bound.",
+        "normalized_text": "In section (subsec:our_estimator) we applied this trick to obtain a differentiable estimator of the variational lower bound.",
+        "section_id": "sec_006",
+        "section_heading": "The reparameterization trick",
+        "source_span": {
+          "paper_id": "1312.6114",
+          "section_id": "sec_006",
+          "char_start": 14363,
+          "char_end": 14487,
+          "tex_start": null,
+          "tex_end": null,
+          "raw_excerpt": "In section (subsec:our_estimator) we applied this trick to obtain a differentiable estimator of the variational lower bound.",
+          "match_confidence": 1.0
+        },
+        "equations": [],
+        "citations": [
+          {
+            "citation_id": "atom_009_cite_001",
+            "key": "devroye1986sample",
+            "label": null,
+            "raw_bib_text": "",
+            "title": null,
+            "authors": [],
+            "year": null,
+            "venue": null,
+            "url": null,
+            "doi": null
+          }
+        ],
+        "extraction_confidence": 0.72,
+        "importance": "medium",
+        "role_in_paper": "deterministic prose atom",
+        "assumptions": [],
+        "conclusions": [],
+        "proof_sketch": null,
+        "key_terms": [],
+        "symbols": []
+      },
+      {
+        "atom_id": "atom_010",
+        "paper_id": "1312.6114",
+        "atom_type": "assertion",
+        "text": "In this model both $\\pT(\\bz)$ (the prior) and $\\qPhi(\\bz|\\bx)$ are Gaussian; in this case, we can use the estimator of eq.",
+        "normalized_text": "In this model both $\\pT(\\bz)$ (the prior) and $\\qPhi(\\bz|\\bx)$ are Gaussian; in this case, we can use the estimator of eq.",
+        "section_id": "sec_007",
+        "section_heading": "Example: Variational Auto-Encoder",
+        "source_span": {
+          "paper_id": "1312.6114",
+          "section_id": "sec_007",
+          "char_start": 18155,
+          "char_end": 18277,
+          "tex_start": null,
+          "tex_end": null,
+          "raw_excerpt": "In this model both $\\pT(\\bz)$ (the prior) and $\\qPhi(\\bz|\\bx)$ are Gaussian; in this case, we can use the estimator of eq.",
+          "match_confidence": 1.0
+        },
+        "equations": [
+          {
+            "equation_id": "eq_035",
+            "latex": "\\qPhi(\\bz|\\bx)",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_002",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_002",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 8330,
+              "tex_end": 8346,
+              "raw_excerpt": "\\qPhi(\\bz|\\bx)",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_071",
+            "latex": "\\pT(\\bz)",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_005",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_005",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 16476,
+              "tex_end": 16486,
+              "raw_excerpt": "\\pT(\\bz)",
+              "match_confidence": 1.0
+            }
+          }
+        ],
+        "citations": [],
+        "extraction_confidence": 0.72,
+        "importance": "medium",
+        "role_in_paper": "deterministic prose atom",
+        "assumptions": [],
+        "conclusions": [],
+        "proof_sketch": null,
+        "key_terms": [],
+        "symbols": []
+      },
+      {
+        "atom_id": "atom_011",
+        "paper_id": "1312.6114",
+        "atom_type": "definition",
+        "text": "Optimization of this objective is equivalent to approximate MAP estimation, where the likelihood gradient is approximated by the gradient of the lower bound.",
+        "normalized_text": "Optimization of this objective is equivalent to approximate MAP estimation, where the likelihood gradient is approximated by the gradient of the lower bound.",
+        "section_id": "sec_009",
+        "section_heading": "Experiments",
+        "source_span": {
+          "paper_id": "1312.6114",
+          "section_id": "sec_009",
+          "char_start": 25176,
+          "char_end": 25333,
+          "tex_start": null,
+          "tex_end": null,
+          "raw_excerpt": "Optimization of this objective is equivalent to approximate MAP estimation, where the likelihood gradient is approximated by the gradient of the lower bound.",
+          "match_confidence": 1.0
+        },
+        "equations": [],
+        "citations": [
+          {
+            "citation_id": "atom_011_cite_001",
+            "key": "hinton1995wake",
+            "label": null,
+            "raw_bib_text": "",
+            "title": null,
+            "authors": [],
+            "year": null,
+            "venue": null,
+            "url": null,
+            "doi": null
+          },
+          {
+            "citation_id": "atom_011_cite_002",
+            "key": "duchi2010adaptive",
+            "label": null,
+            "raw_bib_text": "",
+            "title": null,
+            "authors": [],
+            "year": null,
+            "venue": null,
+            "url": null,
+            "doi": null
+          }
+        ],
+        "extraction_confidence": 0.72,
+        "importance": "medium",
+        "role_in_paper": "deterministic prose atom",
+        "assumptions": [],
+        "conclusions": [],
+        "proof_sketch": null,
+        "key_terms": [],
+        "symbols": []
+      },
+      {
+        "atom_id": "atom_012",
+        "paper_id": "1312.6114",
+        "atom_type": "bound",
+        "text": "Interestingly, superfluous latent variables did not result in overfitting, which is explained by the regularizing nature of the variational bound. [t] [t]1.",
+        "normalized_text": "Interestingly, superfluous latent variables did not result in overfitting, which is explained by the regularizing nature of the variational bound. [t] [t]1.",
+        "section_id": "sec_010",
+        "section_heading": "Likelihood lower bound",
+        "source_span": {
+          "paper_id": "1312.6114",
+          "section_id": "sec_010",
+          "char_start": 26529,
+          "char_end": 26864,
+          "tex_start": null,
+          "tex_end": null,
+          "raw_excerpt": "Interestingly, superfluous latent variables did not result in overfitting, which is explained by the regularizing nature of the variational bound. [t] [t]1 figs/graph_marglik.pdf Comparison of AEVB to the wake-sleep algorithm and Monte Carlo EM, in terms of the estimated marginal likelihood, for a different number of training points.",
+          "match_confidence": 0.85
+        },
+        "equations": [
+          {
+            "equation_id": "eq_133",
+            "latex": "500",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_010",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_010",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 33155,
+              "tex_end": 33160,
+              "raw_excerpt": "500",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_134",
+            "latex": "200",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_010",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_010",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 33196,
+              "tex_end": 33201,
+              "raw_excerpt": "200",
+              "match_confidence": 1.0
+            }
+          }
+        ],
+        "citations": [],
+        "extraction_confidence": 0.72,
+        "importance": "medium",
+        "role_in_paper": "deterministic prose atom",
+        "assumptions": [],
+        "conclusions": [],
+        "proof_sketch": null,
+        "key_terms": [],
+        "symbols": []
+      },
+      {
+        "atom_id": "atom_013",
+        "paper_id": "1312.6114",
+        "atom_type": "bound",
+        "text": "We have introduced a novel estimator of the variational lower bound, Stochastic Gradient VB (SGVB), for efficient approximate inference with continuous latent.",
+        "normalized_text": "We have introduced a novel estimator of the variational lower bound, Stochastic Gradient VB (SGVB), for efficient approximate inference with continuous latent.",
+        "section_id": "sec_013",
+        "section_heading": "Conclusion",
+        "source_span": {
+          "paper_id": "1312.6114",
+          "section_id": "sec_013",
+          "char_start": 28127,
+          "char_end": 28296,
+          "tex_start": null,
+          "tex_end": null,
+          "raw_excerpt": "We have introduced a novel estimator of the variational lower bound, Stochastic Gradient VB (SGVB), for efficient approximate inference with continuous latent variables.",
+          "match_confidence": 1.0
+        },
+        "equations": [],
+        "citations": [],
+        "extraction_confidence": 0.72,
+        "importance": "high",
+        "role_in_paper": "deterministic prose atom",
+        "assumptions": [],
+        "conclusions": [],
+        "proof_sketch": null,
+        "key_terms": [],
+        "symbols": []
+      },
+      {
+        "atom_id": "atom_014",
+        "paper_id": "1312.6114",
+        "atom_type": "bound",
+        "text": "The variational lower bound (the objective to be maximized) contains a KL term that can often be integrated analytically.",
+        "normalized_text": "The variational lower bound (the objective to be maximized) contains a KL term that can often be integrated analytically.",
+        "section_id": "sec_016",
+        "section_heading": "Solution of $- D_{KL}(\\qPhi(\\bz) || \\pT(\\bz))$, Gaussian case",
+        "source_span": {
+          "paper_id": "1312.6114",
+          "section_id": "sec_016",
+          "char_start": 30439,
+          "char_end": 30560,
+          "tex_start": null,
+          "tex_end": null,
+          "raw_excerpt": "The variational lower bound (the objective to be maximized) contains a KL term that can often be integrated analytically.",
+          "match_confidence": 1.0
+        },
+        "equations": [],
+        "citations": [],
+        "extraction_confidence": 0.72,
+        "importance": "medium",
+        "role_in_paper": "deterministic prose atom",
+        "assumptions": [],
+        "conclusions": [],
+        "proof_sketch": null,
+        "key_terms": [],
+        "symbols": []
+      },
+      {
+        "atom_id": "atom_015",
+        "paper_id": "1312.6114",
+        "atom_type": "algorithm",
+        "text": "For all algorithms the parameters were updated using the Adagrad stepsizes (with accompanying annealing schedule).",
+        "normalized_text": "For all algorithms the parameters were updated using the Adagrad stepsizes (with accompanying annealing schedule).",
+        "section_id": "sec_021",
+        "section_heading": "Monte Carlo EM",
+        "source_span": {
+          "paper_id": "1312.6114",
+          "section_id": "sec_021",
+          "char_start": 35355,
+          "char_end": 35469,
+          "tex_start": null,
+          "tex_end": null,
+          "raw_excerpt": "For all algorithms the parameters were updated using the Adagrad stepsizes (with accompanying annealing schedule).",
+          "match_confidence": 1.0
+        },
+        "equations": [
+          {
+            "equation_id": "eq_155",
+            "latex": "\\nabla_{\\bz} \\log \\pT(\\bz|\\bx) = \\nabla_{\\bz} \\log \\pT(\\bz) + \\nabla_{\\bz} \\log \\pT(\\bx|\\bz)",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_021",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_021",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 43467,
+              "tex_end": 43561,
+              "raw_excerpt": "\\nabla_{\\bz} \\log \\pT(\\bz|\\bx) = \\nabla_{\\bz} \\log \\pT(\\bz) + \\nabla_{\\bz} \\log \\pT(\\bx|\\bz)",
+              "match_confidence": 1.0
+            }
+          }
+        ],
+        "citations": [],
+        "extraction_confidence": 0.72,
+        "importance": "medium",
+        "role_in_paper": "deterministic prose atom",
+        "assumptions": [],
+        "conclusions": [],
+        "proof_sketch": null,
+        "key_terms": [],
+        "symbols": []
+      },
+      {
+        "atom_id": "atom_016",
+        "paper_id": "1312.6114",
+        "atom_type": "construction",
+        "text": "The estimator only depends on samples from $p(\\beps)$ and $p(\\bzeta)$ which are obviously not influenced by $\\bphi$, therefore the estimator can be.",
+        "normalized_text": "The estimator only depends on samples from $p(\\beps)$ and $p(\\bzeta)$ which are obviously not influenced by $\\bphi$, therefore the estimator can be.",
+        "section_id": "sec_022",
+        "section_heading": "Full VB",
+        "source_span": {
+          "paper_id": "1312.6114",
+          "section_id": "sec_022",
+          "char_start": 39540,
+          "char_end": 39718,
+          "tex_start": null,
+          "tex_end": null,
+          "raw_excerpt": "The estimator only depends on samples from $p(\\beps)$ and $p(\\bzeta)$ which are obviously not influenced by $\\bphi$, therefore the estimator can be differentiated w.r.t. $\\bphi$.",
+          "match_confidence": 1.0
+        },
+        "equations": [
+          {
+            "equation_id": "eq_066",
+            "latex": "p(\\beps)",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_005",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_005",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 15245,
+              "tex_end": 15255,
+              "raw_excerpt": "p(\\beps)",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_164",
+            "latex": "p(\\bzeta)",
+            "label": null,
+            "environment": "$...$",
+            "section_id": "sec_022",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_022",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 47174,
+              "tex_end": 47185,
+              "raw_excerpt": "p(\\bzeta)",
+              "match_confidence": 1.0
+            }
+          }
+        ],
+        "citations": [
+          {
+            "citation_id": "atom_016_cite_001",
+            "key": "duchi2010adaptive",
+            "label": null,
+            "raw_bib_text": "",
+            "title": null,
+            "authors": [],
+            "year": null,
+            "venue": null,
+            "url": null,
+            "doi": null
+          }
+        ],
+        "extraction_confidence": 0.72,
+        "importance": "medium",
+        "role_in_paper": "deterministic prose atom",
+        "assumptions": [],
+        "conclusions": [],
+        "proof_sketch": null,
+        "key_terms": [],
+        "symbols": []
+      },
+      {
+        "atom_id": "atom_017",
+        "paper_id": "1312.6114",
+        "atom_type": "definition",
+        "text": "These can be plugged into the lower bound defined above (eqs (eq:f_ap) and (eq:fullestimator_ap)).",
+        "normalized_text": "These can be plugged into the lower bound defined above (eqs (eq:f_ap) and (eq:fullestimator_ap)).",
+        "section_id": "sec_023",
+        "section_heading": "Example",
+        "source_span": {
+          "paper_id": "1312.6114",
+          "section_id": "sec_023",
+          "char_start": 41242,
+          "char_end": 41340,
+          "tex_start": null,
+          "tex_end": null,
+          "raw_excerpt": "These can be plugged into the lower bound defined above (eqs (eq:f_ap) and (eq:fullestimator_ap)).",
+          "match_confidence": 1.0
+        },
+        "equations": [
+          {
+            "equation_id": "eq_002",
+            "latex": "\\fPhi(\\bx, \\bz, \\bT) = N \\cdot (\\log \\pT(\\bx | \\bz) + \\log \\pT(\\bz) - \\log \\qPhi(\\bz|\\bx)) + \\log \\pA(\\bT) - \\log \\qPhi(\\bT)\n\\label{eq:f_ap}",
+            "label": "eq:f_ap",
+            "environment": "align",
+            "section_id": "sec_022",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_022",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 47635,
+              "tex_end": 47801,
+              "raw_excerpt": "\\fPhi(\\bx, \\bz, \\bT) = N \\cdot (\\log \\pT(\\bx | \\bz) + \\log \\pT(\\bz) - \\log \\qPhi(\\bz|\\bx)) + \\log \\pA(\\bT) - \\log \\qPhi(\\bT)\n\\label{eq:f_ap}",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_007",
+            "latex": "\\LBT{A}{\\bxi}\n&= \\frac{1}{L} \\sum_{l=1}^L \n\\log \\pT(\\bxi, \\bzil) - \\log \\qPhi(\\bzil|\\bxi) \\\\\n\\text{where \\quad} \\bzil &= \\gPhi(\\bepsil,\\bxi)\n\\text{\\quad and \\quad} \\bepsl \\sim p(\\beps)\n\\eqnr\\label{eq:fullestimator}",
+            "label": "eq:fullestimator",
+            "environment": "align*",
+            "section_id": "sec_005",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_005",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 15809,
+              "tex_end": 16051,
+              "raw_excerpt": "\\LBT{A}{\\bxi}\n&= \\frac{1}{L} \\sum_{l=1}^L \n\\log \\pT(\\bxi, \\bzil) - \\log \\qPhi(\\bzil|\\bxi) \\\\\n\\text{where \\quad} \\bzil &= \\gPhi(\\bepsil,\\bxi)\n\\text{\\quad and \\quad} \\bepsl \\sim p(\\beps)\n\\eqnr\\label{eq:fullestimator}",
+              "match_confidence": 1.0
+            }
+          },
+          {
+            "equation_id": "eq_026",
+            "latex": "\\mathcal{L}(\\bphi;\\bX)\n&\\simeq \\frac{1}{L} \\sum_{l=1}^L \\fPhi(\\bxl, \\gPhi(\\bepsl,\\bxl), \\hPhi(\\bzetal))\n\\eqnr\\label{eq:fullestimator_ap}",
+            "label": "eq:fullestimator_ap",
+            "environment": "align*",
+            "section_id": "sec_022",
+            "source_span": {
+              "paper_id": "1312.6114",
+              "section_id": "sec_022",
+              "char_start": null,
+              "char_end": null,
+              "tex_start": 47982,
+              "tex_end": 48145,
+              "raw_excerpt": "\\mathcal{L}(\\bphi;\\bX)\n&\\simeq \\frac{1}{L} \\sum_{l=1}^L \\fPhi(\\bxl, \\gPhi(\\bepsl,\\bxl), \\hPhi(\\bzetal))\n\\eqnr\\label{eq:fullestimator_ap}",
+              "match_confidence": 1.0
+            }
+          }
+        ],
+        "citations": [],
+        "extraction_confidence": 0.72,
+        "importance": "medium",
+        "role_in_paper": "deterministic prose atom",
+        "assumptions": [],
+        "conclusions": [],
+        "proof_sketch": null,
+        "key_terms": [],
+        "symbols": []
+      }
+    ],
+    "graph": {
+      "paper_id": "1312.6114",
+      "atom_ids": [
+        "atom_001",
+        "atom_002",
+        "atom_003",
+        "atom_004",
+        "atom_005",
+        "atom_006",
+        "atom_007",
+        "atom_008",
+        "atom_009",
+        "atom_010",
+        "atom_011",
+        "atom_012",
+        "atom_013",
+        "atom_014",
+        "atom_015",
+        "atom_016",
+        "atom_017"
+      ],
+      "edges": [],
+      "roots": [
+        "atom_001",
+        "atom_002",
+        "atom_003",
+        "atom_004",
+        "atom_005",
+        "atom_006",
+        "atom_007",
+        "atom_008",
+        "atom_009",
+        "atom_010",
+        "atom_011",
+        "atom_012",
+        "atom_013",
+        "atom_014",
+        "atom_015",
+        "atom_016",
+        "atom_017"
+      ],
+      "topological_order": [
+        "atom_001",
+        "atom_002",
+        "atom_003",
+        "atom_004",
+        "atom_005",
+        "atom_006",
+        "atom_007",
+        "atom_008",
+        "atom_009",
+        "atom_010",
+        "atom_011",
+        "atom_012",
+        "atom_013",
+        "atom_014",
+        "atom_015",
+        "atom_016",
+        "atom_017"
+      ],
+      "warnings": [
+        "llm_edges_failed: LLM request timed out for gemma-4-26b-a4b-it after 15.0s"
+      ]
+    },
+    "verdicts": [
+      {
+        "verdict_id": "v_atom_001_aa57bb",
+        "atom_id": "atom_001",
+        "label": "LIKELY_FLAWED",
+        "confidence": 0.75,
+        "reason_codes": [
+          "algebraic_failure"
+        ],
+        "rationale": "LIKELY_FLAWED for algorithm atom atom_001. Algebraic sanity check failed on at least one attached equation.",
+        "checks": [
+          {
+            "check_id": "check_alg_atom_001_5c261d",
+            "atom_id": "atom_001",
+            "kind": "algebraic_sanity",
+            "status": "failed",
+            "summary": "at least one attached equation does not simplify to an identity",
+            "evidence": [
+              {
+                "evidence_id": "ev_f4d9a301",
+                "source_type": "algebraic_check",
+                "text": "eq_074 ($...$): LHS - RHS = bX**M - bxi",
+                "paper_id": "1312.6114",
+                "atom_id": "atom_001",
+                "equation_id": "eq_074",
+                "citation_id": null,
+                "check_id": "check_alg_atom_001_5c261d",
+                "url": null,
+                "external_paper_id": null,
+                "confidence": 0.85,
+                "metadata": {
+                  "latex": "\\bX^M = \\{\\bxi\\}_{i=1}^M"
+                }
+              },
+              {
+                "evidence_id": "ev_dafc0800",
+                "source_type": "algebraic_check",
+                "text": "eq_075 ($...$): no relation to verify (bare expression)",
+                "paper_id": "1312.6114",
+                "atom_id": "atom_001",
+                "equation_id": "eq_075",
+                "citation_id": null,
+                "check_id": "check_alg_atom_001_5c261d",
+                "url": null,
+                "external_paper_id": null,
+                "confidence": 0.1,
+                "metadata": {
+                  "latex": "datapoints from the full dataset"
+                }
+              },
+              {
+                "evidence_id": "ev_c01b4845",
+                "source_type": "algebraic_check",
+                "text": "eq_076 ($...$): no relation to verify (bare expression)",
+                "paper_id": "1312.6114",
+                "atom_id": "atom_001",
+                "equation_id": "eq_076",
+                "citation_id": null,
+                "check_id": "check_alg_atom_001_5c261d",
+                "url": null,
+                "external_paper_id": null,
+                "confidence": 0.1,
+                "metadata": {
+                  "latex": "with"
+                }
+              },
+              {
+                "evidence_id": "ev_b5067c3e",
+                "source_type": "algebraic_check",
+                "text": "eq_077 ($...$): no relation to verify (bare expression)",
+                "paper_id": "1312.6114",
+                "atom_id": "atom_001",
+                "equation_id": "eq_077",
+                "citation_id": null,
+                "check_id": "check_alg_atom_001_5c261d",
+                "url": null,
+                "external_paper_id": null,
+                "confidence": 0.1,
+                "metadata": {
+                  "latex": "datapoints. In our experiments we found that the number of samples"
+                }
+              },
+              {
+                "evidence_id": "ev_88b6d63e",
+                "source_type": "algebraic_check",
+                "text": "eq_078 ($...$): no relation to verify (bare expression)",
+                "paper_id": "1312.6114",
+                "atom_id": "atom_001",
+                "equation_id": "eq_078",
+                "citation_id": null,
+                "check_id": "check_alg_atom_001_5c261d",
+                "url": null,
+                "external_paper_id": null,
+                "confidence": 0.1,
+                "metadata": {
+                  "latex": "per datapoint can be set to"
+                }
+              },
+              {
+                "evidence_id": "ev_129029b0",
+                "source_type": "algebraic_check",
+                "text": "eq_079 ($...$): no relation to verify (bare expression)",
+                "paper_id": "1312.6114",
+                "atom_id": "atom_001",
+                "equation_id": "eq_079",
+                "citation_id": null,
+                "check_id": "check_alg_atom_001_5c261d",
+                "url": null,
+                "external_paper_id": null,
+                "confidence": 0.1,
+                "metadata": {
+                  "latex": "as long as the minibatch size"
+                }
+              },
+              {
+                "evidence_id": "ev_b4a6d644",
+                "source_type": "algebraic_check",
+                "text": "eq_080 ($...$): no relation to verify (bare expression)",
+                "paper_id": "1312.6114",
+                "atom_id": "atom_001",
+                "equation_id": "eq_080",
+                "citation_id": null,
+                "check_id": "check_alg_atom_001_5c261d",
+                "url": null,
+                "external_paper_id": null,
+                "confidence": 0.1,
+                "metadata": {
+                  "latex": "was large enough, e.g."
+                }
+              },
+              {
+                "evidence_id": "ev_235aa2d1",
+                "source_type": "algebraic_check",
+                "text": "eq_081 ($...$): could not parse latex",
+                "paper_id": "1312.6114",
+                "atom_id": "atom_001",
+                "equation_id": "eq_081",
+                "citation_id": null,
+                "check_id": "check_alg_atom_001_5c261d",
+                "url": null,
+                "external_paper_id": null,
+                "confidence": 0.2,
+                "metadata": {
+                  "latex": ". Derivatives"
+                }
+              },
+              {
+                "evidence_id": "ev_fb5f5696",
+                "source_type": "algebraic_check",
+                "text": "eq_082 ($...$): no relation to verify (bare expression)",
+                "paper_id": "1312.6114",
+                "atom_id": "atom_001",
+                "equation_id": "eq_082",
+                "citation_id": null,
+                "check_id": "check_alg_atom_001_5c261d",
+                "url": null,
+                "external_paper_id": null,
+                "confidence": 0.1,
+                "metadata": {
+                  "latex": "\\gPhi(.)"
+                }
+              },
+              {
+                "evidence_id": "ev_e84ada1c",
+                "source_type": "algebraic_check",
+                "text": "eq_083 ($...$): no relation to verify (bare expression)",
+                "paper_id": "1312.6114",
+                "atom_id": "atom_001",
+                "equation_id": "eq_083",
+                "citation_id": null,
+                "check_id": "check_alg_atom_001_5c261d",
+                "url": null,
+                "external_paper_id": null,
+                "confidence": 0.1,
+                "metadata": {
+                  "latex": "\\bxi"
+                }
+              },
+              {
+                "evidence_id": "ev_58feb75e",
+                "source_type": "algebraic_check",
+                "text": "eq_084 ($...$): no relation to verify (bare expression)",
+                "paper_id": "1312.6114",
+                "atom_id": "atom_001",
+                "equation_id": "eq_084",
+                "citation_id": null,
+                "check_id": "check_alg_atom_001_5c261d",
+                "url": null,
+                "external_paper_id": null,
+                "confidence": 0.1,
+                "metadata": {
+                  "latex": "\\bepsl"
+                }
+              },
+              {
+                "evidence_id": "ev_ec0d9433",
+                "source_type": "algebraic_check",
+                "text": "eq_085 ($...$): LHS - RHS = bzil - gPhi(bepsl, bxi)",
+                "paper_id": "1312.6114",
+                "atom_id": "atom_001",
+                "equation_id": "eq_085",
+                "citation_id": null,
+                "check_id": "check_alg_atom_001_5c261d",
+                "url": null,
+                "external_paper_id": null,
+                "confidence": 0.85,
+                "metadata": {
+                  "latex": "\\bzil = \\gPhi(\\bepsl, \\bxi)"
+                }
+              },
+              {
+                "evidence_id": "ev_b6369c8f",
+                "source_type": "algebraic_check",
+                "text": "eq_086 ($...$): no relation to verify (bare expression)",
+                "paper_id": "1312.6114",
+                "atom_id": "atom_001",
+                "equation_id": "eq_086",
+                "citation_id": null,
+                "check_id": "check_alg_atom_001_5c261d",
+                "url": null,
+                "external_paper_id": null,
+                "confidence": 0.1,
+                "metadata": {
+                  "latex": "\\bzil \\sim \\qPhi(\\bz|\\bxi)"
+                }
+              },
+              {
+                "evidence_id": "ev_7db2bc8b",
+                "source_type": "algebraic_check",
+                "text": "eq_087 ($...$): no relation to verify (bare expression)",
+                "paper_id": "1312.6114",
+                "atom_id": "atom_001",
+                "equation_id": "eq_087",
+                "citation_id": null,
+                "check_id": "check_alg_atom_001_5c261d",
+                "url": null,
+                "external_paper_id": null,
+                "confidence": 0.1,
+                "metadata": {
+                  "latex": "\\bzil"
+                }
+              },
+              {
+                "evidence_id": "ev_32ffd644",
+                "source_type": "algebraic_check",
+                "text": "eq_088 ($...$): no relation to verify (bare expression)",
+                "paper_id": "1312.6114",
+                "atom_id": "atom_001",
+                "equation_id": "eq_088",
+                "citation_id": null,
+                "check_id": "check_alg_atom_001_5c261d",
+                "url": null,
+                "external_paper_id": null,
+                "confidence": 0.1,
+                "metadata": {
+                  "latex": "\\log \\pT(\\bxi|\\bzil)"
+                }
+              },
+              {
+                "evidence_id": "ev_11795604",
+                "source_type": "algebraic_check",
+                "text": "eq_089 ($...$): LHS - RHS = M - 100",
+                "paper_id": "1312.6114",
+                "atom_id": "atom_001",
+                "equation_id": "eq_089",
+                "citation_id": null,
+                "check_id": "check_alg_atom_001_5c261d",
+                "url": null,
+                "external_paper_id": null,
+                "confidence": 0.85,
+                "metadata": {
+                  "latex": "M=100"
+                }
+              },
+              {
+                "evidence_id": "ev_db5b892f",
+                "source_type": "algebraic_check",
+                "text": "eq_090 ($...$): LHS - RHS = L - 1",
+                "paper_id": "1312.6114",
+                "atom_id": "atom_001",
+                "equation_id": "eq_090",
+                "citation_id": null,
+                "check_id": "check_alg_atom_001_5c261d",
+                "url": null,
+                "external_paper_id": null,
+                "confidence": 0.85,
+                "metadata": {
+                  "latex": "L=1"
+                }
+              },
+              {
+                "evidence_id": "ev_744b9a0b",
+                "source_type": "algebraic_check",
+                "text": "eq_091 ($...$): no relation to verify (bare expression)",
+                "paper_id": "1312.6114",
+                "atom_id": "atom_001",
+                "equation_id": "eq_091",
+                "citation_id": null,
+                "check_id": "check_alg_atom_001_5c261d",
+                "url": null,
+                "external_paper_id": null,
+                "confidence": 0.1,
+                "metadata": {
+                  "latex": "\\bT, \\bphi \\gets"
+                }
+              },
+              {
+                "evidence_id": "ev_7353dbcf",
+                "source_type": "algebraic_check",
+                "text": "eq_092 ($...$): no relation to verify (bare expression)",
+                "paper_id": "1312.6114",
+                "atom_id": "atom_001",
+                "equation_id": "eq_092",
+                "citation_id": null,
+                "check_id": "check_alg_atom_001_5c261d",
+                "url": null,
+                "external_paper_id": null,
+                "confidence": 0.1,
+                "metadata": {
+                  "latex": "\\bX^M \\gets"
+                }
+              },
+              {
+                "evidence_id": "ev_44b46017",
+                "source_type": "algebraic_check",
+                "text": "eq_093 ($...$): no relation to verify (bare expression)",
+                "paper_id": "1312.6114",
+                "atom_id": "atom_001",
+                "equation_id": "eq_093",
+                "citation_id": null,
+                "check_id": "check_alg_atom_001_5c261d",
+                "url": null,
+                "external_paper_id": null,
+                "confidence": 0.1,
+                "metadata": {
+                  "latex": "\\beps \\gets"
+                }
+              },
+              {
+                "evidence_id": "ev_9c549b5b",
+                "source_type": "algebraic_check",
+                "text": "eq_094 ($...$): no relation to verify (bare expression)",
+                "paper_id": "1312.6114",
+                "atom_id": "atom_001",
+                "equation_id": "eq_094",
+                "citation_id": null,
+                "check_id": "check_alg_atom_001_5c261d",
+                "url": null,
+                "external_paper_id": null,
+                "confidence": 0.1,
+                "metadata": {
+                  "latex": "\\bg \\gets \\nabla_{\\bT,\\bphi} \\LBT{M}{\\bX^M,\\beps}"
+                }
+              },
+              {
+                "evidence_id": "ev_41455cfb",
+                "source_type": "algebraic_check",
+                "text": "eq_095 ($...$): no relation to verify (bare expression)",
+                "paper_id": "1312.6114",
+                "atom_id": "atom_001",
+                "equation_id": "eq_095",
+                "citation_id": null,
+                "check_id": "check_alg_atom_001_5c261d",
+                "url": null,
+                "external_paper_id": null,
+                "confidence": 0.1,
+                "metadata": {
+                  "latex": "\\bg"
+                }
+              },
+              {
+                "evidence_id": "ev_8139890d",
+                "source_type": "algebraic_check",
+                "text": "eq_096 ($...$): could not parse latex",
+                "paper_id": "1312.6114",
+                "atom_id": "atom_001",
+                "equation_id": "eq_096",
+                "citation_id": null,
+                "check_id": "check_alg_atom_001_5c261d",
+                "url": null,
+                "external_paper_id": null,
+                "confidence": 0.2,
+                "metadata": {
+                  "latex": "(\\bT,\\bphi)"
+                }
+              },
+              {
+                "evidence_id": "ev_f9162878",
+                "source_type": "algebraic_check",
+                "text": "eq_097 ($...$): no relation to verify (bare expression)",
+                "paper_id": "1312.6114",
+                "atom_id": "atom_001",
+                "equation_id": "eq_097",
+                "citation_id": null,
+                "check_id": "check_alg_atom_001_5c261d",
+                "url": null,
+                "external_paper_id": null,
+                "confidence": 0.1,
+                "metadata": {
+                  "latex": "\\bT, \\bphi"
+                }
+              }
+            ],
+            "confidence": 0.85,
+            "raw_details": {
+              "equations": [
+                {
+                  "status": "FAILED",
+                  "detail": "LHS - RHS = bX**M - bxi",
+                  "confidence": 0.85
+                },
+                {
+                  "status": "SKIPPED",
+                  "detail": "no relation to verify (bare expression)",
+                  "confidence": 0.1
+                },
+                {
+                  "status": "SKIPPED",
+                  "detail": "no relation to verify (bare expression)",
+                  "confidence": 0.1
+                },
+                {
+                  "status": "SKIPPED",
+                  "detail": "no relation to verify (bare expression)",
+                  "confidence": 0.1
+                },
+                {
+                  "status": "SKIPPED",
+                  "detail": "no relation to verify (bare expression)",
+                  "confidence": 0.1
+                },
+                {
+                  "status": "SKIPPED",
+                  "detail": "no relation to verify (bare expression)",
+                  "confidence": 0.1
+                },
+                {
+                  "status": "SKIPPED",
+                  "detail": "no relation to verify (bare expression)",
+                  "confidence": 0.1
+                },
+                {
+                  "status": "SKIPPED",
+                  "detail": "could not parse latex",
+                  "confidence": 0.2
+                },
+                {
+                  "status": "SKIPPED",
+                  "detail": "no relation to verify (bare expression)",
+                  "confidence": 0.1
+                },
+                {
+                  "status": "SKIPPED",
+                  "detail": "no relation to verify (bare expression)",
+                  "confidence": 0.1
+                },
+                {
+                  "status": "SKIPPED",
+                  "detail": "no relation to verify (bare expression)",
+                  "confidence": 0.1
+                },
+                {
+                  "status": "FAILED",
+                  "detail": "LHS - RHS = bzil - gPhi(bepsl, bxi)",
+                  "confidence": 0.85
+                },
+                {
+                  "status": "SKIPPED",
+                  "detail": "no relation to verify (bare expression)",
+                  "confidence": 0.1
+                },
+                {
+                  "status": "SKIPPED",
+                  "detail": "no relation to verify (bare expression)",
+                  "confidence": 0.1
+                },
+                {
+                  "status": "SKIPPED",
+                  "detail": "no relation to verify (bare expression)",
+                  "confidence": 0.1
+                },
+                {
+                  "status": "FAILED",
+                  "detail": "LHS - RHS = M - 100",
+                  "confidence": 0.85
+                },
+                {
+                  "status": "FAILED",
+                  "detail": "LHS - RHS = L - 1",
+                  "confidence": 0.85
+                },
+                {
+                  "status": "SKIPPED",
+                  "detail": "no relation to verify (bare expression)",
+                  "confidence": 0.1
+                },
+                {
+                  "status": "SKIPPED",
+                  "detail": "no relation to verify (bare expression)",
+                  "confidence": 0.1
+                },
+                {
+                  "status": "SKIPPED",
+                  "detail": "no relation to verify (bare expression)",
+                  "confidence": 0.1
+                },
+                {
+                  "status": "SKIPPED",
+                  "detail": "no relation to verify (bare expression)",
+                  "confidence": 0.1
+                },
+                {
+                  "status": "SKIPPED",
+                  "detail": "no relation to verify (bare expression)",
+                  "confidence": 0.1
+                },
+                {
+                  "status": "SKIPPED",
+                  "detail": "could not parse latex",
+                  "confidence": 0.2
+                },
+                {
+                  "status": "SKIPPED",
+                  "detail": "no relation to verify (bare expression)",
+                  "confidence": 0.1
+                }
+              ]
+            },
+            "error": null
+          },
+          {
+            "check_id": "check_num_atom_001_8a9350",
+            "atom_id": "atom_001",
+            "kind": "numeric_counterexample_probe",
+            "status": "not_applicable",
+            "summary": "The text provides specific constant values for experimental settings ($M=100, L=1$) rather than a universal mathematical assertion.",
+            "evidence": [
+              {
+                "evidence_id": "ev_6af8858c",
+                "source_type": "numeric_probe",
+                "text": "numeric_probe (not_applicable): The text provides specific constant values for experimental settings ($M=100, L=1$) rather than a universal mathematical assertion.",
+                "paper_id": "1312.6114",
+                "atom_id": "atom_001",
+                "equation_id": null,
+                "citation_id": null,
+                "check_id": "check_num_atom_001_8a9350",
+                "url": null,
+                "external_paper_id": null,
+                "confidence": 0.1,
+                "metadata": {}
+              }
+            ],
+            "confidence": 0.1,
+            "raw_details": {
+              "spec": {
+                "is_universal": false,
+                "predicate": null,
+                "domain": null,
+                "explanation": "The text provides specific constant values for experimental settings ($M=100, L=1$) rather than a universal mathematical assertion."
+              }
+            },
+            "error": null
+          },
+          {
+            "check_id": "check_cite_atom_001_159183",
+            "atom_id": "atom_001",
+            "kind": "citation_context",
+            "status": "inconclusive",
+            "summary": "all attached citations unresolved (no bib entry): duchi2010adaptive",
+            "evidence": [
+              {
+                "evidence_id": "ev_52d35cc1",
+                "source_type": "citation",
+                "text": "unresolved citation keys: duchi2010adaptive",
+                "paper_id": "1312.6114",
+                "atom_id": "atom_001",
+                "equation_id": null,
+                "citation_id": null,
+                "check_id": "check_cite_atom_001_159183",
+                "url": null,
+                "external_paper_id": null,
+                "confidence": 0.4,
+                "metadata": {}
+              }
+            ],
+            "confidence": 0.4,
+            "raw_details": {},
+            "error": null
+          }
+        ],
+        "challenges": [],
+        "rebuttals": [],
+        "evidence": [],
+        "is_cascaded": false,
+        "cascade_source_atom_id": null
+      },
+      {
+        "verdict_id": "v_atom_002_08b86c",
+        "atom_id": "atom_002",
+        "label": "NOT_CHECKABLE",
+        "confidence": 0.4,
+        "reason_codes": [
+          "checks_inconclusive"
+        ],
+        "rationale": "NOT_CHECKABLE for algorithm atom atom_002. Checks were not applicable or inconclusive and no challenges were generated.",
+        "checks": [],
+        "challenges": [],
+        "rebuttals": [],
+        "evidence": [],
+        "is_cascaded": false,
+        "cascade_source_atom_id": null
+      },
+      {
+        "verdict_id": "v_atom_003_525e37",
+        "atom_id": "atom_003",
+        "label": "NOT_CHECKABLE",
+        "confidence": 0.4,
+        "reason_codes": [
+          "checks_inconclusive"
+        ],
+        "rationale": "NOT_CHECKABLE for bound atom atom_003. Checks were not applicable or inconclusive and no challenges were generated.",
+        "checks": [],
+        "challenges": [],
+        "rebuttals": [],
+        "evidence": [],
+        "is_cascaded": false,
+        "cascade_source_atom_id": null
+      },
+      {
+        "verdict_id": "v_atom_004_cc118e",
+        "atom_id": "atom_004",
+        "label": "NOT_CHECKABLE",
+        "confidence": 0.2,
+        "reason_codes": [
+          "not_reviewed"
+        ],
+        "rationale": "technique atoms in section Method are not adversarially reviewed.",
+        "checks": [],
+        "challenges": [],
+        "rebuttals": [],
+        "evidence": [],
+        "is_cascaded": false,
+        "cascade_source_atom_id": null
+      },
+      {
+        "verdict_id": "v_atom_005_ec6bc5",
+        "atom_id": "atom_005",
+        "label": "NOT_CHECKABLE",
+        "confidence": 0.2,
+        "reason_codes": [
+          "not_reviewed"
+        ],
+        "rationale": "technique atoms in section Method are not adversarially reviewed.",
+        "checks": [],
+        "challenges": [],
+        "rebuttals": [],
+        "evidence": [],
+        "is_cascaded": false,
+        "cascade_source_atom_id": null
+      },
+      {
+        "verdict_id": "v_atom_006_35b223",
+        "atom_id": "atom_006",
+        "label": "NOT_CHECKABLE",
+        "confidence": 0.4,
+        "reason_codes": [
+          "checks_inconclusive"
+        ],
+        "rationale": "NOT_CHECKABLE for assumption atom atom_006. Checks were not applicable or inconclusive and no challenges were generated.",
+        "checks": [],
+        "challenges": [],
+        "rebuttals": [],
+        "evidence": [],
+        "is_cascaded": false,
+        "cascade_source_atom_id": null
+      },
+      {
+        "verdict_id": "v_atom_007_45aabd",
+        "atom_id": "atom_007",
+        "label": "NOT_CHECKABLE",
+        "confidence": 0.2,
+        "reason_codes": [
+          "not_reviewed"
+        ],
+        "rationale": "definition atoms in section The variational bound are not adversarially reviewed.",
+        "checks": [],
+        "challenges": [],
+        "rebuttals": [],
+        "evidence": [],
+        "is_cascaded": false,
+        "cascade_source_atom_id": null
+      },
+      {
+        "verdict_id": "v_atom_008_daa196",
+        "atom_id": "atom_008",
+        "label": "NOT_CHECKABLE",
+        "confidence": 0.4,
+        "reason_codes": [
+          "checks_inconclusive"
+        ],
+        "rationale": "NOT_CHECKABLE for assumption atom atom_008. Checks were not applicable or inconclusive and no challenges were generated.",
+        "checks": [],
+        "challenges": [],
+        "rebuttals": [],
+        "evidence": [],
+        "is_cascaded": false,
+        "cascade_source_atom_id": null
+      },
+      {
+        "verdict_id": "v_atom_009_afb38e",
+        "atom_id": "atom_009",
+        "label": "NOT_CHECKABLE",
+        "confidence": 0.4,
+        "reason_codes": [
+          "checks_inconclusive"
+        ],
+        "rationale": "NOT_CHECKABLE for bound atom atom_009. Checks were not applicable or inconclusive and no challenges were generated.",
+        "checks": [],
+        "challenges": [],
+        "rebuttals": [],
+        "evidence": [],
+        "is_cascaded": false,
+        "cascade_source_atom_id": null
+      },
+      {
+        "verdict_id": "v_atom_010_ab970b",
+        "atom_id": "atom_010",
+        "label": "NOT_CHECKABLE",
+        "confidence": 0.4,
+        "reason_codes": [
+          "checks_inconclusive"
+        ],
+        "rationale": "NOT_CHECKABLE for assertion atom atom_010. Checks were not applicable or inconclusive and no challenges were generated.",
+        "checks": [],
+        "challenges": [],
+        "rebuttals": [],
+        "evidence": [],
+        "is_cascaded": false,
+        "cascade_source_atom_id": null
+      },
+      {
+        "verdict_id": "v_atom_011_c20697",
+        "atom_id": "atom_011",
+        "label": "NOT_CHECKABLE",
+        "confidence": 0.2,
+        "reason_codes": [
+          "not_reviewed"
+        ],
+        "rationale": "definition atoms in section Experiments are not adversarially reviewed.",
+        "checks": [],
+        "challenges": [],
+        "rebuttals": [],
+        "evidence": [],
+        "is_cascaded": false,
+        "cascade_source_atom_id": null
+      },
+      {
+        "verdict_id": "v_atom_012_d92624",
+        "atom_id": "atom_012",
+        "label": "NOT_CHECKABLE",
+        "confidence": 0.4,
+        "reason_codes": [
+          "checks_inconclusive"
+        ],
+        "rationale": "NOT_CHECKABLE for bound atom atom_012. Checks were not applicable or inconclusive and no challenges were generated.",
+        "checks": [],
+        "challenges": [],
+        "rebuttals": [],
+        "evidence": [],
+        "is_cascaded": false,
+        "cascade_source_atom_id": null
+      },
+      {
+        "verdict_id": "v_atom_013_095b02",
+        "atom_id": "atom_013",
+        "label": "NOT_CHECKABLE",
+        "confidence": 0.4,
+        "reason_codes": [
+          "checks_inconclusive"
+        ],
+        "rationale": "NOT_CHECKABLE for bound atom atom_013. Checks were not applicable or inconclusive and no challenges were generated.",
+        "checks": [],
+        "challenges": [],
+        "rebuttals": [],
+        "evidence": [],
+        "is_cascaded": false,
+        "cascade_source_atom_id": null
+      },
+      {
+        "verdict_id": "v_atom_014_7485d2",
+        "atom_id": "atom_014",
+        "label": "NOT_CHECKABLE",
+        "confidence": 0.4,
+        "reason_codes": [
+          "checks_inconclusive"
+        ],
+        "rationale": "NOT_CHECKABLE for bound atom atom_014. Checks were not applicable or inconclusive and no challenges were generated.",
+        "checks": [],
+        "challenges": [],
+        "rebuttals": [],
+        "evidence": [],
+        "is_cascaded": false,
+        "cascade_source_atom_id": null
+      },
+      {
+        "verdict_id": "v_atom_015_cf1397",
+        "atom_id": "atom_015",
+        "label": "NOT_CHECKABLE",
+        "confidence": 0.4,
+        "reason_codes": [
+          "checks_inconclusive"
+        ],
+        "rationale": "NOT_CHECKABLE for algorithm atom atom_015. Checks were not applicable or inconclusive and no challenges were generated.",
+        "checks": [],
+        "challenges": [],
+        "rebuttals": [],
+        "evidence": [],
+        "is_cascaded": false,
+        "cascade_source_atom_id": null
+      },
+      {
+        "verdict_id": "v_atom_016_978510",
+        "atom_id": "atom_016",
+        "label": "NOT_CHECKABLE",
+        "confidence": 0.4,
+        "reason_codes": [
+          "checks_inconclusive"
+        ],
+        "rationale": "NOT_CHECKABLE for construction atom atom_016. Checks were not applicable or inconclusive and no challenges were generated.",
+        "checks": [],
+        "challenges": [],
+        "rebuttals": [],
+        "evidence": [],
+        "is_cascaded": false,
+        "cascade_source_atom_id": null
+      },
+      {
+        "verdict_id": "v_atom_017_500dfe",
+        "atom_id": "atom_017",
+        "label": "NOT_CHECKABLE",
+        "confidence": 0.2,
+        "reason_codes": [
+          "not_reviewed"
+        ],
+        "rationale": "definition atoms in section Example are not adversarially reviewed.",
+        "checks": [],
+        "challenges": [],
+        "rebuttals": [],
+        "evidence": [],
+        "is_cascaded": false,
+        "cascade_source_atom_id": null
+      }
+    ],
+    "markdown_report": "# Review Report — Auto-Encoding Variational Bayes\n\n- Atoms: 17  |  Reviewed: 12\n- No objection: 0  |  Contested: 0  |  Likely flawed: 1  |  Refuted: 0  |  Not checkable: 16\n\n**Graph warnings:** llm_edges_failed: LLM request timed out for gemma-4-26b-a4b-it after 15.0s\n\n## Atoms\n\n### atom_001 · algorithm · The SGVB estimator and AEVB algorithm — **LIKELY_FLAWED**\n_Confidence_: 0.75\n_Reasons_: algebraic_failure\n\n**Source excerpt:**\n> Minibatch version of the Auto-Encoding VB (AEVB) algorithm. Either of the two SGVB estimators in section (subsec:our_estimator) can be used. We use settings $M=100$ and $L=1$ in experiments.\n\n**Equations:**\n- `eq_074` ($...$): \\bX^M = \\{\\bxi\\}_{i=1}^M\n- `eq_075` ($...$): datapoints from the full dataset\n- `eq_076` ($...$): with\n- `eq_077` ($...$): datapoints. In our experiments we found that the number of samples\n- `eq_078` ($...$): per datapoint can be set to\n- `eq_079` ($...$): as long as the minibatch size\n\n**Citations:**\n- `atom_001_cite_001` key=duchi2010adaptive\n\n_Rationale_: LIKELY_FLAWED for algorithm atom atom_001. Algebraic sanity check failed on at least one attached equation.\n\n### atom_002 · algorithm · Full VB — **NOT_CHECKABLE**\n_Confidence_: 0.40\n_Reasons_: checks_inconclusive\n\n**Source excerpt:**\n> Pseudocode for computing a stochastic gradient using our estimator. See text for meaning of the functions $\\fPhi$, $\\gPhi$ and $\\hPhi$.\n\n**Equations:**\n- `eq_002` (align): \\fPhi(\\bx, \\bz, \\bT) = N \\cdot (\\log \\pT(\\bx | \\bz) + \\log \\pT(\\bz) - \\log \\qPhi(\\bz|\\bx)) + \\log \\pA(\\bT) - \\log \\qPhi(\\bT)\n\\label{eq:f_ap}\n- `eq_025` (align*): \\mathcal{L}(\\bphi;\\bX)\n&= \\int \\qPhi(\\bT) \\left( \\log \\pT(\\bX) + \\log \\pA(\\bT) - \\log \\qPhi(\\bT) \\right) \\,d\\bT \\\\\n&= \\int p(\\bzeta) \\left( \\log \\pT(\\bX) + \\log \\pA(\\bT) - \\log \\qPhi(\\bT) \\right) \\bigg|_{\\bT=\\hPhi(\\bzeta)} \\,d\\bzeta\n\\eqnr\\label{eq:reparameterizedbound1_ap}\n- `eq_026` (align*): \\mathcal{L}(\\bphi;\\bX)\n&\\simeq \\frac{1}{L} \\sum_{l=1}^L \\fPhi(\\bxl, \\gPhi(\\bepsl,\\bxl), \\hPhi(\\bzetal))\n\\eqnr\\label{eq:fullestimator_ap}\n- `eq_164` ($...$): p(\\bzeta)\n- `eq_165` ($...$): \\hPhi(\\bzeta)\n- `eq_166` ($...$): \\fPhi(\\bx, \\bz, \\bT)\n\n**Citations:**\n- `atom_002_cite_001` key=duchi2010adaptive\n\n_Rationale_: NOT_CHECKABLE for algorithm atom atom_002. Checks were not applicable or inconclusive and no challenges were generated.\n\n### atom_003 · bound · Abstract — **NOT_CHECKABLE**\n_Confidence_: 0.40\n_Reasons_: checks_inconclusive\n\n**Source excerpt:**\n> First, we show that a reparameterization of the variational lower bound yields a lower bound estimator that can be straightforwardly optimized using standard stochastic gradient methods.\n\n_Rationale_: NOT_CHECKABLE for bound atom atom_003. Checks were not applicable or inconclusive and no challenges were generated.\n\n### atom_004 · technique · Method — **NOT_CHECKABLE**\n_Confidence_: 0.20\n_Reasons_: not_reviewed\n\n**Source excerpt:**\n> We will restrict ourselves here to the common case where we have an i.i.d. dataset with latent variables per datapoint, and where we like to perform maximum likelihood (ML) or maximum a posteriori (MAP) inference on the (global) parameters, and variational inference on the latent variables.\n\n_Rationale_: technique atoms in section Method are not adversarially reviewed.\n\n### atom_005 · technique · Method — **NOT_CHECKABLE**\n_Confidence_: 0.20\n_Reasons_: not_reviewed\n\n**Source excerpt:**\n> The variational parameters $\\bphi$ are learned jointly with the generative model parameters $\\bT$.\n\n_Rationale_: technique atoms in section Method are not adversarially reviewed.\n\n### atom_006 · assumption · Problem scenario — **NOT_CHECKABLE**\n_Confidence_: 0.40\n_Reasons_: checks_inconclusive\n\n**Source excerpt:**\n> We assume that the data are generated by some random process, involving an unobserved continuous random variable $\\bz$.\n\n_Rationale_: NOT_CHECKABLE for assumption atom atom_006. Checks were not applicable or inconclusive and no challenges were generated.\n\n### atom_007 · definition · The variational bound — **NOT_CHECKABLE**\n_Confidence_: 0.20\n_Reasons_: not_reviewed\n\n**Source excerpt:**\n> However, the gradient of the lower bound w.r.t. $\\bphi$ is a bit problematic.\n\n**Citations:**\n- `atom_007_cite_001` key=blei2012variational\n\n_Rationale_: definition atoms in section The variational bound are not adversarially reviewed.\n\n### atom_008 · assumption · The SGVB estimator and AEVB algorithm — **NOT_CHECKABLE**\n_Confidence_: 0.40\n_Reasons_: checks_inconclusive\n\n**Source excerpt:**\n> We assume an approximate posterior in the form $\\qPhi(\\bz|\\bx)$, but please note that the technique can be applied to the case $\\qPhi(\\bz)$, i.e. where we do not condition on $\\bx$, as well.\n\n**Equations:**\n- `eq_035` ($...$): \\qPhi(\\bz|\\bx)\n- `eq_062` ($...$): \\qPhi(\\bz)\n\n**Citations:**\n- `atom_008_cite_001` key=duchi2010adaptive\n\n_Rationale_: NOT_CHECKABLE for assumption atom atom_008. Checks were not applicable or inconclusive and no challenges were generated.\n\n### atom_009 · bound · The reparameterization trick — **NOT_CHECKABLE**\n_Confidence_: 0.40\n_Reasons_: checks_inconclusive\n\n**Source excerpt:**\n> In section (subsec:our_estimator) we applied this trick to obtain a differentiable estimator of the variational lower bound.\n\n**Citations:**\n- `atom_009_cite_001` key=devroye1986sample\n\n_Rationale_: NOT_CHECKABLE for bound atom atom_009. Checks were not applicable or inconclusive and no challenges were generated.\n\n### atom_010 · assertion · Example: Variational Auto-Encoder — **NOT_CHECKABLE**\n_Confidence_: 0.40\n_Reasons_: checks_inconclusive\n\n**Source excerpt:**\n> In this model both $\\pT(\\bz)$ (the prior) and $\\qPhi(\\bz|\\bx)$ are Gaussian; in this case, we can use the estimator of eq.\n\n**Equations:**\n- `eq_035` ($...$): \\qPhi(\\bz|\\bx)\n- `eq_071` ($...$): \\pT(\\bz)\n\n_Rationale_: NOT_CHECKABLE for assertion atom atom_010. Checks were not applicable or inconclusive and no challenges were generated.\n\n### atom_011 · definition · Experiments — **NOT_CHECKABLE**\n_Confidence_: 0.20\n_Reasons_: not_reviewed\n\n**Source excerpt:**\n> Optimization of this objective is equivalent to approximate MAP estimation, where the likelihood gradient is approximated by the gradient of the lower bound.\n\n**Citations:**\n- `atom_011_cite_001` key=hinton1995wake\n- `atom_011_cite_002` key=duchi2010adaptive\n\n_Rationale_: definition atoms in section Experiments are not adversarially reviewed.\n\n### atom_012 · bound · Likelihood lower bound — **NOT_CHECKABLE**\n_Confidence_: 0.40\n_Reasons_: checks_inconclusive\n\n**Source excerpt:**\n> Interestingly, superfluous latent variables did not result in overfitting, which is explained by the regularizing nature of the variational bound. [t] [t]1 figs/graph_marglik.pdf Comparison of AEVB to the wake-sleep algorithm and Monte Carlo EM, in terms of the estimated marginal likelihood, for a different number of training points.\n\n**Equations:**\n- `eq_133` ($...$): 500\n- `eq_134` ($...$): 200\n\n_Rationale_: NOT_CHECKABLE for bound atom atom_012. Checks were not applicable or inconclusive and no challenges were generated.\n\n### atom_013 · bound · Conclusion — **NOT_CHECKABLE**\n_Confidence_: 0.40\n_Reasons_: checks_inconclusive\n\n**Source excerpt:**\n> We have introduced a novel estimator of the variational lower bound, Stochastic Gradient VB (SGVB), for efficient approximate inference with continuous latent variables.\n\n_Rationale_: NOT_CHECKABLE for bound atom atom_013. Checks were not applicable or inconclusive and no challenges were generated.\n\n### atom_014 · bound · Solution of $- D_{KL}(\\qPhi(\\bz) || \\pT(\\bz))$, Gaussian case — **NOT_CHECKABLE**\n_Confidence_: 0.40\n_Reasons_: checks_inconclusive\n\n**Source excerpt:**\n> The variational lower bound (the objective to be maximized) contains a KL term that can often be integrated analytically.\n\n_Rationale_: NOT_CHECKABLE for bound atom atom_014. Checks were not applicable or inconclusive and no challenges were generated.\n\n### atom_015 · algorithm · Monte Carlo EM — **NOT_CHECKABLE**\n_Confidence_: 0.40\n_Reasons_: checks_inconclusive\n\n**Source excerpt:**\n> For all algorithms the parameters were updated using the Adagrad stepsizes (with accompanying annealing schedule).\n\n**Equations:**\n- `eq_155` ($...$): \\nabla_{\\bz} \\log \\pT(\\bz|\\bx) = \\nabla_{\\bz} \\log \\pT(\\bz) + \\nabla_{\\bz} \\log \\pT(\\bx|\\bz)\n\n_Rationale_: NOT_CHECKABLE for algorithm atom atom_015. Checks were not applicable or inconclusive and no challenges were generated.\n\n### atom_016 · construction · Full VB — **NOT_CHECKABLE**\n_Confidence_: 0.40\n_Reasons_: checks_inconclusive\n\n**Source excerpt:**\n> The estimator only depends on samples from $p(\\beps)$ and $p(\\bzeta)$ which are obviously not influenced by $\\bphi$, therefore the estimator can be differentiated w.r.t. $\\bphi$.\n\n**Equations:**\n- `eq_066` ($...$): p(\\beps)\n- `eq_164` ($...$): p(\\bzeta)\n\n**Citations:**\n- `atom_016_cite_001` key=duchi2010adaptive\n\n_Rationale_: NOT_CHECKABLE for construction atom atom_016. Checks were not applicable or inconclusive and no challenges were generated.\n\n### atom_017 · definition · Example — **NOT_CHECKABLE**\n_Confidence_: 0.20\n_Reasons_: not_reviewed\n\n**Source excerpt:**\n> These can be plugged into the lower bound defined above (eqs (eq:f_ap) and (eq:fullestimator_ap)).\n\n**Equations:**\n- `eq_002` (align): \\fPhi(\\bx, \\bz, \\bT) = N \\cdot (\\log \\pT(\\bx | \\bz) + \\log \\pT(\\bz) - \\log \\qPhi(\\bz|\\bx)) + \\log \\pA(\\bT) - \\log \\qPhi(\\bT)\n\\label{eq:f_ap}\n- `eq_007` (align*): \\LBT{A}{\\bxi}\n&= \\frac{1}{L} \\sum_{l=1}^L \n\\log \\pT(\\bxi, \\bzil) - \\log \\qPhi(\\bzil|\\bxi) \\\\\n\\text{where \\quad} \\bzil &= \\gPhi(\\bepsil,\\bxi)\n\\text{\\quad and \\quad} \\bepsl \\sim p(\\beps)\n\\eqnr\\label{eq:fullestimator}\n- `eq_026` (align*): \\mathcal{L}(\\bphi;\\bX)\n&\\simeq \\frac{1}{L} \\sum_{l=1}^L \\fPhi(\\bxl, \\gPhi(\\bepsl,\\bxl), \\hPhi(\\bzetal))\n\\eqnr\\label{eq:fullestimator_ap}\n\n_Rationale_: definition atoms in section Example are not adversarially reviewed.\n",
+    "limitations": [],
+    "warnings": [
+      "llm_edges_failed: LLM request timed out for gemma-4-26b-a4b-it after 15.0s"
+    ]
+  }
+}

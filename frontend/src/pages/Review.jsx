@@ -134,6 +134,7 @@ function reducer(state, action) {
         stage: action.payload.dag?.stage,
         extraction_batches_completed: action.payload.dag?.extraction_batches_completed,
         extraction_batches_total: action.payload.dag?.extraction_batches_total,
+        extraction_current_batch: action.payload.dag?.extraction_current_batch,
       },
       atoms,
       buildStage: action.payload.dag?.stage || action.payload.status?.review_stage || action.payload.status?.status || 'Loading DAG',
@@ -144,13 +145,49 @@ function reducer(state, action) {
   const { event_type, atom_id, payload } = action
   switch (event_type) {
     case 'source_fetch_complete':
-      return { ...state, buildStage: 'Parsing TeX' }
+      return {
+        ...state,
+        buildStage: 'Parsing TeX',
+        status: { ...state.status, paper_id: payload.paper_id || state.status?.paper_id },
+      }
     case 'parse_started':
       return { ...state, buildStage: 'Parsing TeX' }
     case 'parse_complete':
-      return { ...state, buildStage: 'Extracting atoms' }
+      return {
+        ...state,
+        buildStage: 'Extracting atoms',
+        status: { ...state.status, paper_title: payload.title || state.status?.paper_title },
+      }
     case 'atom_extraction_started':
       return { ...state, buildStage: 'Extracting atoms' }
+    case 'atom_extraction_progress':
+      {
+        const progressNodes = Array.isArray(payload.nodes)
+          ? payload.nodes.map(n => ({ ...n, id: n.id || n.atom_id }))
+          : state.dag.nodes
+        const progressAtoms = {}
+        for (const node of progressNodes) {
+          progressAtoms[node.id] = { ...(state.atoms[node.id] || {}), ...node }
+        }
+        return {
+          ...state,
+          buildStage: payload.stage || state.buildStage || 'Extracting atoms',
+          atoms: progressAtoms,
+          dag: {
+            ...state.dag,
+            nodes: progressNodes,
+            edges: Array.isArray(payload.edges) ? payload.edges : state.dag.edges,
+            stage: payload.stage || state.dag.stage,
+            parsed_atoms: payload.parsed_atoms ?? progressNodes.length,
+            total_atoms: payload.total_atoms ?? state.dag.total_atoms,
+            extraction_batches_completed: payload.extraction_batches_completed ?? state.dag.extraction_batches_completed,
+            extraction_batches_total: payload.extraction_batches_total ?? state.dag.extraction_batches_total,
+            extraction_current_batch: payload.extraction_current_batch ?? state.dag.extraction_current_batch,
+            recent_atoms: payload.recent_atoms ?? state.dag.recent_atoms,
+          },
+          recentAtoms: payload.recent_atoms ?? state.recentAtoms,
+        }
+      }
     case 'atom_created': {
       const newAtom = { ...payload, id: payload.id || payload.atom_id }
       const exists = Boolean(state.atoms[newAtom.id])
@@ -397,24 +434,21 @@ function isScopeClarification(rebuttal = {}) {
 function BuildProgress({ state, nodes, edges, completed, total }) {
   const extractionTotal = state.dag?.extraction_batches_total || 0
   const extractionDone = state.dag?.extraction_batches_completed || 0
-  const inExtraction = extractionTotal > 0 && state.buildStage.toLowerCase().includes('extract')
+  const extractionCurrent = state.dag?.extraction_current_batch || extractionDone
   const parsed = state.dag?.parsed_atoms ?? nodes.length
-  const knownTotal = inExtraction ? 0 : Math.max(total || 0, state.dag?.total_atoms || 0, nodes.length)
-  const atomPct = knownTotal ? Math.round((completed / knownTotal) * 100) : 0
-  const parsedPct = knownTotal ? Math.round((parsed / knownTotal) * 100) : 0
-  const batchPct = extractionTotal ? 25 + Math.round((extractionDone / extractionTotal) * 35) : 0
   const isComplete = state.status?.status === 'complete' || state.status?.status === 'completed'
-  const hasDiscoveredAtoms = nodes.length > 0 || parsed > 0
-  const rawPct = isComplete
-    ? 100
-    : !hasDiscoveredAtoms
-      ? 0
-    : Math.max(stageProgress(state.buildStage), atomPct, parsedPct > 0 ? Math.min(parsedPct, 65) : 0, batchPct)
+  // Progress advances when a batch starts, instead of waiting until it finishes.
+  const visibleBatch = Math.max(extractionDone, extractionCurrent)
+  const batchPct = extractionTotal > 0
+    ? Math.round((visibleBatch / extractionTotal) * 100)
+    : 0
+  const dagBuilt = edges.length > 0 || state.buildStage.toLowerCase().includes('review') || state.buildStage.toLowerCase().includes('ready')
+  const rawPct = isComplete ? 100 : dagBuilt ? Math.max(90, batchPct) : Math.min(batchPct, 90)
   const [maxPct, setMaxPct] = useState(rawPct)
   useEffect(() => {
     setMaxPct(prev => Math.max(prev, rawPct))
   }, [rawPct])
-  const pct = !isComplete && !hasDiscoveredAtoms ? 0 : maxPct
+  const pct = maxPct
   const recent = state.recentAtoms?.length ? state.recentAtoms : nodes.slice(-5)
 
   return (
@@ -423,10 +457,12 @@ function BuildProgress({ state, nodes, edges, completed, total }) {
         <div className="min-w-0">
           <div className="font-semibold text-[#E4E7F0]">{state.buildStage}</div>
           <div className="text-white/50">
-            {inExtraction
-              ? `${parsed} atoms discovered · batch ${extractionDone}/${extractionTotal}`
-              : knownTotal ? `${parsed}/${knownTotal} atoms parsed` : 'Discovering atoms...'}
-            {knownTotal > 0 && ` · ${completed}/${knownTotal} reviewed`}
+            {extractionTotal > 0
+              ? `batch ${extractionCurrent}/${extractionTotal} · ${parsed} atoms discovered`
+              : parsed > 0
+                ? `${parsed} atoms discovered`
+                : 'Starting extraction...'}
+            {total > 0 && ` · ${completed}/${total} reviewed`}
             {edges.length > 0 && ` · ${edges.length} dependencies linked`}
           </div>
         </div>
@@ -447,18 +483,6 @@ function BuildProgress({ state, nodes, edges, completed, total }) {
       )}
     </div>
   )
-}
-
-function stageProgress(stage = '') {
-  const normalized = stage.toLowerCase()
-  if (normalized.includes('ready')) return 100
-  if (normalized.includes('report')) return 95
-  if (normalized.includes('review')) return 72
-  if (normalized.includes('dependency')) return 62
-  if (normalized.includes('extract')) return 38
-  if (normalized.includes('parsing')) return 20
-  if (normalized.includes('preparing')) return 8
-  return 5
 }
 
 export default function Review() {
@@ -602,6 +626,7 @@ export default function Review() {
   const selectedStatementCollapsed = selectedStatementIsLong && !statementExpanded
   const completed = state.status?.completed_atoms ?? 0
   const total = state.status?.total_atoms ?? nodes.length
+  const paperTitle = state.status?.paper_title
 
   const handleExport = () => {
     if (!reportContent) return
@@ -623,6 +648,11 @@ export default function Review() {
           <Link to="/" className="text-[#5B5BD6] text-sm hover:underline">← Home</Link>
           <span className="text-sm opacity-60">Job</span>
           <span className="text-sm font-mono">{jobId}</span>
+          {paperTitle && (
+            <span className="max-w-[520px] truncate text-sm text-white/75" title={paperTitle}>
+              {paperTitle}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-4 text-sm">
           <span className="opacity-60">Status:</span>
@@ -767,7 +797,7 @@ export default function Review() {
                     <div className="text-[10px] uppercase tracking-wider opacity-50 font-sans">Review Thread</div>
                     <div className="mt-2 flex items-center gap-2 rounded border border-yellow-500/20 bg-yellow-500/10 px-2 py-1 text-[10px] uppercase tracking-wide text-yellow-200">
                       <span className="h-2 w-2 rounded-full bg-yellow-300" />
-                      Yellow = important feature clarifies scope
+                      important feature
                     </div>
                   </div>
                   {uniqueBy(state.challenges[selected.id] || [], challengeKey).map((c, i) => {

@@ -2,11 +2,43 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ReactFlow, Background, Controls, Handle, Position } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
+import ReactMarkdown from 'react-markdown'
+import remarkBreaks from 'remark-breaks'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
+import 'katex/dist/katex.min.css'
 import dagre from 'dagre'
 import { api } from '../api/client'
 
 const LEVELS = ['layperson', 'undergraduate', 'graduate', 'expert']
 const TABS = ['explain', 'prerequisites', 'exercises', 'tutor']
+const LATEX_REMARK_PLUGINS = [remarkMath, remarkBreaks]
+const LATEX_REHYPE_PLUGINS = [rehypeKatex]
+const INLINE_LATEX_COMPONENTS = {
+  p: ({ children }) => <>{children}</>,
+}
+
+function normalizeLatexDelimiters(value = '') {
+  return String(value || '')
+    .replace(/\\\[/g, '$$')
+    .replace(/\\\]/g, '$$')
+    .replace(/\\\(/g, '$')
+    .replace(/\\\)/g, '$')
+}
+
+function LatexText({ children, className = '', inline = false }) {
+  const body = (
+    <ReactMarkdown
+      remarkPlugins={LATEX_REMARK_PLUGINS}
+      rehypePlugins={LATEX_REHYPE_PLUGINS}
+      components={inline ? INLINE_LATEX_COMPONENTS : undefined}
+    >
+      {normalizeLatexDelimiters(children)}
+    </ReactMarkdown>
+  )
+  if (inline) return <span className={className}>{body}</span>
+  return <div className={className}>{body}</div>
+}
 
 function ReaderNode({ data }) {
   const isSelected = data.selectedId === data.id
@@ -16,7 +48,7 @@ function ReaderNode({ data }) {
     <>
       <Handle type="target" position={Position.Left} className="!w-2 !h-2 !border-0" style={{ background: color }} />
       <div
-        className="px-4 py-2 border rounded-md min-w-[170px] transition-all duration-200"
+        className="box-border flex h-[118px] w-[300px] flex-col overflow-hidden rounded-md border px-4 py-3 transition-all duration-200"
         style={{
           backgroundColor: '#101A1E',
           borderColor: isSelected ? color : `${color}55`,
@@ -24,11 +56,16 @@ function ReaderNode({ data }) {
         }}
       >
         <div className="flex items-center gap-2 mb-1">
-          <span className="w-2 h-2 rounded-full inline-block" style={{ background: color, boxShadow: `0 0 5px ${color}` }} />
-          <span className="text-[10px] uppercase font-mono opacity-70 text-[#E4E7F0]">{data.atom_type}</span>
+          <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: color, boxShadow: `0 0 5px ${color}` }} />
+          <span className="min-w-0 truncate text-[10px] uppercase font-mono opacity-70 text-[#E4E7F0]">{data.atom_type}</span>
           {data.start_here && <span className="ml-auto text-[10px] text-[#FBBF24]">START</span>}
         </div>
-        <div className="text-xs font-sans truncate text-[#E4E7F0]">{compactLabel(data.label || data.source_excerpt || data.id)}</div>
+        <div className="line-clamp-3 min-w-0 text-xs leading-snug font-sans text-[#E4E7F0] break-words">
+          {compactLabel(data.label || data.text || data.source_excerpt || data.id)}
+        </div>
+        {data.section && (
+          <div className="mt-auto truncate pt-2 text-[10px] font-mono text-[#6B7280]">{data.section}</div>
+        )}
       </div>
       <Handle type="source" position={Position.Right} className="!w-2 !h-2 !border-0" style={{ background: color }} />
     </>
@@ -142,34 +179,38 @@ function normalizeGraph(g = {}) {
     total_atoms: g.total_atoms || (g.nodes || []).length,
     extraction_batches_completed: g.extraction_batches_completed,
     extraction_batches_total: g.extraction_batches_total,
+    extraction_current_batch: g.extraction_current_batch,
     recent_atoms: g.recent_atoms || [],
   }
 }
 
 function compactLabel(value = '') {
-  const words = String(value)
-    .replace(/[$\\{}[\]().,;:]/g, ' ')
+  const cleaned = String(value)
     .split(/\s+/)
     .filter(Boolean)
-  return words.slice(0, 6).join(' ') || String(value)
+    .join(' ')
+  if (cleaned.length <= 96) return cleaned || String(value)
+  const dangling = new Set(['a', 'an', 'the', 'at', 'to', 'of', 'by', 'with', 'for', 'from', 'in', 'on', 'and', 'or', 'but', 'as', 'than', 'that', 'which', 'less', 'more'])
+  const words = cleaned.slice(0, 96).split(/\s+/)
+  words.pop()
+  while (words.length && dangling.has(words[words.length - 1].toLowerCase())) {
+    words.pop()
+  }
+  return words.join(' ') || cleaned.slice(0, 96)
 }
 
 function BuildProgress({ graph, status, buildStage }) {
   const extractionTotal = graph.extraction_batches_total || 0
   const extractionDone = graph.extraction_batches_completed || 0
-  // inExtraction: true whenever the stage says 'extract', regardless of whether batch info has arrived
-  const inExtraction = status?.status !== 'complete' && buildStage.toLowerCase().includes('extract')
-  const total = inExtraction ? 0 : (graph.total_atoms || status?.total_atoms || graph.nodes.length || 0)
+  const extractionCurrent = graph.extraction_current_batch || extractionDone
   const parsed = graph.parsed_atoms || graph.nodes.length || 0
-  const hasKnownTotal = total > 0
-  const stageFloor = stageProgress(buildStage)
-  const nextFloor = stageProgress('dependency') // 72 — extraction ends when graph build starts
-  const atomPct = hasKnownTotal ? Math.round((parsed / total) * 100) : 0
-  // Batch progress starts at stageFloor and advances toward the next stage floor
-  const batchPct = inExtraction && extractionTotal > 0
-    ? stageFloor + Math.round((extractionDone / extractionTotal) * (nextFloor - stageFloor))
+  // Progress advances when a batch starts, instead of waiting until it finishes.
+  const visibleBatch = Math.max(extractionDone, extractionCurrent)
+  const batchPct = extractionTotal > 0
+    ? Math.round((visibleBatch / extractionTotal) * 100)
     : 0
-  const rawPct = status?.status === 'complete' ? 100 : Math.max(stageFloor, atomPct, batchPct)
+  const dagBuilt = graph.edges.length > 0 || buildStage.toLowerCase().includes('ready')
+  const rawPct = status?.status === 'complete' ? 100 : dagBuilt ? Math.max(90, batchPct) : Math.min(batchPct, 90)
   const [maxPct, setMaxPct] = useState(0)
   useEffect(() => {
     setMaxPct(prev => Math.max(prev, rawPct))
@@ -183,11 +224,11 @@ function BuildProgress({ graph, status, buildStage }) {
         <div className="min-w-0">
           <div className="font-semibold text-[#E4E7F0]">{buildStage}</div>
           <div className="text-[#6B7280]">
-            {inExtraction
-              ? extractionTotal > 0
-                ? `${parsed} atoms discovered · batch ${extractionDone}/${extractionTotal}`
-                : parsed > 0 ? `${parsed} atoms discovered · starting LLM pass...` : 'Starting extraction...'
-              : hasKnownTotal ? `${parsed}/${total} atoms parsed` : 'Discovering atoms...'}
+            {extractionTotal > 0
+              ? `batch ${extractionCurrent}/${extractionTotal} · ${parsed} atoms discovered`
+              : parsed > 0
+                ? `${parsed} atoms discovered`
+                : 'Starting extraction...'}
             {graph.edges.length > 0 && ` · ${graph.edges.length} dependencies linked`}
           </div>
         </div>
@@ -208,16 +249,6 @@ function BuildProgress({ graph, status, buildStage }) {
       )}
     </div>
   )
-}
-
-function stageProgress(stage = '') {
-  const normalized = stage.toLowerCase()
-  if (normalized.includes('ready')) return 100
-  if (normalized.includes('dependency')) return 72
-  if (normalized.includes('extract')) return 40
-  if (normalized.includes('parsing')) return 20
-  if (normalized.includes('preparing')) return 5
-  return 0
 }
 
 function ExercisesTab({ annotation, sessionId, atomId }) {
@@ -251,7 +282,7 @@ function ExercisesTab({ annotation, sessionId, atomId }) {
         return (
           <div key={ex.exercise_id} className="rounded border border-white/10 bg-[#0B1115] p-3">
             <div className="text-[10px] uppercase tracking-wider text-[#67E8F9] mb-2">{(ex.exercise_type || 'exercise').replace(/_/g, ' ')}</div>
-            <div className="text-sm leading-relaxed text-[#E4E7F0] mb-3">{isMcq ? mcq.prompt : ex.prompt}</div>
+            <LatexText className="text-sm leading-relaxed text-[#E4E7F0] mb-3">{isMcq ? mcq.prompt : ex.prompt}</LatexText>
             {!result ? (
               isMcq ? (
                 <div className="space-y-3">
@@ -269,7 +300,7 @@ function ExercisesTab({ annotation, sessionId, atomId }) {
                           <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border text-[11px] font-semibold ${selected ? 'border-[#00AFA3] text-[#67E8F9]' : 'border-white/20 text-[#6B7280]'}`}>
                             {option.label}
                           </span>
-                          <span className="leading-relaxed">{option.text}</span>
+                          <LatexText inline className="leading-relaxed">{option.text}</LatexText>
                         </button>
                       )
                     })}
@@ -305,8 +336,11 @@ function ExercisesTab({ annotation, sessionId, atomId }) {
                 <div className={`text-sm font-semibold ${result.correct ? 'text-[#16A34A]' : 'text-[#EF4444]'}`}>
                   {result.correct ? 'Correct' : 'Not quite'}
                 </div>
-                <div className="text-xs text-[#AAB4C2]">{result.feedback}</div>
-                <div className="text-xs rounded bg-white/5 p-2"><span className="text-[#6B7280]">Answer key: </span>{ex.answer_key}</div>
+                <LatexText className="text-xs text-[#AAB4C2]">{result.feedback}</LatexText>
+                <div className="text-xs rounded bg-white/5 p-2">
+                  <span className="text-[#6B7280]">Answer key: </span>
+                  <LatexText inline>{ex.answer_key}</LatexText>
+                </div>
               </div>
             )}
           </div>
@@ -570,14 +604,14 @@ export default function Reader() {
       },
     }))
 
-    mappedNodes.forEach(node => dagreGraph.setNode(node.id, { width: 250, height: 80 }))
+    mappedNodes.forEach(node => dagreGraph.setNode(node.id, { width: 300, height: 118 }))
     mappedEdges.forEach(edge => dagreGraph.setEdge(edge.source, edge.target))
     dagre.layout(dagreGraph)
 
     return {
       rfNodes: mappedNodes.map(node => {
         const pos = dagreGraph.node(node.id)
-        return { ...node, position: { x: pos.x - 125, y: pos.y - 40 } }
+        return { ...node, position: { x: pos.x - 150, y: pos.y - 59 } }
       }),
       rfEdges: mappedEdges,
     }
@@ -594,7 +628,7 @@ export default function Reader() {
       <header className="flex items-center justify-between px-6 py-3 bg-[#101A1E] border-b border-white/10 z-10">
         <div className="flex items-center gap-4 min-w-0">
           <Link to="/" className="text-[#67E8F9] text-sm hover:underline">Home</Link>
-          <span className="text-sm opacity-60">Learner</span>
+          <span className="text-sm opacity-60">Learn</span>
           <span className="text-sm font-mono truncate max-w-[260px]">{sessionId}</span>
           {title && <span className="text-xs text-[#6B7280] truncate max-w-[360px]">{title}</span>}
         </div>

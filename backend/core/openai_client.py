@@ -18,7 +18,7 @@ def make_async_openai() -> AsyncOpenAI:
     default_headers: dict[str, str] | None = None
 
     if _use_openrouter():
-        api_key = settings.openrouter_api_key
+        api_key = settings.openrouter_api_key or settings.open_router_key
         base_url = settings.openrouter_base_url
         default_headers = {
             "HTTP-Referer": settings.openrouter_http_referer,
@@ -42,7 +42,7 @@ def make_async_openai() -> AsyncOpenAI:
 
 
 def _use_openrouter() -> bool:
-    if not settings.openrouter_api_key:
+    if not (settings.openrouter_api_key or settings.open_router_key):
         return False
     if settings.openai_base_url:
         return settings.openai_base_url.rstrip("/") == settings.openrouter_base_url.rstrip("/")

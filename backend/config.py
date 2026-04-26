@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     openai_api_key: str = ""
     openrouter_api_key: str = ""
+    open_router_key: str = ""
     openrouter_model: str = "google/gemini-3-flash-preview"
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     openrouter_http_referer: str = "http://localhost:3000"
@@ -83,8 +84,10 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=(".env", "backend/.env"), extra="ignore")
 
     def model_post_init(self, __context) -> None:  # noqa: ANN001
-        if self.openrouter_api_key and not os.getenv("OPENAI_MODEL"):
+        if (self.openrouter_api_key or self.open_router_key) and not os.getenv("OPENAI_MODEL"):
             self.openai_model = self.openrouter_model
+        if (self.openrouter_api_key or self.open_router_key) and not self.openai_base_url:
+            self.openai_base_url = self.openrouter_base_url
 
 
 settings = Settings()

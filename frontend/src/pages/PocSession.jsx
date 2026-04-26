@@ -63,6 +63,9 @@ function ClaimRow({ claim, selected, reproStatus, onClick, checkable, checked, o
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginBottom: 4 }}>
           <TestabilityChip testability={claim.testability} />
+          {claim.has_scaffold && (
+            <span style={{ ...mono(8, 700), color: '#22C55E', background: 'rgba(34,197,94,0.10)', border: '1px solid rgba(34,197,94,0.25)', padding: '1px 5px', borderRadius: 2, letterSpacing: '0.04em' }}>✓ SCAFFOLD</span>
+          )}
           <ReproChip status={reproStatus} />
         </div>
         <div style={{ ...mono(10), color: C.muted, marginBottom: 3 }}>{claim.claim_id}</div>
@@ -178,6 +181,88 @@ function GeneratingScaffoldLoader() {
   )
 }
 
+function GeneratingScaffoldOverlay({ count }) {
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        top: 16,
+        right: 16,
+        zIndex: 50,
+        pointerEvents: 'none',
+      }}
+    >
+      <div
+        style={{
+          width: 320,
+          padding: '14px 16px',
+          borderRadius: 8,
+          border: `1px solid rgba(168, 85, 247, 0.35)`,
+          background: 'linear-gradient(180deg, rgba(30, 27, 75, 0.92) 0%, rgba(19, 23, 32, 0.94) 100%)',
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
+          boxShadow: '0 16px 40px rgba(0,0,0,0.45), 0 0 0 1px rgba(168,85,247,0.12)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+          pointerEvents: 'auto',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div
+            className="animate-spin"
+            style={{
+              width: 18,
+              height: 18,
+              borderRadius: '50%',
+              border: `2px solid rgba(168, 85, 247, 0.25)`,
+              borderTopColor: C.purple,
+            }}
+          />
+          <span style={{ ...mono(12, 700), color: C.purple, letterSpacing: '0.08em' }}>
+            GENERATING SCAFFOLDS
+          </span>
+        </div>
+        <div style={{ ...grotesk(13), color: C.text, lineHeight: 1.5 }}>
+          {count > 0
+            ? <>Building test harnesses for <strong style={{ color: C.purple }}>{count}</strong> claim{count === 1 ? '' : 's'}.</>
+            : <>Building test harnesses for the selected claims.</>}
+        </div>
+        <div style={{ ...mono(10), color: C.muted, lineHeight: 1.5 }}>
+          Drafting <code style={{ color: C.cyan }}>implementation.py</code> + <code style={{ color: C.cyan }}>test_harness.py</code> per claim. Usually 30–90s.
+        </div>
+        <div
+          style={{
+            position: 'relative',
+            height: 4,
+            borderRadius: 2,
+            background: 'rgba(255,255,255,0.06)',
+            overflow: 'hidden',
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              bottom: 0,
+              width: '40%',
+              borderRadius: 2,
+              background: `linear-gradient(90deg, transparent, ${C.purple}, transparent)`,
+              animation: 'poc-progress-slide 1.6s ease-in-out infinite',
+            }}
+          />
+        </div>
+        <style>{`
+          @keyframes poc-progress-slide {
+            0%   { transform: translateX(-100%); }
+            100% { transform: translateX(350%); }
+          }
+        `}</style>
+      </div>
+    </div>
+  )
+}
+
 export default function PocSession() {
   const { sessionId } = useParams()
   const navigate = useNavigate()
@@ -198,6 +283,8 @@ export default function PocSession() {
   const [scaffoldStatus, setScaffoldStatus] = useState('awaiting_selection')
   const [scaffoldError, setScaffoldError]   = useState(null)
   const [sessions, setSessions]             = useState([])
+  const [paperTitle, setPaperTitle]         = useState('')
+  const [sessionError, setSessionError]     = useState(null)
 
   const feedRef     = useRef(null)
   const fileInputRef = useRef(null)
@@ -205,10 +292,19 @@ export default function PocSession() {
 
   // Load + poll claims
   useEffect(() => {
-    const load = () =>
-      api.poc.claims(sessionId)
-        .then(setClaimsData)
-        .catch(() => {})
+    const load = async () => {
+      try {
+        const data = await api.poc.claims(sessionId)
+        setSessionError(null)
+        setClaimsData(data)
+        if (data && data.paper_title) setPaperTitle(data.paper_title)
+      } catch (err) {
+        const msg = err?.message || ''
+        if (msg.includes('404') || msg.toLowerCase().includes('not found')) {
+          setSessionError('Session not found — the server may have restarted. Submit the paper again.')
+        }
+      }
+    }
     load()
     const t = setInterval(load, 3000)
     return () => clearInterval(t)
@@ -280,10 +376,11 @@ export default function PocSession() {
       prevSelectedId.current = selectedId
       setSpecLoading(true)
       api.poc.spec(sessionId, selectedId)
-        .then(s => { 
+        .then(s => {
           setSpec(s)
           setSpecLoading(false)
-          setSelectedFile('README.md')
+          const files = s?.scaffold_files ? Object.keys(s.scaffold_files) : []
+          setSelectedFile(files.includes('README.md') ? 'README.md' : (files[0] || 'README.md'))
         })
         .catch(() => { setSpec(null); setSpecLoading(false) })
     }
@@ -405,17 +502,60 @@ export default function PocSession() {
             })
           )}
         </select>
+        {paperTitle && (
+          <span
+            title={paperTitle}
+            style={{ ...grotesk(14, 700), color: C.text, marginLeft: 6, maxWidth: 480, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+          >
+            {paperTitle}
+          </span>
+        )}
         <div style={{ flex: 1 }} />
         {claimsData && (<span style={{ ...mono(10), color: C.muted }}>{claimsData.testable} testable · {claimsData.theoretical} theoretical</span>)}
         <div style={{ ...mono(10, 700), padding: '3px 8px', borderRadius: 3, background: statusChipStyle.bg, border: `1px solid ${statusChipStyle.border}`, color: statusChipStyle.color }}>{statusChipStyle.label}</div>
       </div>
       {/* Body: three columns */}
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0, position: 'relative' }}>
+        {scaffoldStatus === 'generating' && (
+          <GeneratingScaffoldOverlay count={checkedIds.size} />
+        )}
         {/* Claims list */}
         <div style={{ width: 280, flexShrink: 0, background: C.sunken, backdropFilter: 'blur(12px)', borderRight: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', overflow: 'hidden', zIndex: 5 }}>
-          <div style={{ padding: '7px 12px', borderBottom: `1px solid ${C.border}`, ...mono(9, 700), color: C.muted, letterSpacing: '0.1em', textTransform: 'uppercase', flexShrink: 0 }}>CLAIMS {claimsData ? `(${claimsData.total})` : ''}</div>
+          <div style={{ padding: '7px 12px', borderBottom: `1px solid ${C.border}`, ...mono(9, 700), color: C.muted, letterSpacing: '0.1em', textTransform: 'uppercase', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <span>CLAIMS {claimsData ? `(${claimsData.total})` : ''}</span>
+            {claimsData && claimsData.claims?.length > 0 && (() => {
+              const testableIds = claimsData.claims.filter(c => c.testability === 'testable').map(c => c.claim_id)
+              if (testableIds.length === 0) return null
+              const allSelected = testableIds.every(id => checkedIds.has(id))
+              const disabled = scaffoldStatus === 'generating'
+              return (
+                <button
+                  onClick={() => {
+                    if (disabled) return
+                    setCheckedIds(prev => {
+                      if (allSelected) {
+                        const next = new Set(prev)
+                        for (const id of testableIds) next.delete(id)
+                        return next
+                      }
+                      const next = new Set(prev)
+                      for (const id of testableIds) next.add(id)
+                      return next
+                    })
+                  }}
+                  disabled={disabled}
+                  style={{ ...mono(9, 700), color: disabled ? C.muted : C.cyan, background: 'none', border: 'none', cursor: disabled ? 'not-allowed' : 'pointer', padding: '2px 6px', borderRadius: 3, textTransform: 'none', letterSpacing: 0 }}
+                  title={allSelected ? 'Unselect all testable claims' : 'Select all testable claims'}
+                >
+                  {allSelected ? 'Unselect All' : 'Select All'}
+                </button>
+              )
+            })()}
+          </div>
           <div style={{ flex: 1, overflowY: 'auto' }}>
-            {!claimsData ? (
+            {sessionError ? (
+              <div style={{ padding: 16, ...mono(11), color: '#EF4444', lineHeight: 1.5 }}>{sessionError}</div>
+            ) : !claimsData ? (
               <ExtractingClaimsLoader />
             ) : claimsData.claims.length === 0 ? (
               jobStatus === 'processing' ? <ExtractingClaimsLoader /> : <div style={{ padding: 16, ...mono(11), color: C.muted }}>No claims found.</div>

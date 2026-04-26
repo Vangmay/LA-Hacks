@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python scripts/test_model_response.py)",
+      "Bash(python -c \"from agents.atom_extractor import AtomExtractorAgent; print\\('imports ok'\\)\")",
+      "Bash(python *)",
+      "Read(//c/Users/ishur/OneDrive/Desktop/VS_Code_Projects/**)",
+      "Bash(grep -l \"learner\\\\|Learner\" frontend/src/pages/*.jsx)",
+      "Bash(grep *)"
+    ]
+  }
+}
