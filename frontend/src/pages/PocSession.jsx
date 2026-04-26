@@ -20,6 +20,8 @@ const C = {
   indigo:  '#5B5BD6',
   cyan:    '#00eaff',
   purple:  '#b388ff',
+  // Added for new features
+  codeTab: '#00eaff',
 };
 
 function mono(size = 11, weight = 400) {
@@ -61,6 +63,9 @@ function ClaimRow({ claim, selected, reproStatus, onClick, checkable, checked, o
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginBottom: 4 }}>
           <TestabilityChip testability={claim.testability} />
+          {claim.has_scaffold && (
+            <span style={{ ...mono(8), color: '#22C55E', background: 'rgba(34,197,94,0.10)', border: '1px solid rgba(34,197,94,0.25)', padding: '1px 5px', borderRadius: 2 }}>✓ scaffold</span>
+          )}
           <ReproChip status={reproStatus} />
         </div>
         <div style={{ ...mono(10), color: C.muted, marginBottom: 3 }}>{claim.claim_id}</div>
@@ -169,16 +174,29 @@ export default function PocSession() {
   const [checkedIds, setCheckedIds]     = useState(() => new Set())
   const [scaffoldStatus, setScaffoldStatus] = useState('awaiting_selection')
   const [scaffoldError, setScaffoldError]   = useState(null)
+  const [paperTitle, setPaperTitle]     = useState('')
+  const [codeTab, setCodeTab]           = useState('')
+  const [sessionError, setSessionError] = useState(null)
 
   const feedRef     = useRef(null)
   const fileInputRef = useRef(null)
 
-  // Load + poll claims
+
+  // Load + poll claims and paper title
   useEffect(() => {
-    const load = () =>
-      api.poc.claims(sessionId)
-        .then(setClaimsData)
-        .catch(() => {})
+    const load = async () => {
+      try {
+        const data = await api.poc.claims(sessionId)
+        setSessionError(null)
+        setClaimsData(data)
+        if (data && data.paper_title) setPaperTitle(data.paper_title)
+      } catch (err) {
+        const msg = err?.message || ''
+        if (msg.includes('404') || msg.toLowerCase().includes('not found')) {
+          setSessionError('Session not found — the server may have restarted. Submit the paper again.')
+        }
+      }
+    }
     load()
     const t = setInterval(load, 3000)
     return () => clearInterval(t)
@@ -232,10 +250,12 @@ export default function PocSession() {
     const t = setInterval(async () => {
       try {
         const data = await api.poc.report(sessionId)
+        // Backend returns 202 (2xx) while still processing; skip until real report arrives
+        if (!Array.isArray(data.results)) return
         setReport(data)
         setAnalysisStatus('complete')
         const statuses = {}
-        for (const r of data.results || []) statuses[r.claim_id] = r.status
+        for (const r of data.results) statuses[r.claim_id] = r.status
         setReproStatuses(statuses)
         clearInterval(t)
       } catch {}
@@ -252,10 +272,13 @@ export default function PocSession() {
         if (cancelled) return
         const next = s.scaffold_status || 'phase_1'
         setScaffoldStatus(next)
-        setScaffoldError(s.scaffold_error || null)
+        setScaffoldError(s.scaffold_error || s.job_error || null)
         setZipReady(!!s.zip_ready)
-        // Phase 1 done → flip the header chip out of "processing" so the
-        // generate button is reachable.
+        // Flip job status based on what the server reports
+        if (s.job_status === 'error') {
+          setJobStatus('error')
+          return
+        }
         if (next === 'awaiting_selection' || next === 'generating' || next === 'ready') {
           setJobStatus(j => j === 'processing' ? 'ready' : j)
         }
@@ -318,11 +341,14 @@ export default function PocSession() {
   return (
     <div style={{ background: C.bg, minHeight: '100vh', display: 'flex', flexDirection: 'column', ...grotesk(), color: C.text, overflow: 'hidden' }}>
       {/* Header */}
-      <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, height: 44 }}>
+      <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, height: 48 }}>
         <button onClick={() => navigate('/')} style={{ ...mono(11), background: 'none', border: `1px solid ${C.border}`, color: C.muted, cursor: 'pointer', padding: '3px 8px', borderRadius: 3 }}>← HOME</button>
         <div style={{ width: 1, height: 16, background: C.border }} />
-        <span style={{ ...mono(11), color: C.muted }}>POC /</span>
-        <span style={{ ...mono(11, 600), color: C.text }}>{sessionId}</span>
+        {paperTitle && (
+          <span style={{ ...grotesk(15, 700), color: C.cyan, marginLeft: 6, maxWidth: 420, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={paperTitle}>
+            {paperTitle}
+          </span>
+        )}
         <div style={{ flex: 1 }} />
         {claimsData && (<span style={{ ...mono(10), color: C.muted }}>{claimsData.testable} testable · {claimsData.theoretical} theoretical</span>)}
         <div style={{ ...mono(10, 700), padding: '3px 8px', borderRadius: 3, background: statusChipStyle.bg, border: `1px solid ${statusChipStyle.border}`, color: statusChipStyle.color }}>{statusChipStyle.label}</div>
@@ -331,11 +357,36 @@ export default function PocSession() {
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
         {/* Claims list */}
         <div style={{ width: 280, flexShrink: 0, background: C.sunken, borderRight: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <div style={{ padding: '7px 12px', borderBottom: `1px solid ${C.border}`, ...mono(9, 700), color: C.muted, letterSpacing: '0.1em', textTransform: 'uppercase', flexShrink: 0 }}>CLAIMS {claimsData ? `(${claimsData.total})` : ''}</div>
+          <div style={{ padding: '7px 12px', borderBottom: `1px solid ${C.border}`, ...mono(9, 700), color: C.muted, letterSpacing: '0.1em', textTransform: 'uppercase', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span>CLAIMS {claimsData ? `(${claimsData.total})` : ''}</span>
+            {/* Select All Testable Button */}
+            {claimsData && claimsData.claims?.length > 0 && (
+              <button
+                onClick={() => {
+                  const testableIds = claimsData.claims.filter(c => c.testability === 'testable').map(c => c.claim_id)
+                  const allSelected = testableIds.every(id => checkedIds.has(id))
+                  setCheckedIds(prev => {
+                    if (allSelected) return new Set([...prev].filter(id => !testableIds.includes(id)))
+                    return new Set([...prev, ...testableIds])
+                  })
+                }}
+                style={{ ...mono(9, 700), color: C.cyan, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', borderRadius: 3, marginLeft: 4 }}
+                title="Select all testable claims"
+              >
+                {(() => {
+                  const testableIds = claimsData.claims.filter(c => c.testability === 'testable').map(c => c.claim_id)
+                  const allSelected = testableIds.every(id => checkedIds.has(id))
+                  return allSelected ? 'Unselect All' : 'Select All'
+                })()}
+              </button>
+            )}
+          </div>
           <div style={{ flex: 1, overflowY: 'auto' }}>
-            {!claimsData ? (
+            {sessionError ? (
+              <div style={{ padding: 16, ...mono(11), color: '#EF4444', lineHeight: 1.5 }}>{sessionError}</div>
+            ) : !claimsData ? (
               <div style={{ padding: 16, ...mono(11), color: C.muted }}>Loading…</div>
-            ) : claimsData.claims.length === 0 ? (
+            ) : !(claimsData.claims?.length) ? (
               <div style={{ padding: 16, ...mono(11), color: C.muted }}>{jobStatus === 'processing' ? '⟳ Extracting claims…' : 'No claims found.'}</div>
             ) : (
               claimsData.claims.map(claim => (
@@ -354,8 +405,93 @@ export default function PocSession() {
           </div>
         </div>
         {/* Claim detail */}
-        <div style={{ width: 380, flexShrink: 0, background: C.surface, borderRight: `1px solid ${C.border}`, overflowY: 'auto', padding: 20, minWidth: 0, transition: 'box-shadow 0.2s' }}>
-          {!selectedClaim ? (<div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8 }}><span style={{ ...mono(12), color: C.muted }}>Select a claim from the left panel</span>{jobStatus === 'processing' && (<span style={{ ...mono(11), color: C.indigo }}>⟳ Pipeline running…</span>)}</div>) : (<><div style={{ marginBottom: 16 }}><div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginBottom: 8 }}><TestabilityChip testability={selectedClaim.testability} />{selectedClaim.claim_type && (<Chip>{selectedClaim.claim_type}</Chip>)}<ReproChip status={reproStatuses[selectedClaim.claim_id]} /></div><div style={{ ...mono(10), color: C.muted, marginBottom: 8 }}>{selectedClaim.claim_id}</div><p style={{ ...grotesk(14), color: C.text, lineHeight: 1.65, margin: 0 }}>{selectedClaim.text}</p></div>{selectedClaim.testability === 'theoretical' && (<div style={{ padding: '10px 12px', background: 'rgba(107,114,128,0.07)', border: `1px solid ${C.border}`, borderRadius: 4, ...grotesk(12), color: C.muted, lineHeight: 1.5 }}>This claim is theoretical — no executable scaffold can be generated.{selectedClaim.spec_summary?.reason && (<div style={{ ...mono(10), marginTop: 6 }}>reason: {selectedClaim.spec_summary.reason}</div>)}</div>)}{selectedClaim.testability === 'testable' && (specLoading ? (<div style={{ ...mono(11), color: C.muted }}>⟳ Loading spec…</div>) : !spec ? (<div style={{ ...mono(11), color: C.muted }}>{jobStatus === 'processing' ? '⟳ Scaffold generating…' : 'No spec available.'}</div>) : (<><section style={{ marginBottom: 20 }}>{spec.success_criteria?.length > 0 && (<><SectionLabel>Success Criteria</SectionLabel>{spec.success_criteria.map((c, i) => (<SuccessCriterion key={i} c={c} />))}</>)}{spec.environment && Object.keys(spec.environment).length > 0 && (<><SectionLabel>Environment</SectionLabel><div style={{ background: C.sunken, border: `1px solid ${C.border}`, borderRadius: 4, padding: '8px 10px' }}>{Object.entries(spec.environment).map(([k, v]) => (<div key={k} style={{ display: 'flex', gap: 12, marginBottom: 4 }}><span style={{ ...mono(11), color: C.muted, minWidth: 100 }}>{k}</span><span style={{ ...mono(11), color: C.text }}>{String(v)}</span></div>))}</div></>)}{spec.scaffold_files && Object.keys(spec.scaffold_files).length > 0 && (<><SectionLabel>Scaffold Files</SectionLabel><div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>{Object.keys(spec.scaffold_files).map(name => (<ScaffoldFileChip key={name} name={name} />))}</div>{spec.scaffold_files['README.md'] && (<><div style={{ ...mono(10), color: C.muted, marginBottom: 4 }}>README.md</div><pre style={{ background: C.sunken, border: `1px solid ${C.border}`, borderRadius: 4, padding: '10px 12px', ...mono(11), color: C.text, whiteSpace: 'pre-wrap', maxHeight: 220, overflowY: 'auto', margin: 0 }}>{spec.scaffold_files['README.md']}</pre></>)}</>)}{report && (<ReportPanel report={{ summary: report.summary, results: (report.results || []).filter(r => r.claim_id === selectedClaim.claim_id) }} />)}</section></>))}</>)}
+        <div style={{ width: 380, flexShrink: 0, background: C.surface, borderRight: `1px solid ${C.border}`, overflowY: 'auto', padding: 22, minWidth: 0, transition: 'box-shadow 0.2s' }}>
+          {!selectedClaim ? (
+            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8 }}>
+              <span style={{ ...mono(12), color: C.muted }}>Select a claim from the left panel</span>
+              {jobStatus === 'processing' && (<span style={{ ...mono(11), color: C.indigo }}>⟳ Pipeline running…</span>)}
+            </div>
+          ) : (
+            <>
+              <div style={{ marginBottom: 18 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginBottom: 8 }}>
+                  <TestabilityChip testability={selectedClaim.testability} />
+                  {selectedClaim.claim_type && (<Chip>{selectedClaim.claim_type}</Chip>)}
+                  <ReproChip status={reproStatuses[selectedClaim.claim_id]} />
+                </div>
+                <div style={{ ...mono(10), color: C.muted, marginBottom: 8 }}>{selectedClaim.claim_id}</div>
+                <p style={{ ...grotesk(14), color: C.text, lineHeight: 1.65, margin: 0 }}>{selectedClaim.text}</p>
+              </div>
+              {selectedClaim.testability === 'theoretical' && (
+                <div style={{ padding: '10px 12px', background: 'rgba(107,114,128,0.07)', border: `1px solid ${C.border}`, borderRadius: 4, ...grotesk(12), color: C.muted, lineHeight: 1.5 }}>
+                  This claim is theoretical — no executable scaffold can be generated.
+                  {selectedClaim.spec_summary?.reason && (<div style={{ ...mono(10), marginTop: 6 }}>reason: {selectedClaim.spec_summary.reason}</div>)}
+                </div>
+              )}
+              {selectedClaim.testability === 'testable' && (
+                specLoading ? (
+                  <div style={{ ...mono(11), color: C.muted }}>⟳ Loading spec…</div>
+                ) : !spec ? (
+                  <div style={{ ...mono(11), color: C.muted }}>{jobStatus === 'processing' ? '⟳ Scaffold generating…' : 'No spec available.'}</div>
+                ) : (
+                  <>
+                    <section style={{ marginBottom: 20 }}>
+                      {spec.success_criteria?.length > 0 && (
+                        <>
+                          <SectionLabel>Success Criteria</SectionLabel>
+                          {spec.success_criteria.map((c, i) => (<SuccessCriterion key={i} c={c} />))}
+                        </>
+                      )}
+                      {spec.environment && Object.keys(spec.environment).length > 0 && (
+                        <>
+                          <SectionLabel>Environment</SectionLabel>
+                          <div style={{ background: C.sunken, border: `1px solid ${C.border}`, borderRadius: 4, padding: '8px 10px' }}>
+                            {Object.entries(spec.environment).map(([k, v]) => (
+                              <div key={k} style={{ display: 'flex', gap: 12, marginBottom: 4 }}>
+                                <span style={{ ...mono(11), color: C.muted, minWidth: 100 }}>{k}</span>
+                                <span style={{ ...mono(11), color: C.text }}>{String(v)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                      {spec.scaffold_files && Object.keys(spec.scaffold_files).length === 0 && scaffoldStatus === 'ready' && (
+                        <div style={{ padding: '8px 10px', background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.20)', borderRadius: 4, ...mono(11), color: '#EF4444', marginBottom: 10 }}>
+                          Scaffold generation failed for this claim (LLM error or timeout). Select it and click GENERATE SCAFFOLDS to retry.
+                        </div>
+                      )}
+                      {spec.scaffold_files && Object.keys(spec.scaffold_files).length > 0 && (
+                        <>
+                          <SectionLabel>Scaffold Files</SectionLabel>
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                            {Object.keys(spec.scaffold_files).map(name => (
+                              <span
+                                key={name}
+                                onClick={() => setCodeTab(codeTab === name ? '' : name)}
+                                style={{ cursor: 'pointer', opacity: codeTab === name ? 1 : 0.8, border: codeTab === name ? `2px solid ${C.codeTab}` : undefined, boxShadow: codeTab === name ? `0 0 0 2px ${C.codeTab}33` : undefined, marginBottom: 2 }}
+                                title={name}
+                              >
+                                <ScaffoldFileChip name={name} />
+                              </span>
+                            ))}
+                          </div>
+                          {codeTab && spec.scaffold_files[codeTab] && (
+                            <>
+                              <div style={{ ...mono(10), color: C.muted, marginBottom: 4 }}>{codeTab}</div>
+                              <pre style={{ background: C.sunken, border: `1px solid ${C.border}`, borderRadius: 4, padding: '10px 12px', ...mono(11), color: C.text, whiteSpace: 'pre-wrap', maxHeight: 220, overflowY: 'auto', margin: 0 }}>{spec.scaffold_files[codeTab]}</pre>
+                            </>
+                          )}
+                        </>
+                      )}
+                      {report && (
+                        <ReportPanel report={{ summary: report.summary, results: (report.results || []).filter(r => r.claim_id === selectedClaim.claim_id) }} />
+                      )}
+                    </section>
+                  </>
+                )
+              )}
+            </>
+          )}
         </div>
         {/* Activity feed */}
         <div style={{ width: 280, flexShrink: 0, background: C.sunken, borderLeft: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -364,7 +500,7 @@ export default function PocSession() {
         </div>
       </div>
       {/* Bottom action bar */}
-      <div style={{ background: C.surface, borderTop: `1px solid ${C.border}`, padding: '9px 16px', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+      <div style={{ background: C.surface, borderTop: `1px solid ${C.border}`, padding: '11px 18px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
         {(() => {
           const canGenerate =
             checkedIds.size > 0 &&

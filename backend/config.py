@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     backend_port: int = 8000
     frontend_port: int = 5173
     max_parallel_claims: int = 5
+    llm_max_concurrency: int = 2
     attacker_challenge_cap: int = 3
     log_level: str = "INFO"
     deepdive_workspace_root: str = "backend/outputs/research_deepdives"

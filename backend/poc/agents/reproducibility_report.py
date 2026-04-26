@@ -2,10 +2,9 @@ import json
 import logging
 from typing import Dict, List
 
-from openai import AsyncOpenAI
-
 from agents.base import AgentContext, AgentResult, BaseAgent
 from config import settings
+from core.openai_client import build_messages, extract_json, json_response_format, make_async_openai
 from models import (
     ExperimentResult,
     GapAnalysisEntry,
@@ -26,7 +25,7 @@ _STATUS_RANK: Dict[ReproductionStatus, int] = {
 class ReproducibilityReportAgent(BaseAgent):
     agent_id = "reproducibility_report"
 
-    _client = AsyncOpenAI(api_key=settings.openai_api_key)
+    _client = make_async_openai()
 
     async def run(self, context: AgentContext) -> AgentResult:
         experiment_results_raw: list = context.extra.get("experiment_results", [])
@@ -147,14 +146,11 @@ class ReproducibilityReportAgent(BaseAgent):
         try:
             response = await self._client.chat.completions.create(
                 model=settings.openai_model,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                response_format={"type": "json_object"},
-                max_tokens=800,
+                messages=build_messages(system, user),
+                **json_response_format(),
+                max_tokens=8000,
             )
-            raw = response.choices[0].message.content or "{}"
+            raw = extract_json(response.choices[0].message.content or "{}")
             data = json.loads(raw)
         except Exception as exc:
             logger.warning("Gap analysis LLM call failed for %s: %s", claim_id, exc)
@@ -204,14 +200,11 @@ class ReproducibilityReportAgent(BaseAgent):
         try:
             response = await self._client.chat.completions.create(
                 model=settings.openai_model,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                response_format={"type": "json_object"},
-                max_tokens=600,
+                messages=build_messages(system, user),
+                **json_response_format(),
+                max_tokens=8000,
             )
-            raw = response.choices[0].message.content or "{}"
+            raw = extract_json(response.choices[0].message.content or "{}")
             data = json.loads(raw)
             return data.get("steps", [])
         except Exception as exc:
@@ -273,10 +266,7 @@ class ReproducibilityReportAgent(BaseAgent):
         try:
             response = await self._client.chat.completions.create(
                 model=settings.openai_model,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
+                messages=build_messages(system, user),
                 max_tokens=1500,
             )
             return response.choices[0].message.content or ""

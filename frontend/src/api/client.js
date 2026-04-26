@@ -16,6 +16,24 @@ async function postJson(url, body) {
   return r.json()
 }
 
+async function pocFetch(url) {
+  const r = await fetch(url)
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(data.detail || data.error || `HTTP ${r.status}`)
+  return data
+}
+
+async function pocPost(url, body) {
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(data.detail || data.error || `HTTP ${r.status}`)
+  return data
+}
+
 async function fetchResearchJson(url) {
   const r = await fetch(url)
   const text = await r.text()
@@ -89,16 +107,15 @@ export const api = {
     critique: (runId, criticId) => fetchResearchJson(`${BASE}/research/${runId}/critique/${criticId}`),
   },
   poc: {
-    submit: (arxivUrl) => postJson(`${BASE}/poc`, { arxiv_url: arxivUrl }),
-    claims: (sessionId) => fetch(`${BASE}/poc/${sessionId}/claims`).then(r => r.json()),
-    spec: (sessionId, claimId) => fetch(`${BASE}/poc/${sessionId}/claim/${claimId}/spec`).then(r => r.json()),
+    submit: (arxivUrl) => pocPost(`${BASE}/poc`, { arxiv_url: arxivUrl }),
+    claims: (sessionId) => pocFetch(`${BASE}/poc/${sessionId}/claims`),
+    spec: (sessionId, claimId) => pocFetch(`${BASE}/poc/${sessionId}/claim/${claimId}/spec`),
     generateScaffolds: (sessionId, claimIds) =>
-      postJson(`${BASE}/poc/${sessionId}/scaffold`, { claim_ids: claimIds }),
-    scaffoldStatus: (sessionId) =>
-      fetch(`${BASE}/poc/${sessionId}/scaffold/status`).then(r => r.json()),
+      pocPost(`${BASE}/poc/${sessionId}/scaffold`, { claim_ids: claimIds }),
+    scaffoldStatus: (sessionId) => pocFetch(`${BASE}/poc/${sessionId}/scaffold/status`),
     uploadResults: (sessionId, file) => postFile(`${BASE}/poc/${sessionId}/results`, file),
-    report: (sessionId) => fetch(`${BASE}/poc/${sessionId}/report`).then(r => r.json()),
+    report: (sessionId) => pocFetch(`${BASE}/poc/${sessionId}/report`),
     stream: (sessionId) => new EventSource(`${BASE}/poc/${sessionId}/stream`),
-    dag: (sessionId) => fetch(`${BASE}/poc/${sessionId}/dag`).then(r => r.json()),
+    dag: (sessionId) => pocFetch(`${BASE}/poc/${sessionId}/dag`),
   },
 }

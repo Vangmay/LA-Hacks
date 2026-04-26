@@ -3,10 +3,9 @@ import json
 import logging
 from typing import List
 
-from openai import AsyncOpenAI
-
 from agents.base import AgentContext, AgentResult, BaseAgent
 from config import settings
+from core.openai_client import build_messages, extract_json, json_response_format, make_async_openai
 from models import ResearchAtom
 
 logger = logging.getLogger(__name__)
@@ -27,7 +26,7 @@ _SYSTEM_PROMPT = (
 class ClaimFilterAgent(BaseAgent):
     agent_id = "claim_filter"
 
-    _client = AsyncOpenAI(api_key=settings.openai_api_key)
+    _client = make_async_openai()
 
     async def run(self, context: AgentContext) -> AgentResult:
         atoms: List[ResearchAtom] = context.extra.get("atoms", [])
@@ -86,14 +85,11 @@ class ClaimFilterAgent(BaseAgent):
 
         response = await self._client.chat.completions.create(
             model=settings.openai_model,
-            messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ],
-            response_format={"type": "json_object"},
-            max_tokens=1500,
+            messages=build_messages(_SYSTEM_PROMPT, user_prompt),
+            **json_response_format(),
+            max_tokens=8000,
         )
-        raw = response.choices[0].message.content
+        raw = extract_json(response.choices[0].message.content or "")
 
         try:
             parsed = json.loads(raw)
@@ -122,14 +118,11 @@ class ClaimFilterAgent(BaseAgent):
     async def _retry_parse(self, user_prompt: str) -> dict:
         response = await self._client.chat.completions.create(
             model=settings.openai_model,
-            messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT + " Respond with ONLY valid JSON, no markdown."},
-                {"role": "user", "content": user_prompt},
-            ],
-            response_format={"type": "json_object"},
-            max_tokens=1500,
+            messages=build_messages(_SYSTEM_PROMPT + " Respond with ONLY valid JSON, no markdown.", user_prompt),
+            **json_response_format(),
+            max_tokens=8000,
         )
-        raw = response.choices[0].message.content
+        raw = extract_json(response.choices[0].message.content or "")
         try:
             return json.loads(raw)
         except json.JSONDecodeError:

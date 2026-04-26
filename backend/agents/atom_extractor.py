@@ -26,7 +26,7 @@ from typing import Any, Awaitable, Callable, Optional
 from openai import AsyncOpenAI
 
 from config import settings
-from core.openai_client import make_async_openai
+from core.openai_client import build_messages, extract_json, json_response_format, make_async_openai
 from core.span_resolver import resolve_span
 from models import (
     AtomExtractionResult,
@@ -239,6 +239,7 @@ class AtomExtractorAgent(BaseAgent):
         return self._client
 
     async def run(self, context: AgentContext) -> AgentResult:
+        import time
         paper = context.parsed_paper
         if paper is None:
             return AgentResult(
@@ -249,8 +250,15 @@ class AtomExtractorAgent(BaseAgent):
                 error="parsed_paper missing from context",
             )
 
+        timings = {}
+        t0 = time.perf_counter()
         deterministic = self._extract_environments(paper)
+        t1 = time.perf_counter()
+        timings["deterministic"] = t1 - t0
         warnings: list[str] = []
+        logger.warning(f"[DEBUG] Deterministic atoms extracted: {len(deterministic)}")
+        for atom in deterministic:
+            logger.warning(f"[DEBUG] Deterministic atom: {atom.atom_type} | {atom.text[:80]}")
         await self._emit_progress(
             _merge_atoms(deterministic, []),
             {
@@ -261,18 +269,35 @@ class AtomExtractorAgent(BaseAgent):
         )
 
         try:
-            llm_atoms, llm_warnings = await self._extract_with_llm(paper, deterministic)
+            t2 = time.perf_counter()
+            llm_atoms, llm_warnings = await self._extract_with_llm_parallel(paper, deterministic)
+            t3 = time.perf_counter()
+            timings["llm"] = t3 - t2
             warnings.extend(llm_warnings)
+            logger.warning(f"[DEBUG] LLM atoms extracted: {len(llm_atoms)}")
+            for atom in llm_atoms:
+                logger.warning(f"[DEBUG] LLM atom: {atom.atom_type} | {atom.text[:80]}")
         except Exception as exc:
             logger.exception("LLM atom extraction failed")
             warnings.append(f"llm_extraction_failed: {exc}")
             llm_atoms = []
 
+        # Early deduplication/filtering before normalization
         merged = _merge_atoms(deterministic, llm_atoms)
+        logger.warning(f"[DEBUG] Atoms after merge: {len(merged)}")
+        merged = _filter_duplicate_and_low_confidence_atoms(merged)
+        logger.warning(f"[DEBUG] Atoms after filtering: {len(merged)}")
+
         if self._normalize_headers and merged:
             try:
+                t4 = time.perf_counter()
                 merged, normalization_warnings = await self._normalize_headers_with_llm(merged)
+                t5 = time.perf_counter()
+                timings["normalize_headers"] = t5 - t4
                 warnings.extend(normalization_warnings)
+                logger.warning(f"[DEBUG] Atoms after header normalization: {len(merged)}")
+                for atom in merged:
+                    logger.warning(f"[DEBUG] Normalized atom: {atom.atom_type} | {atom.text[:80]}")
                 await self._emit_progress(
                     merged,
                     {
@@ -287,7 +312,7 @@ class AtomExtractorAgent(BaseAgent):
         result = AtomExtractionResult(
             paper_id=paper.paper_id,
             atoms=merged,
-            warnings=warnings,
+            warnings=warnings + [f"timings: {timings}"],
         )
 
         confidence = 0.85 if merged else 0.2
@@ -297,6 +322,77 @@ class AtomExtractorAgent(BaseAgent):
             output=result.model_dump(),
             confidence=confidence,
         )
+
+    async def _extract_with_llm_parallel(self, paper: ParsedPaper, seen: list[ResearchAtom], max_concurrency: int = 4) -> tuple[list[ResearchAtom], list[str]]:
+        import asyncio
+        batches = _section_batches(paper, self._max_section_chars)
+        if not batches:
+            return [], ["llm_skipped: empty section text"]
+
+        client = self._get_client()
+        atoms: list[ResearchAtom] = []
+        warnings: list[str] = []
+        counter = 0
+
+        semaphore = asyncio.Semaphore(max_concurrency)
+        results = [None] * len(batches)
+
+        async def process_batch(batch_idx, sections_text):
+            nonlocal counter
+            async with semaphore:
+                seen_block = _format_seen_block([*seen, *atoms]) or "(none)"
+                prompt = _USER_PROMPT_TMPL.format(
+                    seen_block=seen_block,
+                    sections_text=sections_text,
+                )
+                try:
+                    response = await client.chat.completions.create(
+                        model=settings.openai_model,
+                        messages=build_messages(_SYSTEM_PROMPT, prompt),
+                        **json_response_format(),
+                        max_tokens=16000,
+                    )
+                    raw = extract_json(response.choices[0].message.content or "")
+                    data = json.loads(raw)
+                except Exception as exc:
+                    warnings.append(f"llm_batch_{batch_idx}_failed: {exc}")
+                    return
+
+                atoms_data = data.get("atoms") if isinstance(data, dict) else None
+                if not isinstance(atoms_data, list):
+                    warnings.append(f"llm_response_missing_atoms_array_batch_{batch_idx}")
+                    return
+
+                batch_warnings = data.get("warnings") if isinstance(data, dict) else None
+                if isinstance(batch_warnings, list):
+                    warnings.extend(str(w) for w in batch_warnings if str(w).strip())
+
+                batch_atoms = []
+                for entry in atoms_data:
+                    if not isinstance(entry, dict):
+                        continue
+                    atom = _atom_from_llm_entry(entry, paper, counter)
+                    if atom is None:
+                        continue
+                    batch_atoms.append(atom)
+                    counter += 1
+                results[batch_idx] = batch_atoms
+                await self._emit_progress(
+                    _merge_atoms(seen, atoms + batch_atoms),
+                    {
+                        "stage": f"Extracting atoms ({batch_idx+1}/{len(batches)})",
+                        "batches_completed": batch_idx+1,
+                        "batches_total": len(batches),
+                    },
+                )
+
+        await asyncio.gather(*(process_batch(i, batch) for i, batch in enumerate(batches)))
+        # Flatten results and filter out None
+        for batch_atoms in results:
+            if batch_atoms:
+                atoms.extend(batch_atoms)
+        return atoms, warnings
+
 
     # --------------------------------------------------------------- pass A
 
@@ -380,14 +476,11 @@ class AtomExtractorAgent(BaseAgent):
 
             response = await client.chat.completions.create(
                 model=settings.openai_model,
-                messages=[
-                    {"role": "system", "content": _SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt},
-                ],
-                response_format={"type": "json_object"},
-                max_tokens=4500,
+                messages=build_messages(_SYSTEM_PROMPT, prompt),
+                **json_response_format(),
+                max_tokens=16000,
             )
-            raw = response.choices[0].message.content or ""
+            raw = extract_json(response.choices[0].message.content or "")
             try:
                 data = json.loads(raw)
             except json.JSONDecodeError as exc:
@@ -449,14 +542,11 @@ class AtomExtractorAgent(BaseAgent):
             )
             response = await client.chat.completions.create(
                 model=settings.openai_model,
-                messages=[
-                    {"role": "system", "content": _HEADER_SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt},
-                ],
-                response_format={"type": "json_object"},
-                max_tokens=4500,
+                messages=build_messages(_HEADER_SYSTEM_PROMPT, prompt),
+                **json_response_format(),
+                max_tokens=16000,
             )
-            raw = response.choices[0].message.content or ""
+            raw = extract_json(response.choices[0].message.content or "")
             try:
                 data = json.loads(raw)
             except json.JSONDecodeError as exc:
@@ -531,6 +621,21 @@ class AtomExtractorAgent(BaseAgent):
 
 # ---------------------------------------------------------------------------
 # helpers
+
+
+def _filter_duplicate_and_low_confidence_atoms(
+    atoms: list[ResearchAtom], min_confidence: float = 0.5
+) -> list[ResearchAtom]:
+    seen_texts = set()
+    filtered = []
+    for atom in atoms:
+        key = (atom.text or "").strip().lower()
+        if atom.extraction_confidence is not None and atom.extraction_confidence < min_confidence:
+            continue
+        if key and key not in seen_texts:
+            seen_texts.add(key)
+            filtered.append(atom)
+    return filtered
 
 
 def _section_id_for_tex_offset(paper: ParsedPaper, offset: int) -> Optional[str]:

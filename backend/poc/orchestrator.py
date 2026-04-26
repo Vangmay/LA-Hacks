@@ -91,7 +91,7 @@ class PoCOrchestrator:
         )
 
         # ── 2. Extract research atoms (replaces ClaimExtractorAgent) ──────────
-        ext_result = await AtomExtractorAgent().run(
+        ext_result = await AtomExtractorAgent(normalize_headers=False).run(
             AgentContext(job_id=job_id, parsed_paper=paper)
         )
         if ext_result.status == "error":
@@ -100,6 +100,8 @@ class PoCOrchestrator:
         raw_atoms = ext_result.output.get("atoms") or []
         atoms = [ResearchAtom.model_validate(a) for a in raw_atoms]
         if not atoms:
+            warnings = ext_result.output.get("warnings") or []
+            logger.error("atom extraction zero atoms; warnings: %s", warnings)
             raise RuntimeError("atom extraction produced zero atoms")
 
         # PoC only wants atoms that look like real claims worth testing —
@@ -137,9 +139,11 @@ class PoCOrchestrator:
             ))
 
         # ── 4. Extract metrics in parallel for ALL candidate atoms ────────────
-        metric_results = await asyncio.gather(
-            *[
-                MetricExtractorAgent().run(
+        _metric_sem = asyncio.Semaphore(settings.llm_max_concurrency)
+
+        async def _metric_one(atom):
+            async with _metric_sem:
+                return await MetricExtractorAgent().run(
                     AgentContext(
                         job_id=job_id,
                         parsed_paper=paper,
@@ -147,8 +151,9 @@ class PoCOrchestrator:
                         extra={"paper_metadata": paper_metadata},
                     )
                 )
-                for atom in candidate_atoms
-            ],
+
+        metric_results = await asyncio.gather(
+            *[_metric_one(atom) for atom in candidate_atoms],
             return_exceptions=True,
         )
 

@@ -1,11 +1,11 @@
 import ast
+import asyncio
 import json
 import logging
 
-from openai import AsyncOpenAI
-
 from agents.base import AgentContext, AgentResult, BaseAgent
 from config import settings
+from core.openai_client import build_messages, make_async_openai
 from models import ResearchAtom
 
 logger = logging.getLogger(__name__)
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class ScaffoldGeneratorAgent(BaseAgent):
     agent_id = "scaffold_generator"
 
-    _client = AsyncOpenAI(api_key=settings.openai_api_key)
+    _client = make_async_openai()
 
     async def run(self, context: AgentContext) -> AgentResult:
         atom: ResearchAtom | None = context.atom or context.extra.get("atom")
@@ -127,7 +127,7 @@ class ScaffoldGeneratorAgent(BaseAgent):
             f"Relevant sections:\n{relevant_sections}\n\n"
             f"Success criteria:\n{success_criteria_json}"
         )
-        return await self._llm_call(system, user, max_tokens=2000)
+        return await self._llm_call(system, user, max_tokens=8000)
 
     async def _gen_test_harness(self, success_criteria_json: str, impl_code: str) -> str:
         system = (
@@ -143,7 +143,7 @@ class ScaffoldGeneratorAgent(BaseAgent):
             "Return ONLY the pytest code."
         )
         user = f"Success criteria:\n{success_criteria_json}\n\nimplementation.py content:\n{impl_code}"
-        return await self._llm_call(system, user, max_tokens=2000)
+        return await self._llm_call(system, user, max_tokens=8000)
 
     def _gen_results_logger(self) -> str:
         return (
@@ -194,16 +194,22 @@ class ScaffoldGeneratorAgent(BaseAgent):
 
     # ── Helpers ────────────────────────────────────────────────────────────────
 
-    async def _llm_call(self, system_prompt: str, user_prompt: str, max_tokens: int = 2000) -> str:
-        response = await self._client.chat.completions.create(
-            model=settings.openai_model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            max_tokens=max_tokens,
-        )
-        return response.choices[0].message.content or ""
+    async def _llm_call(self, system_prompt: str, user_prompt: str, max_tokens: int = 8000) -> str:
+        last_exc: Exception | None = None
+        for attempt in range(3):
+            try:
+                response = await self._client.chat.completions.create(
+                    model=settings.openai_model,
+                    messages=build_messages(system_prompt, user_prompt),
+                    max_tokens=max_tokens,
+                )
+                return response.choices[0].message.content or ""
+            except Exception as exc:
+                last_exc = exc
+                logger.warning("_llm_call attempt %d failed: %s", attempt + 1, exc)
+                if attempt < 2:
+                    await asyncio.sleep(5 * (attempt + 1))
+        raise last_exc  # type: ignore[misc]
 
     def _check_syntax(self, scaffold_files: dict) -> dict:
         errors = {}
@@ -223,10 +229,7 @@ class ScaffoldGeneratorAgent(BaseAgent):
         user = f"File: {filename}\nSyntax error: {error}\n\nCode:\n{code}"
         response = await self._client.chat.completions.create(
             model=settings.openai_model,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-            max_tokens=3000,
+            messages=build_messages(system, user),
+            max_tokens=8000,
         )
         return response.choices[0].message.content or code
