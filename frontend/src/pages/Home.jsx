@@ -13,11 +13,11 @@ const MODES = {
     pipeline: ['Source Ingestion & TeX Assembly', 'Research Atom Extraction', 'Symbolic & Numeric Probes', 'Adversarial Debate & Verdict Cascade'],
   },
   reader: {
-    label: 'Learner',
-    title: 'Start Learner Mode',
+    label: 'Learn',
+    title: 'Start Learn Mode',
     description: 'Build an educational graph, then click atoms for explanations, exercises, prerequisites, and a scoped tutor.',
     card: 'Explanations, exercises, tutor',
-    cta: 'Begin Learner',
+    cta: 'Begin Learn',
     accent: '#00AFA3',
     pipeline: ['Source Ingestion & TeX Assembly', 'Research Atom Extraction', 'Dependency Graph', 'Lazy Explanations, Exercises & Tutor'],
   },
@@ -202,7 +202,7 @@ export default function Home() {
                     onChange={(e) => setLevel(e.target.value)}
                     className="rounded border border-white/10 bg-[#0D1017] px-4 py-2.5 text-sm text-[#E4E7F0] outline-none transition-colors focus:border-[#00AFA3] focus:ring-1 focus:ring-[#00AFA3]"
                   >
-                    <option value="layperson">Layperson</option>
+                    <option value="layperson">Beginner</option>
                     <option value="undergraduate">Undergraduate</option>
                     <option value="graduate">Graduate</option>
                     <option value="expert">Expert</option>

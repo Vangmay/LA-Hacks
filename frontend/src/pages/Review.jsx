@@ -140,11 +140,19 @@ function reducer(state, action) {
   const { event_type, atom_id, payload } = action
   switch (event_type) {
     case 'source_fetch_complete':
-      return { ...state, buildStage: 'Parsing TeX' }
+      return {
+        ...state,
+        buildStage: 'Parsing TeX',
+        status: { ...state.status, paper_id: payload.paper_id || state.status?.paper_id },
+      }
     case 'parse_started':
       return { ...state, buildStage: 'Parsing TeX' }
     case 'parse_complete':
-      return { ...state, buildStage: 'Extracting atoms' }
+      return {
+        ...state,
+        buildStage: 'Extracting atoms',
+        status: { ...state.status, paper_title: payload.title || state.status?.paper_title },
+      }
     case 'atom_extraction_started':
       return { ...state, buildStage: 'Extracting atoms' }
     case 'atom_extraction_progress':
@@ -582,6 +590,7 @@ export default function Review() {
   const selectedStatementCollapsed = selectedStatementIsLong && !statementExpanded
   const completed = state.status?.completed_atoms ?? 0
   const total = state.status?.total_atoms ?? nodes.length
+  const paperTitle = state.status?.paper_title
 
   const handleExport = () => {
     if (!reportContent) return
@@ -603,6 +612,11 @@ export default function Review() {
           <Link to="/" className="text-[#5B5BD6] text-sm hover:underline">← Home</Link>
           <span className="text-sm opacity-60">Job</span>
           <span className="text-sm font-mono">{jobId}</span>
+          {paperTitle && (
+            <span className="max-w-[520px] truncate text-sm text-white/75" title={paperTitle}>
+              {paperTitle}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-4 text-sm">
           <span className="opacity-60">Status:</span>

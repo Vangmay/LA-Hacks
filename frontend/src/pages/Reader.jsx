@@ -628,7 +628,7 @@ export default function Reader() {
       <header className="flex items-center justify-between px-6 py-3 bg-[#101A1E] border-b border-white/10 z-10">
         <div className="flex items-center gap-4 min-w-0">
           <Link to="/" className="text-[#67E8F9] text-sm hover:underline">Home</Link>
-          <span className="text-sm opacity-60">Learner</span>
+          <span className="text-sm opacity-60">Learn</span>
           <span className="text-sm font-mono truncate max-w-[260px]">{sessionId}</span>
           {title && <span className="text-xs text-[#6B7280] truncate max-w-[360px]">{title}</span>}
         </div>
