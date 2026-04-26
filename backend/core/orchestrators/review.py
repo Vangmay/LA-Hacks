@@ -101,20 +101,22 @@ class ReviewOrchestrator:
             emitted_atoms: set[str] = set()
 
             async def on_atom_progress(partial_atoms: list[ResearchAtom], progress: dict[str, Any]) -> None:
+                stage = progress.get("stage", "Extracting atoms")
                 current_job = job_store.get(job_id) or {}
                 job_store.update(
                     job_id,
                     total_atoms=max(len(partial_atoms), current_job.get("total_atoms", 0)),
-                    review_stage=progress.get("stage", "Extracting atoms"),
+                    review_stage=stage,
                     graph_snapshot=_graph_snapshot(
                         partial_atoms,
-                        stage=progress.get("stage", "Extracting atoms"),
+                        stage=stage,
                         extraction_batches_completed=progress.get("batches_completed"),
                         extraction_batches_total=progress.get("batches_total"),
                     ),
                 )
                 for idx, atom in enumerate(partial_atoms, start=1):
-                    if atom.atom_id in emitted_atoms:
+                    should_update_existing = stage == "Normalizing atom headers"
+                    if atom.atom_id in emitted_atoms and not should_update_existing:
                         continue
                     emitted_atoms.add(atom.atom_id)
                     await _publish(
@@ -523,16 +525,7 @@ def _node_label(atom: ResearchAtom) -> str:
             text = text[len(prefix):]
             break
 
-    stops = {
-        "a", "an", "the", "this", "that", "these", "those", "we", "our",
-        "there", "exists", "is", "are", "was", "were", "for", "every",
-    }
-    words = [word.strip(" ,.;:()[]{}") for word in text.split()]
-    words = [word for word in words if word]
-    while words and words[0].lower() in stops:
-        words.pop(0)
-    phrase = " ".join(words[:6]).strip(" ,.;:")
-    return phrase or atom.atom_id
+    return _safe_concept_label(text) or atom.atom_id
 
 
 def _clean_label_text(text: str) -> str:
@@ -540,6 +533,21 @@ def _clean_label_text(text: str) -> str:
     for char in "\\{}[]()":
         text = text.replace(char, " ")
     return " ".join(text.split())
+
+
+def _safe_concept_label(text: str, limit: int = 96) -> str:
+    cleaned = " ".join(str(text or "").split()).strip(" ,.;:")
+    if len(cleaned) <= limit:
+        return cleaned
+    clipped = cleaned[:limit].rsplit(" ", 1)[0].strip(" ,.;:")
+    dangling = {
+        "a", "an", "the", "at", "to", "of", "by", "with", "for", "from", "in",
+        "on", "and", "or", "but", "as", "than", "that", "which", "less", "more",
+    }
+    words = clipped.split()
+    while words and words[-1].lower().strip(" ,.;:") in dangling:
+        words.pop()
+    return " ".join(words).strip(" ,.;:") or cleaned[:limit].strip(" ,.;:")
 
 
 async def _publish(

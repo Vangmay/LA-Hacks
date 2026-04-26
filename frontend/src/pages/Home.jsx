@@ -2,66 +2,76 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 
+
 export default function Home() {
-  const navigate = useNavigate()
-  const [arxivUrl, setArxivUrl] = useState('')
-  const [mode, setMode] = useState('review')
-  const [level, setLevel] = useState('undergraduate')
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState('')
+  const navigate = useNavigate();
+  const [arxivUrl, setArxivUrl] = useState("");
+  const [mode, setMode] = useState("review");
+  const [level, setLevel] = useState("undergraduate");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
   async function handleSubmit(e) {
-    e?.preventDefault()
-    const url = arxivUrl.trim()
-    if (!url || submitting) return
-    setSubmitting(true)
-    setError('')
+    e?.preventDefault();
+    const url = arxivUrl.trim();
+    if (!url || submitting) return;
+    setSubmitting(true);
+    setError("");
     try {
-      if (mode === 'reader') {
-        const res = await api.reader.submit(url, level)
-        const sessionId = res?.session_id || res?.sessionId
-        if (!sessionId) throw new Error(res?.detail || 'No session_id returned')
-        navigate(`/read/${sessionId}`)
-        return
+      if (mode === "reader") {
+        const res = await api.reader.submit(url, level);
+        const sessionId = res?.session_id || res?.sessionId;
+        if (!sessionId) throw new Error(res?.detail || "No session_id returned");
+        navigate(`/read/${sessionId}`);
+        return;
       }
-
-      const res = await api.review.submit(url)
-      const jobId = res?.job_id || res?.jobId
-      if (!jobId) throw new Error(res?.detail || 'No job_id returned')
-      navigate(`/review/${jobId}`)
+      if (mode === "poc") {
+        const res = await api.poc.submit(url);
+        const sessionId = res?.session_id || res?.sessionId;
+        if (!sessionId) throw new Error(res?.detail || "No session_id returned");
+        navigate(`/poc/${sessionId}`);
+        return;
+      }
+      // Default: review
+      const res = await api.review.submit(url);
+      const jobId = res?.job_id || res?.jobId;
+      if (!jobId) throw new Error(res?.detail || "No job_id returned");
+      navigate(`/review/${jobId}`);
     } catch (err) {
-      setError(err.message || 'Submit failed')
-      setSubmitting(false)
+      setError(err.message || "Submit failed");
+      setSubmitting(false);
     }
   }
 
   return (
     <div className="min-h-screen w-full bg-[#0A0C10] text-[#E4E7F0] flex flex-col relative font-sans">
       <header className="w-full flex items-center px-8 py-4 border-b border-white/10 bg-[#131720]">
-        <div className="text-xl font-bold tracking-wide">
-          PaperCourt
-        </div>
+        <div className="text-xl font-bold tracking-wide">PaperCourt</div>
         <div className="ml-auto flex gap-6 text-sm">
           <button onClick={() => setMode('review')} className={`${mode === 'review' ? 'text-[#5B5BD6] opacity-100' : 'opacity-70'} hover:opacity-100 hover:text-[#5B5BD6] transition-colors`}>Review</button>
           <button onClick={() => setMode('reader')} className={`${mode === 'reader' ? 'text-[#5B5BD6] opacity-100' : 'opacity-70'} hover:opacity-100 hover:text-[#5B5BD6] transition-colors`}>Reader</button>
-          <button className="opacity-70 hover:opacity-100 hover:text-[#5B5BD6] transition-colors">PoC</button>
-          <button onClick={() => navigate('/research')} className="opacity-70 hover:opacity-100 hover:text-[#5B5BD6] transition-colors">Research</button>
+          <button onClick={() => setMode('poc')} className={`${mode === 'poc' ? 'text-[#5B5BD6] opacity-100' : 'opacity-70'} hover:opacity-100 hover:text-[#5B5BD6] transition-colors`}>PoC</button>
+          <button className="opacity-70 hover:opacity-100 hover:text-[#5B5BD6] transition-colors">Research</button>
         </div>
       </header>
 
       <main className="flex-1 flex flex-col items-center justify-center p-6">
         <div className="w-full max-w-xl bg-[#131720] border border-white/10 rounded-lg p-8">
           <div className="mb-8">
-            <h1 className="text-2xl font-semibold mb-2">{mode === 'reader' ? 'Start Learner Mode' : 'Start Review'}</h1>
+            <h1 className="text-2xl font-semibold mb-2">
+              {mode === 'reader' ? 'Start Learner Mode' : mode === 'poc' ? 'Start PoC Mode' : 'Start Review'}
+            </h1>
             <p className="text-[#6B7280] text-sm">
               {mode === 'reader'
                 ? 'Enter an arXiv URL or ID to build a concept graph, then click atoms for explanations, exercises, and a scoped tutor.'
-                : 'Enter an arXiv URL or ID to ingest the e-print source, assemble the TeX, and generate a rigorous claim-level audit.'}
+                : mode === 'poc'
+                  ? 'Enter an arXiv URL or ID to generate a proof-of-concept scaffold for a key claim, with test harness and reproducibility analysis.'
+                  : 'Enter an arXiv URL or ID to ingest the e-print source, assemble the TeX, and generate a rigorous claim-level audit.'}
             </p>
           </div>
           
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <button
                 type="button"
                 onClick={() => setMode('review')}
@@ -77,6 +87,14 @@ export default function Home() {
               >
                 <div className="text-sm font-semibold">Learner</div>
                 <div className="text-xs text-[#6B7280] mt-1">Explanations, exercises, tutor</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode('poc')}
+                className={`rounded border px-4 py-3 text-left transition-colors ${mode === 'poc' ? 'border-[#5B5BD6] bg-[#5B5BD6]/15' : 'border-white/10 bg-[#0D1017] hover:border-white/20'}`}
+              >
+                <div className="text-sm font-semibold">PoC</div>
+                <div className="text-xs text-[#6B7280] mt-1">Proof-of-concept scaffold</div>
               </button>
             </div>
 
@@ -118,7 +136,13 @@ export default function Home() {
                   disabled={submitting || !arxivUrl.trim()}
                   className="px-6 py-2.5 rounded bg-[#5B5BD6] text-white font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#4a4ac2] transition-colors whitespace-nowrap"
                 >
-                  {submitting ? 'Ingesting...' : mode === 'reader' ? 'Begin Learner' : 'Begin Review'}
+                  {submitting
+                    ? 'Ingesting...'
+                    : mode === 'reader'
+                      ? 'Begin Learner'
+                      : mode === 'poc'
+                        ? 'Begin PoC'
+                        : 'Begin Review'}
                 </button>
               </div>
             </div>
@@ -131,15 +155,17 @@ export default function Home() {
 
           <div className="mt-8 pt-6 border-t border-white/5">
             <h3 className="text-xs uppercase tracking-wider text-[#6B7280] font-semibold mb-3">
-              {mode === 'reader' ? 'Learner Pipeline' : 'Verification Pipeline'}
+              {mode === 'reader' ? 'Learner Pipeline' : mode === 'poc' ? 'PoC Pipeline' : 'Verification Pipeline'}
             </h3>
             <ul className="text-xs text-[#6B7280] space-y-2 font-mono">
               {(mode === 'reader'
                 ? ['Source Ingestion & TeX Assembly', 'Research Atom Extraction', 'Dependency Graph', 'Lazy Explanations, Exercises & Tutor']
-                : ['Source Ingestion & TeX Assembly', 'Research Atom Extraction', 'Symbolic & Numeric Probes', 'Adversarial Debate & Verdict Cascade']
+                : mode === 'poc'
+                  ? ['Source Ingestion & TeX Assembly', 'Claim Extraction', 'PoC Scaffold Generation', 'Test Harness & Repro Analysis']
+                  : ['Source Ingestion & TeX Assembly', 'Research Atom Extraction', 'Symbolic & Numeric Probes', 'Adversarial Debate & Verdict Cascade']
               ).map(item => (
                 <li key={item} className="flex gap-2 items-center">
-                  <span className={`w-1.5 h-1.5 rounded-full ${mode === 'reader' ? 'bg-[#00AFA3]' : 'bg-[#3B82F6]'} opacity-70`}></span>
+                  <span className={`w-1.5 h-1.5 rounded-full ${mode === 'reader' ? 'bg-[#00AFA3]' : mode === 'poc' ? 'bg-[#5B5BD6]' : 'bg-[#3B82F6]'} opacity-70`}></span>
                   {item}
                 </li>
               ))}

@@ -1,22 +1,24 @@
+import asyncio
 import json
 import logging
-import asyncio
 from typing import List
 
 from openai import AsyncOpenAI
 
-from backend.config import settings
-from backend.models import ClaimUnit
-from backend.agents.base import BaseAgent, AgentContext, AgentResult
+from agents.base import AgentContext, AgentResult, BaseAgent
+from config import settings
+from models import ResearchAtom
 
 logger = logging.getLogger(__name__)
 
 _BATCH_SIZE = 10
 
 _SYSTEM_PROMPT = (
-    "Classify each mathematical/algorithmic claim as 'testable' (can be verified by running "
-    "an experiment and measuring a metric) or 'theoretical' (requires mathematical proof only). "
-    "For testable claims, briefly state what experiment would verify it. "
+    "Classify each research atom (a discrete claim, theorem, lemma, definition, "
+    "construction, algorithm, or assertion from a paper) as 'testable' (can be "
+    "verified by running an experiment and measuring a metric) or 'theoretical' "
+    "(requires mathematical proof only, or is purely definitional). "
+    "For testable atoms, briefly state what experiment would verify it. "
     "Return a JSON object with a single key 'results' containing an array: "
     "{\"results\": [{\"claim_id\": str, \"testability\": \"testable\"|\"theoretical\", \"reason\": str}]}"
 )
@@ -28,18 +30,18 @@ class ClaimFilterAgent(BaseAgent):
     _client = AsyncOpenAI(api_key=settings.openai_api_key)
 
     async def run(self, context: AgentContext) -> AgentResult:
-        claims: List[ClaimUnit] = context.extra.get("claims", [])
-        if not claims:
+        atoms: List[ResearchAtom] = context.extra.get("atoms", [])
+        if not atoms:
             return AgentResult(
                 agent_id=self.agent_id,
                 status="error",
                 output={"testable": [], "theoretical": [], "classifications": {}},
                 confidence=0.0,
-                error="No claims provided in context.extra['claims']",
+                error="No atoms provided in context.extra['atoms']",
             )
 
         try:
-            classifications = await self._classify_all(claims)
+            classifications = await self._classify_all(atoms)
         except Exception as exc:
             logger.error("ClaimFilterAgent failed: %s", exc)
             return AgentResult(
@@ -50,8 +52,8 @@ class ClaimFilterAgent(BaseAgent):
                 error=str(exc),
             )
 
-        testable = [cid for cid, v in classifications.items() if v["testability"] == "testable"]
-        theoretical = [cid for cid, v in classifications.items() if v["testability"] == "theoretical"]
+        testable = [aid for aid, v in classifications.items() if v["testability"] == "testable"]
+        theoretical = [aid for aid, v in classifications.items() if v["testability"] == "theoretical"]
 
         return AgentResult(
             agent_id=self.agent_id,
@@ -64,17 +66,22 @@ class ClaimFilterAgent(BaseAgent):
             confidence=0.85,
         )
 
-    async def _classify_all(self, claims: List[ClaimUnit]) -> dict:
-        batches = [claims[i:i + _BATCH_SIZE] for i in range(0, len(claims), _BATCH_SIZE)]
+    async def _classify_all(self, atoms: List[ResearchAtom]) -> dict:
+        batches = [atoms[i:i + _BATCH_SIZE] for i in range(0, len(atoms), _BATCH_SIZE)]
         results = await asyncio.gather(*[self._classify_batch(b) for b in batches])
         merged = {}
         for batch_result in results:
             merged.update(batch_result)
         return merged
 
-    async def _classify_batch(self, batch: List[ClaimUnit]) -> dict:
+    async def _classify_batch(self, batch: List[ResearchAtom]) -> dict:
         user_prompt = json.dumps([
-            {"claim_id": c.claim_id, "text": c.text} for c in batch
+            {
+                "claim_id": a.atom_id,
+                "atom_type": a.atom_type.value,
+                "text": a.text,
+            }
+            for a in batch
         ])
 
         response = await self._client.chat.completions.create(
