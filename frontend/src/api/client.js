@@ -46,7 +46,7 @@ export const api = {
     reportMarkdown: (jobId) => fetch(`${BASE}/review/${jobId}/report/markdown`).then(r => r.text()),
   },
   poc: {
-    submit: (file) => postFile(`${BASE}/poc`, file),
+    submit: (arxivUrl) => postJson(`${BASE}/poc`, { arxiv_url: arxivUrl }),
     claims: (sessionId) => fetch(`${BASE}/poc/${sessionId}/claims`).then(r => r.json()),
     spec: (sessionId, claimId) => fetch(`${BASE}/poc/${sessionId}/claim/${claimId}/spec`).then(r => r.json()),
     uploadResults: (sessionId, file) => postFile(`${BASE}/poc/${sessionId}/results`, file),

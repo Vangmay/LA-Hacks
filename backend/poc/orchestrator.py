@@ -63,7 +63,8 @@ class PoCOrchestrator:
         claim_units = [ClaimUnit.model_validate(c) for c in raw_claims]
         job_store.update(job_id, claims={c.claim_id: c.model_dump() for c in claim_units})
 
-        # ── 3. Filter claims ──────────────────────────────────────────────────
+
+        # ── 3. Filter claims (but process ALL claims for PoC) ────────────────
         filter_result = await ClaimFilterAgent().run(
             AgentContext(job_id=job_id, extra={"claims": claim_units})
         )
@@ -84,28 +85,26 @@ class PoCOrchestrator:
                 timestamp=datetime.utcnow(),
             ))
 
-        testable_claims = [c for c in claim_units if c.claim_id in testable_ids]
-
-        # ── 4. Extract metrics in parallel ────────────────────────────────────
+        # ── 4. Extract metrics in parallel for ALL claims ────────────────────
         metric_results = await asyncio.gather(
             *[
                 MetricExtractorAgent().run(
                     AgentContext(job_id=job_id, extra={"claim": c, "paper_metadata": paper_metadata})
                 )
-                for c in testable_claims
+                for c in claim_units
             ],
             return_exceptions=True,
         )
 
         poc_specs: dict = {}
-        for claim, result in zip(testable_claims, metric_results):
+        for claim, result in zip(claim_units, metric_results):
             if isinstance(result, Exception):
                 logger.warning("MetricExtractorAgent failed for %s: %s", claim.claim_id, result)
                 continue
             if result.status in ("success", "inconclusive"):
                 poc_specs[claim.claim_id] = result.output
 
-        # ── 5. Generate scaffolds in parallel (max 5 concurrent) ─────────────
+        # ── 5. Generate scaffolds in parallel (max 5 concurrent) for ALL claims with metrics ──
         semaphore = asyncio.Semaphore(settings.max_parallel_claims)
 
         async def _scaffold_one(claim: ClaimUnit, spec: dict) -> tuple:
@@ -121,7 +120,7 @@ class PoCOrchestrator:
         scaffold_results = await asyncio.gather(
             *[
                 _scaffold_one(claim, poc_specs[claim.claim_id])
-                for claim in testable_claims
+                for claim in claim_units
                 if claim.claim_id in poc_specs
             ],
             return_exceptions=True,
@@ -143,7 +142,8 @@ class PoCOrchestrator:
                 timestamp=datetime.utcnow(),
             ))
 
-        job_store.update(job_id, poc_specs=poc_specs)
+        # Ensure claims are always present in the job store for API
+        job_store.update(job_id, poc_specs=poc_specs, claims={c.claim_id: c.model_dump() for c in claim_units})
 
         # ── 6. Package zip ────────────────────────────────────────────────────
         zip_path = await self._build_zip(job_id, poc_specs, paper_metadata)
